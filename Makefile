@@ -9,6 +9,7 @@ help:
 	@echo "  clean       Remove temporary files"
 	@echo "  docker-up   Start docker services"
 	@echo "  docker-down Stop docker services"
+	@echo "  rust-build  Build rust core"
 
 install:
 	uv sync
@@ -32,3 +33,6 @@ docker-up:
 
 docker-down:
 	docker-compose down
+
+rust-build:
+	cd rust_core && cargo build --release
