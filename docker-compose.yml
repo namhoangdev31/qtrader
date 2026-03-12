@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    platform: linux/arm64
     volumes:
       - .:/app
     environment:
@@ -11,6 +12,7 @@ services:
 
   timescaledb:
     image: timescale/timescaledb:latest-pg16
+    platform: linux/arm64
     ports:
       - "5432:5432"
     environment:
@@ -22,6 +24,7 @@ services:
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
+    platform: linux/arm64
     ports:
       - "5000:5000"
     command: mlflow server --host 0.0.0.0 --port 5000
