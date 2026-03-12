@@ -1,0 +1,23 @@
+# Rust
+rust_core/target/
+rust_core/Cargo.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Data & ML
+*.log
+*.parquet
+*.db
+.mlflow/
+mlruns/
+.ray/
+
+# Environment
+.env
+.DS_Store
