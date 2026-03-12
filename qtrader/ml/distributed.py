@@ -1,12 +1,17 @@
-import ray
 from typing import Callable, Any, List
+from qtrader.core.config import Config
 
 class RayCompute:
     """Helper for distributed task execution using Ray (Local Mode)."""
     
     def __init__(self) -> None:
         if not ray.is_initialized():
-            ray.init(ignore_reinit_error=True)
+            ray.init(
+                address=Config.RAY_ADDRESS,
+                _memory=Config.RAY_MEMORY if Config.RAY_ADDRESS == "auto" else None,
+                num_cpus=Config.RAY_CPUS if Config.RAY_ADDRESS == "auto" else None,
+                ignore_reinit_error=True
+            )
 
     @staticmethod
     def run_parallel(func: Callable[..., Any], tasks_args: List[tuple]) -> List[Any]:

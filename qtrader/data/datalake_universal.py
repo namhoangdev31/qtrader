@@ -1,7 +1,7 @@
-import polars as pl
 from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
+from qtrader.core.config import Config
 
 class UniversalDataLake:
     """
@@ -9,9 +9,13 @@ class UniversalDataLake:
     Supports local paths and S3/GCS URIs via Polars native integration.
     """
     
-    def __init__(self, base_uri: str = "qtrader/data/datalake", cloud_options: Optional[Dict[str, Any]] = None) -> None:
-        self.base_uri = base_uri
-        self.cloud_options = cloud_options or {}
+    def __init__(self, base_uri: Optional[str] = None, cloud_options: Optional[Dict[str, Any]] = None) -> None:
+        self.base_uri = base_uri or Config.DATALAKE_URI
+        self.cloud_options = cloud_options or {
+            "key": Config.S3_ACCESS_KEY,
+            "secret": Config.S3_SECRET_KEY,
+            "endpoint_url": Config.S3_ENDPOINT
+        }
         
         if not base_uri.startswith(("s3://", "gs://", "az://")):
             Path(base_uri).mkdir(parents=True, exist_ok=True)

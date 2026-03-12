@@ -14,7 +14,8 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=sanauto
+      - POSTGRES_PASSWORD=secret
       - POSTGRES_DB=qtrader
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
@@ -27,3 +28,7 @@ services:
 
 volumes:
   timescaledb_data:
+
+networks:
+  sanauto-production-net:
+    external: true

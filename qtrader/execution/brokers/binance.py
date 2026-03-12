@@ -1,19 +1,16 @@
-import asyncio
-import hmac
-import hashlib
-import time
-import aiohttp
 from typing import List, Dict, Any, Optional
 from qtrader.core.event import OrderEvent, FillEvent
 from qtrader.execution.brokers.base import BrokerAdapter
+from qtrader.core.config import Config
 
 class BinanceBrokerAdapter(BrokerAdapter):
     """Production Binance API adapter (Spot)."""
     
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = True) -> None:
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.base_url = "https://testnet.binance.vision" if testnet else "https://api.binance.com"
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, testnet: Optional[bool] = None) -> None:
+        self.api_key = api_key or Config.BINANCE_API_KEY
+        self.api_secret = api_secret or Config.BINANCE_API_SECRET
+        is_testnet = testnet if testnet is not None else Config.SIMULATE_MODE
+        self.base_url = "https://testnet.binance.vision" if is_testnet else "https://api.binance.com"
 
     def _generate_signature(self, params: Dict[str, Any]) -> str:
         query_string = "&".join([f"{k}={v}" for k, v in params.items()])

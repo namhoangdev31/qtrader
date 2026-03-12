@@ -1,13 +1,16 @@
-import mlflow
 import polars as pl
 from typing import Dict, Any, List, Optional
 import json
+from qtrader.core.config import Config
 
 class ModelRegistry:
     """Wrapper for MLflow to handle systematic model versioning and metadata."""
     
-    def __init__(self, experiment_name: str = "QTrader_v3") -> None:
-        mlflow.set_experiment(experiment_name)
+    def __init__(self, experiment_name: Optional[str] = None) -> None:
+        mlflow.set_tracking_uri(Config.MLFLOW_URI)
+        exp = experiment_name or os.getenv("MLFLOW_EXPERIMENT_NAME", "qtrader_v4_autonomous")
+        mlflow.set_experiment(exp)
+        self.experiment_name = exp
 
     def log_model_iteration(
         self, 
@@ -40,7 +43,7 @@ class ModelRegistry:
     def get_best_model(self, model_name: str, metric: str = "mse") -> str:
         """Retrieves the run ID of the best performing model."""
         runs = mlflow.search_runs(
-            experiment_names=["QTrader_v3"],
+            experiment_names=[self.experiment_name],
             filter_string=f"tags.mlflow.runName = '{model_name}'",
             order_by=[f"metrics.{metric} ASC"]
         )

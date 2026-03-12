@@ -1,14 +1,13 @@
-import duckdb
-import polars as pl
 from pathlib import Path
 from typing import Optional
+from qtrader.core.config import Config
 
 class DuckDBClient:
     """Wrapper for DuckDB to query the Parquet datalake."""
     
-    def __init__(self, datalake_path: str = "qtrader/data/datalake") -> None:
-        self.datalake_path = Path(datalake_path)
-        self.con = duckdb.connect(database=':memory:') # Or persistent file if needed
+    def __init__(self, datalake_path: Optional[str] = None, db_path: Optional[str] = None) -> None:
+        self.datalake_path = Path(datalake_path or Config.DATALAKE_URI)
+        self.con = duckdb.connect(database=db_path or Config.DB_PATH) 
 
     def query(self, sql: str) -> pl.DataFrame:
         """Executes a SQL query and returns a Polars DataFrame."""
