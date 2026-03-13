@@ -21,3 +21,4 @@ mlruns/
 # Environment
 .env
 .DS_Store
+qtrader/api/__init__.py

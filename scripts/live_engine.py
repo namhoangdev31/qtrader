@@ -2,71 +2,84 @@ import asyncio
 import logging
 import signal
 import sys
+import uvicorn
 from datetime import datetime
 from qtrader.core.config import Config
 from qtrader.core.db import DBClient
+from qtrader.api.api import app as fastapi_app, stats
 from scripts.verify_v4_autonomous import verify_v4_autonomous_intelligence
 
-# Configure logging to show timestamps and levels
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger("LiveEngine")
 
 class LiveEngine:
     def __init__(self):
         self.running = True
-        # Handle termination signals gracefully
         signal.signal(signal.SIGINT, self.stop)
         signal.signal(signal.SIGTERM, self.stop)
 
     def stop(self, *args):
         logger.info("🛑 Shutdown signal received. Cleaning up...")
         self.running = False
+        stats["status"] = "Shutting Down"
 
-    async def run(self):
+    async def run_api(self):
+        """Runs the FastAPI server."""
+        config = uvicorn.Config(fastapi_app, host="0.0.0.0", port=8000, log_level="warning")
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    async def trading_loop(self):
+        """Main autonomous trading logic."""
         logger.info("🚀 QTrader v4 Autonomous Live Engine Starting...")
-        logger.info(f"Environment: {'SIMULATION' if Config.SIMULATE_MODE else 'LIVE'}")
+        stats["status"] = "Initializing"
         
         # Initial health check
         await verify_v4_autonomous_intelligence()
         
+        stats["status"] = "Running"
         iteration = 0
         while self.running:
             iteration += 1
-            start_time = datetime.now()
+            now = datetime.now()
+            stats["iteration"] = iteration
+            stats["last_heartbeat"] = now
             
             try:
-                # 1. Market Monitoring & Execution Logic
-                # (This is where the real strategies would be called)
-                logger.info(f"🔄 Loop #{iteration} | Heartbeat | Time: {start_time}")
+                logger.info(f"🔄 Loop #{iteration} | Heartbeat | Time: {now}")
                 
-                # Simulate core work
-                await asyncio.sleep(1) # Processing latency simulation
+                # Update mock stats for the API
+                stats["regime"] = "Bull" if iteration % 2 == 0 else "Sideways"
+                stats["active_model"] = "Model_Bull" if stats["regime"] == "Bull" else "Model_Sideways"
+                stats["exposure_btc"] = 0.5 + (iteration * 0.01)
                 
-                # Check DB connectivity
+                await asyncio.sleep(1)
+                
                 pool = await DBClient.get_pool()
-                res = await pool.fetchval("SELECT 1")
-                if res != 1:
-                    logger.error("❌ Database connectivity lost!")
+                await pool.fetchval("SELECT 1")
                 
             except Exception as e:
-                logger.error(f"⚠️ Error in main loop: {e}")
-                await asyncio.sleep(5) # Delay on error to avoid rapid failure loops
+                logger.error(f"⚠️ Error in loop: {e}")
+                stats["status"] = f"Error: {str(e)}"
+                await asyncio.sleep(5)
                 
-            # Maintain frequency (e.g., every 10 seconds)
-            elapsed = (datetime.now() - start_time).total_seconds()
-            sleep_time = max(0.1, 10 - elapsed)
-            await asyncio.sleep(sleep_time)
+            await asyncio.sleep(9)
 
-        logger.info("✅ QTrader Live Engine has gracefully stopped.")
+    async def main(self):
+        # Run both the API and the Trading loop concurrently
+        await asyncio.gather(
+            self.run_api(),
+            self.trading_loop()
+        )
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     engine = LiveEngine()
     try:
-        asyncio.run(engine.run())
+        asyncio.run(engine.main())
     except KeyboardInterrupt:
         pass
     except Exception as e:
