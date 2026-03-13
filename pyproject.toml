@@ -6,7 +6,7 @@ authors = [
     { name = "Hoang Nam" }
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.11"
 dependencies = [
     "polars>=1.0",
     "numpy>=2.0",
@@ -16,7 +16,7 @@ dependencies = [
     "lightgbm>=4.4",
     "shap>=0.45",
     "mlflow>=2.14",
-    "arctic>=3.0",
+    "arcticdb>=3.0; (sys_platform != 'linux' or platform_machine != 'aarch64')",
     "asyncpg>=0.29",
     "aiohttp>=3.10",
     "uvloop>=0.20",

@@ -29,7 +29,7 @@ clean:
 	rm -rf .pytest_cache .coverage .mypy_cache .ruff_cache
 
 docker-up:
-	docker-compose up -d
+	docker-compose up -d --build
 
 docker-down:
 	docker-compose down

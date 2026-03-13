@@ -26,7 +26,7 @@ class Config:
     S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
     
     # ML & Simulation
-    MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050")
     MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "qtrader_v4_autonomous")
     SIMULATE_MODE = os.getenv("SIMULATE_MODE", "True").lower() == "true"
     

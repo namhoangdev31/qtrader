@@ -13,20 +13,20 @@ class EventType(Enum):
     CLOCK = auto()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Event:
     type: EventType
     timestamp: datetime = field(default_factory=datetime.now)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class MarketDataEvent(Event):
     symbol: str
     data: Dict[str, Any]
     type: EventType = EventType.MARKET_DATA
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SignalEvent(Event):
     symbol: str
     signal_type: str  # e.g., "LONG", "SHORT", "EXIT"
@@ -35,7 +35,7 @@ class SignalEvent(Event):
     type: EventType = EventType.SIGNAL
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class OrderEvent(Event):
     symbol: str
     order_type: str
@@ -46,7 +46,7 @@ class OrderEvent(Event):
     type: EventType = EventType.ORDER
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FillEvent(Event):
     symbol: str
     quantity: float
@@ -58,7 +58,7 @@ class FillEvent(Event):
     type: EventType = EventType.FILL
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RiskEvent(Event):
     reason: str
     action: str  # e.g., "BLOCK", "LIQUIDATE"

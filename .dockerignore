@@ -1,0 +1,30 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Rust build artifacts
+rust_core/target/
+
+# Python cache & artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# Local data & logs
+data_lake/
+logs/
+*.db
+*.log
+
+# Git
+.git/
+
+# Env files
+.env
+.env.local

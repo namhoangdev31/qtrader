@@ -11,7 +11,8 @@ async def verify_v4_autonomous_intelligence():
     
     # 1. Regime Detection & Rotation
     df = generate_synthetic_data("BTCUSDT", days=10)
-    # Add a few features
+    
+    # Add features
     df = df.with_columns([
         pl.col("close").pct_change().alias("returns"),
         pl.col("close").pct_change().rolling_std(20).alias("volatility")
@@ -19,6 +20,7 @@ async def verify_v4_autonomous_intelligence():
 
     detector = RegimeDetector(n_regimes=3)
     detector.fit(df, ["returns", "volatility"])
+    
     regimes = detector.predict_regime(df, ["returns", "volatility"])
     print(f"✅ Regime Detection: Found {len(regimes.unique())} distinct market states")
 

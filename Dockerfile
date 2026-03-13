@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.10-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -6,24 +6,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     libgomp1 \
-    pkg-config \
-    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Rust toolchain for native kernel compilation
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install uv for fast package management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 WORKDIR /app
 
-# Enable bytecode compilation
-ENV UV_COMPILE_BYTECODE=1
+# Disable bytecode compilation for Rosetta stability
+ENV UV_COMPILE_BYTECODE=0
 
 # Install dependencies
-COPY pyproject.toml .
+COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 
 # Copy project
@@ -32,5 +26,5 @@ COPY . .
 # Install project
 RUN uv sync --frozen
 
-# Default command
-CMD ["python", "-m", "qtrader.scripts.backtest"]
+# Default command (Verification loop)
+CMD ["uv", "run", "python", "scripts/verify_v4_autonomous.py"]
