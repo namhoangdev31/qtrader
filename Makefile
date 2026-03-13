@@ -1,4 +1,4 @@
-.PHONY: help install test lint check clean docker-up docker-down rust-build rust-py rust-py-dev
+.PHONY: help install test lint check clean docker-up docker-down rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader
 
 help:
 	@echo "Available commands:"
@@ -12,6 +12,9 @@ help:
 	@echo "  rust-build  Build rust core"
 	@echo "  rust-py     Build Python wheel via maturin"
 	@echo "  rust-py-dev Build+install extension (dev)"
+	@echo "  analyst             Install analyst deps + launch Jupyter (all notebooks)"
+	@echo "  analyst-researcher  Launch Jupyter for Researcher notebooks"
+	@echo "  analyst-trader      Launch Jupyter for Trader notebooks"
 
 install:
 	uv sync
@@ -44,3 +47,15 @@ rust-py:
 
 rust-py-dev:
 	maturin develop --release --manifest-path rust_core/Cargo.toml -i python3.10
+
+analyst:
+	uv sync --extra analyst
+	uv run jupyter lab notebooks/
+
+analyst-researcher:
+	uv sync --extra analyst
+	uv run jupyter lab notebooks/researcher/
+
+analyst-trader:
+	uv sync --extra analyst
+	uv run jupyter lab notebooks/trader/

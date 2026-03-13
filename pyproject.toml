@@ -41,6 +41,14 @@ dev = [
     "maturin>=1.6",
     "aioresponses>=0.7",
 ]
+analyst = [
+    "jupyterlab>=4.2",
+    "ipykernel>=6.29",
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+    "plotly>=5.23",
+    "pandas>=2.2",
+]
 
 [build-system]
 requires = ["hatchling"]

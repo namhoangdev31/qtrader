@@ -8,6 +8,10 @@ class PerformanceAnalytics:
 
     @staticmethod
     def calculate_metrics(equity_curve: pl.Series) -> dict[str, float]:
+        # Drop leading/trailing nulls so head(1) and tail(1) return valid values
+        equity_curve = equity_curve.drop_nulls()
+        if len(equity_curve) < 2:
+            raise ValueError("equity_curve must have at least 2 non-null values")
         returns = equity_curve.pct_change().drop_nulls()
         
         total_return = (equity_curve.tail(1).item() / equity_curve.head(1).item()) - 1

@@ -60,6 +60,7 @@ _Note: If port 5000 is occupied (e.g., by another MLflow instance or MacOS AirPl
 | `make docker-up`  | Start the full trading stack in Docker  |
 | `make test`       | Run unit and integration tests          |
 | `make clean`      | Purge temporary cache and build files   |
+| `make analyst`    | Install analyst deps + launch Jupyter   |
 
 ---
 
@@ -80,5 +81,13 @@ The data lake is managed via `UniversalDataLake`, supporting:
 - Google Cloud Storage (GCS)
 
 ---
+
+## 🧪 Analyst Toolkit (Jupyter + Colab)
+
+The analyst workflow is documented in `docs/analyst.md` and provides:
+
+- Notebook quickstart for local Jupyter
+- Colab quickstart with git clone + pip install
+- Core research flow: load data, EDA, vectorized backtest, metrics
 
 **Developed for QTrader 2026 Autonomous Operations.**
