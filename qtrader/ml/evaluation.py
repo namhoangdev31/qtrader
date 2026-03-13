@@ -1,6 +1,10 @@
+from collections.abc import Callable
+from typing import Any
+
 import polars as pl
-from typing import List, Callable, Dict, Any
+
 from qtrader.ml.walk_forward import WalkForwardPipeline
+
 
 class NestedCrossValidation:
     """
@@ -16,9 +20,9 @@ class NestedCrossValidation:
     def evaluate(
         self, 
         df: pl.DataFrame, 
-        train_func: Callable[[pl.DataFrame, Dict[str, Any]], Any],
-        param_grid: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        train_func: Callable[[pl.DataFrame, dict[str, Any]], Any],
+        param_grid: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Runs the nested CV process."""
         results = []
         outer_splits = self.outer.get_splits(df)

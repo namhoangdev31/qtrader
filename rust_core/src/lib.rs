@@ -81,7 +81,7 @@ impl OrderbookEngine {
     }
 
     /// Computes microstructure features in Rust and returns only the feature vector.
-    /// This is the "Zero-copy" bridge pattern (v4).
+    /// Note: returning `Vec<f64>` copies data into Python; this is not zero-copy.
     fn compute_microstructure_features(&self) -> PyResult<Vec<f64>> {
         let best_bid = self.bids.keys().rev().next().map(|&p| p as f64 / self.precision_factor).unwrap_or(0.0);
         let best_ask = self.asks.keys().next().map(|&p| p as f64 / self.precision_factor).unwrap_or(0.0);

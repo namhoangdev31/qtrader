@@ -1,6 +1,8 @@
-import polars as pl
-from typing import Optional, Dict, Any
 import logging
+from typing import Any
+
+import polars as pl
+
 
 class IcebergManager:
     """
@@ -12,9 +14,9 @@ class IcebergManager:
         self.table_uri = table_uri
         # In a real implementation, we would use pyiceberg
         # Here we simulate the metadata management
-        self.current_snapshot_id: Optional[int] = None
+        self.current_snapshot_id: int | None = None
 
-    def commit_transaction(self, df: pl.DataFrame, metadata: Dict[str, Any]) -> int:
+    def commit_transaction(self, df: pl.DataFrame, metadata: dict[str, Any]) -> int:
         """
         Atomic commit of new data.
         1. Write Parquet files

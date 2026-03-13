@@ -1,6 +1,6 @@
+
 import polars as pl
-from typing import List, Tuple, Any
-from datetime import datetime, timedelta
+
 
 class WalkForwardPipeline:
     """Manages rolling window training and evaluation to prevent lookahead bias."""
@@ -15,7 +15,7 @@ class WalkForwardPipeline:
         self.test_size = test_size
         self.embargo = embargo
 
-    def get_splits(self, df: pl.DataFrame) -> List[Tuple[pl.DataFrame, pl.DataFrame]]:
+    def get_splits(self, df: pl.DataFrame) -> list[tuple[pl.DataFrame, pl.DataFrame]]:
         """Generates (train, test) splits using rolling windows."""
         splits = []
         n = len(df)

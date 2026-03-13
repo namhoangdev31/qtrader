@@ -1,5 +1,7 @@
 import logging
+
 from qtrader.core.event import RiskEvent
+
 
 class RuntimeRiskEngine:
     """Real-time monitoring and safety guardrails."""

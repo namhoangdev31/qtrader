@@ -1,5 +1,7 @@
 import polars as pl
+
 from qtrader.features.base import Feature
+
 
 class PriceMomentum(Feature):
     """Simple price momentum."""

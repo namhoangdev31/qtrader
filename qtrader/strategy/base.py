@@ -1,12 +1,13 @@
-from typing import Protocol, runtime_checkable, List
-from qtrader.core.event import SignalEvent, OrderEvent
+from typing import Protocol, runtime_checkable
+
+from qtrader.core.event import OrderEvent, SignalEvent
 
 
 @runtime_checkable
 class Strategy(Protocol):
     """Protocol for converting signals into orders."""
 
-    def on_signal(self, event: SignalEvent) -> List[OrderEvent]:
+    def on_signal(self, event: SignalEvent) -> list[OrderEvent]:
         ...
 
 

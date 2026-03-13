@@ -1,13 +1,15 @@
-from typing import Any, Dict
+from typing import Any
+
 import polars as pl
 from catboost import CatBoostRegressor, Pool
+
 from qtrader.models.base import Predictor
 
 
 class CatBoostPredictor(Predictor):
     """Wrapper for CatBoost model with Polars support."""
 
-    def __init__(self, model_params: Dict[str, Any] | None = None) -> None:
+    def __init__(self, model_params: dict[str, Any] | None = None) -> None:
         params = model_params or {
             "iterations": 1000,
             "learning_rate": 0.05,
@@ -18,7 +20,7 @@ class CatBoostPredictor(Predictor):
         }
         self.model = CatBoostRegressor(**params)
 
-    def train(self, X: pl.DataFrame, y: pl.Series, params: Dict[str, Any] | None = None) -> None:
+    def train(self, X: pl.DataFrame, y: pl.Series, params: dict[str, Any] | None = None) -> None:
         # Convert Polars to NumPy for CatBoost
         train_pool = Pool(X.to_numpy(), label=y.to_numpy())
         self.model.fit(train_pool)

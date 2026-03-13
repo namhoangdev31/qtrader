@@ -1,5 +1,7 @@
 import polars as pl
+
 from qtrader.features.base import Feature
+
 
 class SentimentFactor(Feature):
     """Placeholder for sentiment analysis factor."""

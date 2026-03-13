@@ -1,7 +1,6 @@
-import numpy as np
-import time
 import logging
-from typing import Optional
+import time
+
 
 class RotationHysteresis:
     """
@@ -12,10 +11,10 @@ class RotationHysteresis:
         self.persistence_bars = persistence_bars
         self.cooldown_sec = cooldown_sec
         
-        self.pending_regime: Optional[int] = None
+        self.pending_regime: int | None = None
         self.pending_count = 0
         self.last_rotation_time = 0.0
-        self.current_regime: Optional[int] = None
+        self.current_regime: int | None = None
 
     def validate_shift(self, new_regime: int) -> bool:
         """Returns True if the regime shift meets stability criteria."""

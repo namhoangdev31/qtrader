@@ -1,14 +1,16 @@
+
 import polars as pl
-from typing import List, Dict, Type
+
 from qtrader.features.base import Feature
 from qtrader.features.store import FeatureStore
+
 
 class FactorEngine:
     """Orchestrates batch computation and storage of features."""
     
     def __init__(self, store: FeatureStore) -> None:
         self.store = store
-        self.factors: List[Feature] = []
+        self.factors: list[Feature] = []
 
     def register_factor(self, factor: Feature) -> None:
         """Adds a factor to the engine."""

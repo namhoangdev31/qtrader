@@ -1,7 +1,5 @@
-import asyncio
-from typing import List
 from qtrader.core.bus import EventBus
-from qtrader.data.pipeline.base import DataSource, DataNormalizer, DataPipeline
+from qtrader.data.pipeline.base import DataNormalizer, DataPipeline, DataSource
 
 
 class SimpleDataPipeline(DataPipeline):

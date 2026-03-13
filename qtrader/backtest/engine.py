@@ -1,14 +1,13 @@
 import asyncio
-from typing import List
+
 from qtrader.core.bus import EventBus
-from qtrader.core.event import EventType, MarketDataEvent, SignalEvent, OrderEvent, FillEvent
 from qtrader.data.pipeline.base import DataPipeline
 
 
 class BacktestEngine:
     """Event-driven backtesting engine."""
 
-    def __init__(self, bus: EventBus, pipelines: List[DataPipeline]) -> None:
+    def __init__(self, bus: EventBus, pipelines: list[DataPipeline]) -> None:
         self.bus = bus
         self.pipelines = pipelines
         self._running = False
@@ -29,7 +28,7 @@ class BacktestEngine:
         # Once data is exhausted, wait a bit for bus to process remaining events
         await asyncio.sleep(1)
         
-        self.bus.stop()
+        await self.bus.shutdown()
         await bus_task
         self._running = False
         print("Backtest completed.")

@@ -1,7 +1,9 @@
-import asyncpg
 import logging
-from typing import Optional
+
+import asyncpg
+
 from qtrader.core.config import Config
+
 
 class DBClient:
     """
@@ -9,7 +11,7 @@ class DBClient:
     Manages connection pooling for high-performance data operations.
     """
     
-    _pool: Optional[asyncpg.Pool] = None
+    _pool: asyncpg.Pool | None = None
 
     @classmethod
     async def get_pool(cls) -> asyncpg.Pool:

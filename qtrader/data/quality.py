@@ -1,13 +1,13 @@
+from typing import Any
+
 import polars as pl
-import numpy as np
-import logging
-from typing import Dict, List, Any
+
 
 class DataQualityChecker:
     """Institutional-grade data validation and cleaning."""
 
     @staticmethod
-    def check_anomalies(df: pl.DataFrame) -> Dict[str, Any]:
+    def check_anomalies(df: pl.DataFrame) -> dict[str, Any]:
         """Runs a series of checks for bad data."""
         results = {}
         

@@ -1,9 +1,11 @@
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Any
+
 from qtrader.ml.regime import RegimeDetector
-from qtrader.ml.rotation import ModelRotator
 from qtrader.ml.registry import ModelRegistry
+from qtrader.ml.rotation import ModelRotator
+
 
 class AutonomousLoop:
     """

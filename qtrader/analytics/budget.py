@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+
 
 class CloudBudgetGuard:
     """
@@ -20,7 +20,10 @@ class CloudBudgetGuard:
 
     def trigger_budget_circuit_breaker(self) -> None:
         """Kills expensive training jobs."""
-        logging.critical(f"BUDGET | Monthly budget of ${self.monthly_budget} reached! Throttling all non-critical compute.")
+        logging.critical(
+            "BUDGET | Monthly budget of $%s reached! Throttling all non-critical compute.",
+            self.monthly_budget,
+        )
         self.is_throttled = True
         # Future: Call ray.shutdown() or kubectl delete jobs
 
@@ -41,6 +44,6 @@ class ResourceGuardrail:
         return {
             "num_cpus": 2,
             "num_gpus": 0,
-            "memory": 4 * 1024 * 1024 * 1024, # 4GB
-            "timeout": 3600 # 1 hour Max TTL
+            "memory": 4 * 1024 * 1024 * 1024,  # 4GB
+            "timeout": 3600,  # 1 hour Max TTL
         }

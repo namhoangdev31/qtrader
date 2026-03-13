@@ -1,5 +1,7 @@
-from typing import Protocol, runtime_checkable, List
-from qtrader.core.event import OrderEvent, FillEvent
+from typing import Protocol, runtime_checkable
+
+from qtrader.core.event import FillEvent, OrderEvent
+
 
 @runtime_checkable
 class BrokerAdapter(Protocol):
@@ -13,7 +15,7 @@ class BrokerAdapter(Protocol):
         """Cancel an existing order."""
         ...
 
-    async def get_fills(self, order_id: str) -> List[FillEvent]:
+    async def get_fills(self, order_id: str) -> list[FillEvent]:
         """Fetch fills for a specific order."""
         ...
 

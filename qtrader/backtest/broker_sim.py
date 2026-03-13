@@ -1,8 +1,7 @@
-import asyncio
-from typing import Dict
-from qtrader.core.bus import EventBus
-from qtrader.core.event import OrderEvent, FillEvent, MarketDataEvent, EventType
 import uuid
+
+from qtrader.core.bus import EventBus
+from qtrader.core.event import FillEvent, MarketDataEvent, OrderEvent
 
 
 class SimulatedBroker:
@@ -11,8 +10,8 @@ class SimulatedBroker:
     def __init__(self, bus: EventBus, commission_rate: float = 0.0001) -> None:
         self.bus = bus
         self.commission_rate = commission_rate
-        self.latest_prices: Dict[str, float] = {}
-        self.active_orders: Dict[str, OrderEvent] = {}
+        self.latest_prices: dict[str, float] = {}
+        self.active_orders: dict[str, OrderEvent] = {}
 
     async def on_market_data(self, event: MarketDataEvent) -> None:
         """Update internal price state for fills."""

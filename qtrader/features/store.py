@@ -1,6 +1,9 @@
-import polars as pl
 from pathlib import Path
+
+import polars as pl
+
 from qtrader.data.datalake import DataLake
+
 
 class FeatureStore:
     """Offline Feature Store for persistent factor storage."""

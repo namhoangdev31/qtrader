@@ -1,13 +1,14 @@
 from datetime import datetime
-from typing import Any, Dict
-from qtrader.core.event import MarketDataEvent, EventType
+from typing import Any
+
+from qtrader.core.event import MarketDataEvent
 from qtrader.data.pipeline.base import DataNormalizer
 
 
 class OHLCVNormalizer(DataNormalizer):
     """Normalizes raw dictionary data into MarketDataEvent."""
 
-    def __init__(self, symbol: str, column_mapping: Dict[str, str] | None = None) -> None:
+    def __init__(self, symbol: str, column_mapping: dict[str, str] | None = None) -> None:
         self.symbol = symbol
         self.column_mapping = column_mapping or {
             "timestamp": "timestamp",
@@ -18,7 +19,7 @@ class OHLCVNormalizer(DataNormalizer):
             "volume": "volume",
         }
 
-    def normalize(self, raw_data: Dict[str, Any]) -> MarketDataEvent:
+    def normalize(self, raw_data: dict[str, Any]) -> MarketDataEvent:
         # Map raw columns to standard fields
         data = {
             std: raw_data.get(raw) for std, raw in self.column_mapping.items()

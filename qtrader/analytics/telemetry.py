@@ -1,12 +1,13 @@
-import time
-from typing import Dict, Any
 import logging
+import time
+from typing import Any
+
 
 class Telemetry:
     """Institutional-grade metrics exporter for Prometheus/Grafana."""
     
     def __init__(self) -> None:
-        self.metrics: Dict[str, Any] = {}
+        self.metrics: dict[str, Any] = {}
         # In a real system, use prometheus_client library here
 
     def record_latency(self, component: str, start_time: float) -> None:
@@ -22,6 +23,6 @@ class Telemetry:
         """Records real-time PnL."""
         logging.info(f"METRIC | Strategy {strategy_id} PnL: {pnl:.4f}")
         
-    def export(self) -> Dict[str, Any]:
+    def export(self) -> dict[str, Any]:
         """Placeholder for Prometheus scraping endpoint logic."""
         return self.metrics

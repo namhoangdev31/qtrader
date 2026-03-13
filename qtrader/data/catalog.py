@@ -1,8 +1,10 @@
 import logging
-from typing import Optional, List, Dict
-import polars as pl
 from datetime import datetime
+
+import polars as pl
+
 from qtrader.core.db import DBClient
+
 
 class DataCatalog:
     """
@@ -53,11 +55,14 @@ class DataCatalog:
             last_updated = EXCLUDED.last_updated;
         """
         await DBClient.execute(
-            query, 
-            symbol, timeframe, 
-            start_ts.to_datetime() if hasattr(start_ts, "to_datetime") else start_ts, 
-            end_ts.to_datetime() if hasattr(end_ts, "to_datetime") else end_ts, 
-            row_count, schema_version, datetime.now()
+            query,
+            symbol,
+            timeframe,
+            start_ts.to_datetime() if hasattr(start_ts, "to_datetime") else start_ts,
+            end_ts.to_datetime() if hasattr(end_ts, "to_datetime") else end_ts,
+            row_count,
+            schema_version,
+            datetime.now(),
         )
 
     async def list_available_data(self) -> pl.DataFrame:
@@ -67,10 +72,11 @@ class DataCatalog:
             return pl.DataFrame()
         return pl.DataFrame([dict(r) for r in rows])
 
-    async def find_partition(self, symbol: str, timeframe: str) -> Optional[Dict]:
+    async def find_partition(self, symbol: str, timeframe: str) -> dict | None:
         """Finds metadata for a specific partition."""
         row = await DBClient.fetchrow(
-            "SELECT * FROM data_partitions WHERE symbol = $1 AND timeframe = $2", 
-            symbol, timeframe
+            "SELECT * FROM data_partitions WHERE symbol = $1 AND timeframe = $2",
+            symbol,
+            timeframe,
         )
         return dict(row) if row else None

@@ -1,4 +1,4 @@
-.PHONY: help install test lint check clean docker-up docker-down
+.PHONY: help install test lint check clean docker-up docker-down rust-build rust-py rust-py-dev
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,8 @@ help:
 	@echo "  docker-up   Start docker services"
 	@echo "  docker-down Stop docker services"
 	@echo "  rust-build  Build rust core"
+	@echo "  rust-py     Build Python wheel via maturin"
+	@echo "  rust-py-dev Build+install extension (dev)"
 
 install:
 	uv sync
@@ -36,3 +38,9 @@ docker-down:
 
 rust-build:
 	cd rust_core && cargo build --release
+
+rust-py:
+	maturin build --release --manifest-path rust_core/Cargo.toml -i python3.10
+
+rust-py-dev:
+	maturin develop --release --manifest-path rust_core/Cargo.toml -i python3.10

@@ -1,7 +1,8 @@
-import polars as pl
-from pathlib import Path
-from typing import Optional
 import logging
+from pathlib import Path
+
+import polars as pl
+
 
 class DataLake:
     """Manages raw market data stored as Parquet files."""

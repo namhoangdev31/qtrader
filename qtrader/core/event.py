@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, Dict
+from typing import Any
 
 
 class EventType(Enum):
@@ -22,7 +22,7 @@ class Event:
 @dataclass(frozen=True, kw_only=True)
 class MarketDataEvent(Event):
     symbol: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     type: EventType = EventType.MARKET_DATA
 
 
@@ -31,7 +31,7 @@ class SignalEvent(Event):
     symbol: str
     signal_type: str  # e.g., "LONG", "SHORT", "EXIT"
     strength: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.SIGNAL
 
 
@@ -62,5 +62,5 @@ class FillEvent(Event):
 class RiskEvent(Event):
     reason: str
     action: str  # e.g., "BLOCK", "LIQUIDATE"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.RISK

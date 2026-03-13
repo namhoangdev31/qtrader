@@ -1,4 +1,4 @@
-from qtrader.core.event import OrderEvent, RiskEvent, EventType
+from qtrader.core.event import OrderEvent, RiskEvent
 from qtrader.risk.base import RiskManager
 
 

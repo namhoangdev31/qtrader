@@ -1,4 +1,3 @@
-import numpy as np
 
 class KellySizer:
     """Kelly Criterion based position sizing."""

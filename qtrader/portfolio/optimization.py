@@ -1,6 +1,7 @@
-import polars as pl
+from typing import Protocol, runtime_checkable
+
 import numpy as np
-from typing import Protocol, runtime_checkable, Dict, List
+import polars as pl
 from scipy.optimize import minimize
 
 
@@ -12,7 +13,7 @@ class PortfolioOptimizer(Protocol):
         self, 
         returns: pl.DataFrame, 
         expected_returns: pl.Series | None = None
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         ...
 
 
@@ -26,7 +27,7 @@ class MeanVarianceOptimizer(PortfolioOptimizer):
         self, 
         returns: pl.DataFrame, 
         expected_returns: pl.Series | None = None
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         symbols = returns.columns
         n = len(symbols)
         

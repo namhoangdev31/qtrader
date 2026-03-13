@@ -1,7 +1,8 @@
-import polars as pl
+
 import numpy as np
+import polars as pl
 from scipy.stats import ks_2samp
-from typing import Dict, Any
+
 
 class DriftMonitor:
     """
@@ -15,7 +16,11 @@ class DriftMonitor:
         def get_counts(arr: np.ndarray, bins: np.ndarray) -> np.ndarray:
             return np.histogram(arr, bins=bins)[0]
             
-        bins = np.linspace(min(expected.min(), actual.min()), max(expected.max(), actual.max()), buckets + 1)
+        bins = np.linspace(
+            min(expected.min(), actual.min()),
+            max(expected.max(), actual.max()),
+            buckets + 1,
+        )
         expected_counts = get_counts(expected, bins) / len(expected)
         actual_counts = get_counts(actual, bins) / len(actual)
         
@@ -27,11 +32,14 @@ class DriftMonitor:
         return psi
 
     @staticmethod
-    def detect_drift(train_data: pl.DataFrame, live_data: pl.DataFrame, columns: list[str]) -> Dict[str, float]:
+    def detect_drift(train_data: pl.DataFrame, live_data: pl.DataFrame, columns: list[str]) -> dict[str, float]:
         """Detects drift using Kolmogorov-Smirnov test."""
         drifts = {}
         for col in columns:
             if col in train_data.columns and col in live_data.columns:
-                stat, p_value = ks_2samp(train_data[col].to_numpy(), live_data[col].to_numpy())
+                _stat, p_value = ks_2samp(
+                    train_data[col].to_numpy(),
+                    live_data[col].to_numpy(),
+                )
                 drifts[col] = p_value # Low p-value indicates drift
         return drifts

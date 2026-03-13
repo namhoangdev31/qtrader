@@ -1,5 +1,5 @@
-from typing import Dict, Any, Optional
 import logging
+
 
 class ModelRotator:
     """
@@ -8,15 +8,15 @@ class ModelRotator:
     
     def __init__(self) -> None:
         # Map regime_id -> model_id (from Registry)
-        self.regime_map: Dict[int, str] = {}
-        self.current_regime: Optional[int] = None
-        self.current_model_id: Optional[str] = None
+        self.regime_map: dict[int, str] = {}
+        self.current_regime: int | None = None
+        self.current_model_id: str | None = None
 
-    def update_map(self, mapping: Dict[int, str]) -> None:
+    def update_map(self, mapping: dict[int, str]) -> None:
         """Updates the regime-to-model mapping."""
         self.regime_map = mapping
 
-    def on_regime_change(self, new_regime: int) -> Optional[str]:
+    def on_regime_change(self, new_regime: int) -> str | None:
         """Triggers model rotation if the market regime has shifted."""
         if new_regime == self.current_regime:
             return self.current_model_id

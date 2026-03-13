@@ -1,5 +1,8 @@
-from typing import Callable, Any, List
+from collections.abc import Callable
+from typing import Any
+
 from qtrader.core.config import Config
+
 
 class RayCompute:
     """Helper for distributed task execution using Ray (Local Mode)."""
@@ -14,7 +17,7 @@ class RayCompute:
             )
 
     @staticmethod
-    def run_parallel(func: Callable[..., Any], tasks_args: List[tuple]) -> List[Any]:
+    def run_parallel(func: Callable[..., Any], tasks_args: list[tuple]) -> list[Any]:
         """Runs a function in parallel over a list of arguments."""
         remote_func = ray.remote(func)
         futures = [remote_func.remote(*args) for args in tasks_args]

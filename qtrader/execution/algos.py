@@ -1,6 +1,7 @@
 import asyncio
-from typing import List
+
 from qtrader.core.event import OrderEvent
+
 
 class ExecutionAlgo:
     """Base class for execution algorithms."""
@@ -30,7 +31,7 @@ class TWAP(ExecutionAlgo):
 class VWAP(ExecutionAlgo):
     """Volume-Weighted Average Price execution (simplified)."""
     
-    async def execute(self, volume_profile: List[float], bus: Any) -> None:
+    async def execute(self, volume_profile: list[float], bus: Any) -> None:
         """Executes based on a provided volume profile."""
         for weight in volume_profile:
             slice_qty = self.total_quantity * weight

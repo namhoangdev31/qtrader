@@ -1,7 +1,8 @@
-import polars as pl
+
 import numpy as np
+import polars as pl
 from sklearn.mixture import GaussianMixture
-from typing import Dict, Any, Optional
+
 
 class RegimeDetector:
     """

@@ -1,7 +1,8 @@
-import polars as pl
+
 import numpy as np
-from typing import Dict, List
-from scipy.cluster.hierarchy import linkage, dendrogram
+import polars as pl
+from scipy.cluster.hierarchy import linkage
+
 
 class HRPOptimizer:
     """Hierarchical Risk Parity (HRP) Optimizer."""
@@ -9,7 +10,7 @@ class HRPOptimizer:
     def __init__(self) -> None:
         pass
 
-    def optimize(self, returns: pl.DataFrame) -> Dict[str, float]:
+    def optimize(self, returns: pl.DataFrame) -> dict[str, float]:
         """
         Implementation of HRP algorithm.
         1. Clustering
@@ -40,7 +41,7 @@ class CVaROptimizer:
     def __init__(self, alpha: float = 0.05) -> None:
         self.alpha = alpha
 
-    def optimize(self, returns: pl.DataFrame) -> Dict[str, float]:
+    def optimize(self, returns: pl.DataFrame) -> dict[str, float]:
         # Optimization via linear programming (minimizing expected tail loss)
         # Placeholder for implementation
         n = len(returns.columns)

@@ -1,6 +1,9 @@
 import asyncio
+from collections.abc import AsyncIterator
+from typing import Any
+
 import polars as pl
-from typing import AsyncIterator, Any
+
 from qtrader.data.pipeline.base import DataSource
 
 

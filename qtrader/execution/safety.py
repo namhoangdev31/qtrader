@@ -1,7 +1,9 @@
 import logging
 import time
-from typing import Dict, Any, Optional
+from typing import Any
+
 from qtrader.core.event import OrderEvent
+
 
 class SafetyLayer:
     """
@@ -19,7 +21,7 @@ class SafetyLayer:
         self.max_spread_pct = 0.05 # 5% spread explosion
         self.min_liquidity_depth = 1000.0 # Min depth required to trade
 
-    def check_order(self, order: OrderEvent, market_state: Dict[str, Any]) -> bool:
+    def check_order(self, order: OrderEvent, market_state: dict[str, Any]) -> bool:
         """Runs safety checks before allowing an order to hit the exchange."""
         if self.is_halted:
             logging.error("SAFETY | Order REJECTED: System is HALTED")

@@ -1,6 +1,6 @@
 import os
+
 from dotenv import load_dotenv
-from typing import Optional
 
 # Load .env file from the root directory
 load_dotenv()
@@ -18,6 +18,11 @@ class Config:
     # Coinbase
     COINBASE_API_KEY = os.getenv("COINBASE_API_KEY", "")
     COINBASE_API_SECRET = os.getenv("COINBASE_API_SECRET", "")
+    # organizations/{org_id}/apiKeys/{key_id}
+    COINBASE_KEY_NAME = os.getenv("COINBASE_KEY_NAME", "")
+    # PEM, newlines preserved
+    COINBASE_PRIVATE_KEY = os.getenv("COINBASE_PRIVATE_KEY", "")
+    COINBASE_REST_BASE = os.getenv("COINBASE_REST_BASE", "https://api.coinbase.com")
     
     # Data Lake
     DATALAKE_URI = os.getenv("DATALAKE_URI", "./data_lake")
@@ -56,6 +61,11 @@ class Config:
     DB_MAX_CONN = int(os.getenv("DATABASE_MAX_CONNECTIONS", "100"))
     DB_SSL = os.getenv("DATABASE_SSL_ENABLED", "false").lower() == "true"
     DB_SYNC = os.getenv("DATABASE_SYNCHRONIZE", "false").lower() == "true"
+
+    # Execution impact defaults
+    IMPACT_DAILY_VOLUME = float(os.getenv("IMPACT_DAILY_VOLUME", "1000000"))
+    IMPACT_SIGMA_DAILY = float(os.getenv("IMPACT_SIGMA_DAILY", "0.02"))
+    IMPACT_Y = float(os.getenv("IMPACT_Y", "1.0"))
 
     @classmethod
     def validate(cls):

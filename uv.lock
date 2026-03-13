@@ -47,6 +47,19 @@ wheels = [
 ]
 
 [[package]]
+name = "aioresponses"
+version = "0.7.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/de/03/532bbc645bdebcf3b6af3b25d46655259d66ce69abba7720b71ebfabbade/aioresponses-0.7.8.tar.gz", hash = "sha256:b861cdfe5dc58f3b8afac7b0a6973d5d7b2cb608dd0f6253d16b8ee8eaf6df11", size = 40253, upload-time = "2025-01-19T18:14:03.222Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/b7/584157e43c98aa89810bc2f7099e7e01c728ecf905a66cf705106009228f/aioresponses-0.7.8-py2.py3-none-any.whl", hash = "sha256:b73bd4400d978855e55004b23a3a84cb0f018183bcf066a85ad392800b5b9a94", size = 12518, upload-time = "2025-01-19T18:13:59.633Z" },
+]
+
+[[package]]
 name = "aiosignal"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -441,6 +454,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
+]
+
+[[package]]
+name = "duckdb"
+version = "1.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/11/e05a7eb73a373d523e45d83c261025e02bc31ebf868e6282c30c4d02cc59/duckdb-1.5.0.tar.gz", hash = "sha256:f974b61b1c375888ee62bc3125c60ac11c4e45e4457dd1bb31a8f8d3cf277edd", size = 17981141, upload-time = "2026-03-09T12:50:26.372Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/5d/8fa129bbd604d0e91aa9a0a407e7d2acc559b6024c3f887868fd7a13871d/duckdb-1.5.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:47fbb1c053a627a91fa71ec883951561317f14a82df891c00dcace435e8fea78", size = 30012348, upload-time = "2026-03-09T12:48:39.133Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/31/db320641a262a897755e634d16838c98d5ca7dc91f4e096e104e244a3a01/duckdb-1.5.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:2b546a30a6ac020165a86ab3abac553255a6e8244d5437d17859a6aa338611aa", size = 15940515, upload-time = "2026-03-09T12:48:41.905Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/45/5725684794fbabf54d8dbae5247685799a6bf8e1e930ebff3a76a726772c/duckdb-1.5.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:122396041c0acb78e66d7dc7d36c55f03f67fe6ad012155c132d82739722e381", size = 14193724, upload-time = "2026-03-09T12:48:44.105Z" },
+    { url = "https://files.pythonhosted.org/packages/27/68/f110c66b43e27191d7e53d3587e118568b73d66f23cb9bd6c7e0a560fd6d/duckdb-1.5.0-cp310-cp310-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4a2cd73d50ea2c2bf618a4b7d22fe7c4115a1c9083d35654a0d5d421620ed999", size = 19218777, upload-time = "2026-03-09T12:48:46.399Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/9d/46affc9257377cbc865e494650312a7a08a56e85aa8d702eb297bec430b7/duckdb-1.5.0-cp310-cp310-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:63a8ea3b060a881c90d1c1b9454abed3daf95b6160c39bbb9506fee3a9711730", size = 21311205, upload-time = "2026-03-09T12:48:48.895Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/34/dac03ab7340989cda258655387959c88342ea3b44949751391267bcbc830/duckdb-1.5.0-cp310-cp310-win_amd64.whl", hash = "sha256:238d576ae1dda441f8c79ed1370c5ccf863e4a5d59ca2563f9c96cd26b2188ac", size = 13043217, upload-time = "2026-03-09T12:48:51.262Z" },
 ]
 
 [[package]]
@@ -917,6 +944,30 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f5/43/31d59500bb950b0d188e149a2e552040528c13d6e3d6e84d0cccac593dcd/matplotlib-3.10.8-pp310-pypy310_pp73-macosx_10_15_x86_64.whl", hash = "sha256:f97aeb209c3d2511443f8797e3e5a569aebb040d4f8bc79aa3ee78a8fb9e3dd8", size = 8237252, upload-time = "2025-12-10T22:56:39.529Z" },
     { url = "https://files.pythonhosted.org/packages/0c/2c/615c09984f3c5f907f51c886538ad785cf72e0e11a3225de2c0f9442aecc/matplotlib-3.10.8-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:fb061f596dad3a0f52b60dc6a5dec4a0c300dec41e058a7efe09256188d170b7", size = 8124693, upload-time = "2025-12-10T22:56:41.758Z" },
     { url = "https://files.pythonhosted.org/packages/91/e1/2757277a1c56041e1fc104b51a0f7b9a4afc8eb737865d63cababe30bc61/matplotlib-3.10.8-pp310-pypy310_pp73-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:12d90df9183093fcd479f4172ac26b322b1248b15729cb57f42f71f24c7e37a3", size = 8702205, upload-time = "2025-12-10T22:56:43.415Z" },
+]
+
+[[package]]
+name = "maturin"
+version = "1.12.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tomli" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0c/18/8b2eebd3ea086a5ec73d7081f95ec64918ceda1900075902fc296ea3ad55/maturin-1.12.6.tar.gz", hash = "sha256:d37be3a811a7f2ee28a0fa0964187efa50e90f21da0c6135c27787fa0b6a89db", size = 269165, upload-time = "2026-03-01T14:54:04.21Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/8b/9ddfde8a485489e3ebdc50ee3042ef1c854f00dfea776b951068f6ffe451/maturin-1.12.6-py3-none-linux_armv6l.whl", hash = "sha256:6892b4176992fcc143f9d1c1c874a816e9a041248eef46433db87b0f0aff4278", size = 9789847, upload-time = "2026-03-01T14:54:09.172Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/e8/5f7fd3763f214a77ac0388dbcc71cc30aec5490016bd0c8e6bd729fc7b0a/maturin-1.12.6-py3-none-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:c0c742beeeef7fb93b6a81bd53e75507887e396fd1003c45117658d063812dad", size = 19023833, upload-time = "2026-03-01T14:53:46.743Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/7f/706ff3839c8b2046436d4c2bc97596c558728264d18abc298a1ad862a4be/maturin-1.12.6-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:2cb41139295eed6411d3cdafc7430738094c2721f34b7eeb44f33cac516115dc", size = 9821620, upload-time = "2026-03-01T14:54:12.04Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/9c/70917fb123c8dd6b595e913616c9c72d730cbf4a2b6cac8077dc02a12586/maturin-1.12.6-py3-none-manylinux_2_12_i686.manylinux2010_i686.musllinux_1_1_i686.whl", hash = "sha256:351f3af1488a7cbdcff3b6d8482c17164273ac981378a13a4a9937a49aec7d71", size = 9849107, upload-time = "2026-03-01T14:53:48.971Z" },
+    { url = "https://files.pythonhosted.org/packages/59/ea/f1d6ad95c0a12fbe761a7c28a57540341f188564dbe8ad730a4d1788cd32/maturin-1.12.6-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl", hash = "sha256:6dbddfe4dc7ddee60bbac854870bd7cfec660acb54d015d24597d59a1c828f61", size = 10242855, upload-time = "2026-03-01T14:53:44.605Z" },
+    { url = "https://files.pythonhosted.org/packages/93/1b/2419843a4f1d2fb4747f3dc3d9c4a2881cd97a3274dd94738fcdf0835e79/maturin-1.12.6-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:8fdb0f63e77ee3df0f027a120e9af78dbc31edf0eb0f263d55783c250c33b728", size = 9674972, upload-time = "2026-03-01T14:53:52.763Z" },
+    { url = "https://files.pythonhosted.org/packages/71/46/b60ab2fc996d904b40e55bd475599dcdccd8f7ad3e649bf95e87970df466/maturin-1.12.6-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l.whl", hash = "sha256:fa84b7493a2e80759cacc2e668fa5b444d55b9994e90707c42904f55d6322c1e", size = 9645755, upload-time = "2026-03-01T14:53:58.497Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/96/03f2b55a8c226805115232fc23c4a4f33f0c9d39e11efab8166dc440f80d/maturin-1.12.6-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.musllinux_1_1_ppc64le.whl", hash = "sha256:e90dc12bc6a38e9495692a36c9e231c4d7e0c9bfde60719468ab7d8673db3c45", size = 12737612, upload-time = "2026-03-01T14:54:05.393Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/c2/648667022c5b53cdccefa67c245e8a984970f3045820f00c2e23bdb2aff4/maturin-1.12.6-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:06fc8d089f98623ce924c669b70911dfed30f9a29956c362945f727f9abc546b", size = 10455028, upload-time = "2026-03-01T14:54:07.349Z" },
+    { url = "https://files.pythonhosted.org/packages/63/d6/5b5efe3ca0c043357ed3f8d2b2d556169fdbf1ff75e50e8e597708a359d2/maturin-1.12.6-py3-none-manylinux_2_31_riscv64.musllinux_1_1_riscv64.whl", hash = "sha256:75133e56274d43b9227fd49dca9a86e32f1fd56a7b55544910c4ce978c2bb5aa", size = 10014531, upload-time = "2026-03-01T14:53:54.548Z" },
+    { url = "https://files.pythonhosted.org/packages/68/d5/39c594c27b1a8b32a0cb95fff9ad60b888c4352d1d1c389ac1bd20dc1e16/maturin-1.12.6-py3-none-win32.whl", hash = "sha256:3f32e0a3720b81423c9d35c14e728cb1f954678124749776dc72d533ea1115e8", size = 8553012, upload-time = "2026-03-01T14:53:50.706Z" },
+    { url = "https://files.pythonhosted.org/packages/94/66/b262832a91747e04051e21f986bd01a8af81fbffafacc7d66a11e79aab5f/maturin-1.12.6-py3-none-win_amd64.whl", hash = "sha256:977290159d252db946054a0555263c59b3d0c7957135c69e690f4b1558ee9983", size = 9890470, upload-time = "2026-03-01T14:53:56.659Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/47/76b8ca470ddc8d7d36aa8c15f5a6aed1841806bb93a0f4ead8ee61e9a088/maturin-1.12.6-py3-none-win_arm64.whl", hash = "sha256:bae91976cdc8148038e13c881e1e844e5c63e58e026e8b9945aa2d19b3b4ae89", size = 8606158, upload-time = "2026-03-01T14:54:02.423Z" },
 ]
 
 [[package]]
@@ -1457,6 +1508,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/10/e8192be5f38f3e8e7e046716de4cae33d56fd5ae08927a823bb916be36c1/pyjwt-2.12.0.tar.gz", hash = "sha256:2f62390b667cd8257de560b850bb5a883102a388829274147f1d724453f8fb02", size = 102511, upload-time = "2026-03-12T17:15:30.831Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/70/70f895f404d363d291dcf62c12c85fdd47619ad9674ac0f53364d035925a/pyjwt-2.12.0-py3-none-any.whl", hash = "sha256:9bb459d1bdd0387967d287f5656bf7ec2b9a26645d1961628cda1764e087fd6e", size = 29700, upload-time = "2026-03-12T17:15:29.257Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1577,6 +1637,7 @@ dependencies = [
     { name = "arcticdb", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
     { name = "asyncpg" },
     { name = "catboost" },
+    { name = "duckdb" },
     { name = "fastapi" },
     { name = "lightgbm" },
     { name = "loguru" },
@@ -1585,6 +1646,8 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "polars" },
     { name = "pydantic" },
+    { name = "pyjwt" },
+    { name = "python-dotenv" },
     { name = "scipy" },
     { name = "shap" },
     { name = "streamlit" },
@@ -1595,6 +1658,8 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "aioresponses" },
+    { name = "maturin" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1605,21 +1670,26 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10" },
+    { name = "aioresponses", marker = "extra == 'dev'", specifier = ">=0.7" },
     { name = "arcticdb", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'", specifier = ">=3.0" },
     { name = "asyncpg", specifier = ">=0.29" },
     { name = "catboost", specifier = ">=1.2" },
+    { name = "duckdb", specifier = ">=1.0" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "lightgbm", specifier = ">=4.4" },
     { name = "loguru", specifier = ">=0.7" },
+    { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.6" },
     { name = "mlflow", specifier = ">=2.14" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "opentelemetry-api", specifier = ">=1.25" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "pyjwt", specifier = ">=2.8.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
     { name = "scipy", specifier = ">=1.13" },
     { name = "shap", specifier = ">=0.45" },

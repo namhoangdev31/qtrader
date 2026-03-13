@@ -1,4 +1,6 @@
-from typing import Protocol, runtime_checkable, Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any, Protocol, runtime_checkable
+
 from qtrader.core.event import MarketDataEvent
 
 

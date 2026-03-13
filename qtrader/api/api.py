@@ -1,7 +1,8 @@
-from fastapi import FastAPI
-from datetime import datetime
-from typing import Dict, Any
 import os
+from datetime import datetime
+from typing import Any
+
+from fastapi import FastAPI
 
 app = FastAPI(title="QTrader v4 Live Monitoring")
 
@@ -26,7 +27,7 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
 
 @app.get("/status")
-async def get_status() -> Dict[str, Any]:
+async def get_status() -> dict[str, Any]:
     uptime = datetime.now() - stats["start_time"]
     return {
         "uptime_seconds": uptime.total_seconds(),

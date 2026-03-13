@@ -1,5 +1,7 @@
 import polars as pl
+
 from qtrader.features.base import Feature
+
 
 class RelativeStrength(Feature):
     """Rank-based relative strength across assets."""

@@ -1,13 +1,13 @@
-import polars as pl
+
 import numpy as np
-from typing import Dict
+import polars as pl
 
 
 class PerformanceAnalytics:
     """Calculates performance metrics from equity curve or returns."""
 
     @staticmethod
-    def calculate_metrics(equity_curve: pl.Series) -> Dict[str, float]:
+    def calculate_metrics(equity_curve: pl.Series) -> dict[str, float]:
         returns = equity_curve.pct_change().drop_nulls()
         
         total_return = (equity_curve.tail(1).item() / equity_curve.head(1).item()) - 1

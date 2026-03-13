@@ -1,6 +1,7 @@
-import polars as pl
+
 import numpy as np
-from typing import List
+import polars as pl
+
 
 class FactorNeutralizer:
     """Neutralizes factors against risk factors or sectors."""
@@ -40,7 +41,7 @@ class FactorNeutralizer:
         return FactorNeutralizer.neutralize(df_mapped, factor_col, group_col="_group")
 
     @staticmethod
-    def orthogonalize(df: pl.DataFrame, factor_cols: List[str]) -> pl.DataFrame:
+    def orthogonalize(df: pl.DataFrame, factor_cols: list[str]) -> pl.DataFrame:
         """
         PCA-based orthogonalization to remove correlation between factors.
         Returns a DataFrame of independent principle components.

@@ -1,4 +1,5 @@
-from typing import Protocol, runtime_checkable, Any
+from typing import Any, Protocol, runtime_checkable
+
 import polars as pl
 
 

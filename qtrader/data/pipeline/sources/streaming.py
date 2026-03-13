@@ -1,8 +1,9 @@
-import asyncio
 import json
+from collections.abc import AsyncIterator
+from typing import Any, Protocol, runtime_checkable
+
 import aiohttp
-from typing import Protocol, runtime_checkable, AsyncIterator, Any
-from qtrader.core.event import MarketDataEvent
+
 
 @runtime_checkable
 class StreamingConnector(Protocol):

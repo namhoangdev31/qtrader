@@ -1,25 +1,36 @@
-import polars as pl
-from typing import Dict, Any, List, Optional
+import hashlib
 import json
+import os
+from datetime import datetime, timezone
+from typing import Any
+
+import mlflow
+
 from qtrader.core.config import Config
+
 
 class ModelRegistry:
     """Wrapper for MLflow to handle systematic model versioning and metadata."""
     
-    def __init__(self, experiment_name: Optional[str] = None) -> None:
-        mlflow.set_tracking_uri(Config.MLFLOW_URI)
-        exp = experiment_name or os.getenv("MLFLOW_EXPERIMENT_NAME", "qtrader_v4_autonomous")
-        mlflow.set_experiment(exp)
+    def __init__(self, experiment_name: str | None = None) -> None:
+        try:
+            mlflow.set_tracking_uri(Config.MLFLOW_URI)
+            exp = experiment_name or os.getenv("MLFLOW_EXPERIMENT_NAME", "qtrader_v4_autonomous")
+            mlflow.set_experiment(exp)
+        except Exception as exc:
+            raise RuntimeError(f"MLflow initialization failed: {exc}") from exc
         self.experiment_name = exp
 
     def log_model_iteration(
         self, 
         model_name: str,
         model: Any, 
-        features: List[str],
-        params: Dict[str, Any],
-        metrics: Dict[str, float],
-        tags: Optional[Dict[str, str]] = None
+        features: list[str],
+        params: dict[str, Any],
+        metrics: dict[str, float],
+        tags: dict[str, str] | None = None,
+        artifact_path: str = "model",
+        register_model_name: str | None = None,
     ) -> str:
         """Logs a training iteration with hyperparams, features, and metrics."""
         with mlflow.start_run(run_name=model_name) as run:
@@ -33,10 +44,48 @@ class ModelRegistry:
             # 3. Log tags (e.g., symbols, timeframe)
             if tags:
                 mlflow.set_tags(tags)
-            
-            # 4. Save model artifact (assuming sklearn/xgb/catboost/pytorch-like interface)
-            # This is a generic placeholder; in practice, use mlflow.sklearn.log_model, etc.
-            mlflow.log_text(f"Placeholder for {type(model)} structure", "model_summary.txt")
+
+            # 3b. Log model metadata + params hash for traceability
+            params_hash = hashlib.sha256(
+                json.dumps(params, sort_keys=True, default=str).encode("utf-8")
+            ).hexdigest()
+            mlflow.set_tags(
+                {
+                    "model_type": str(type(model)),
+                    "params_hash": params_hash,
+                    "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+            # 4. Save model artifact (best-effort by flavor)
+            try:
+                module_name = type(model).__module__
+                if module_name.startswith("sklearn"):
+                    mlflow.sklearn.log_model(
+                        model, artifact_path=artifact_path, registered_model_name=register_model_name
+                    )
+                elif module_name.startswith("xgboost"):
+                    mlflow.xgboost.log_model(
+                        model, artifact_path=artifact_path, registered_model_name=register_model_name
+                    )
+                elif module_name.startswith("catboost"):
+                    mlflow.catboost.log_model(
+                        model, artifact_path=artifact_path, registered_model_name=register_model_name
+                    )
+                elif module_name.startswith("lightgbm"):
+                    mlflow.lightgbm.log_model(
+                        model, artifact_path=artifact_path, registered_model_name=register_model_name
+                    )
+                else:
+                    mlflow.log_text(
+                        f"Model type: {type(model)}", f"{artifact_path}/model_summary.txt"
+                    )
+            except Exception:
+                # Fallback: do not fail the run due to model logging issues.
+                mlflow.log_text(
+                    f"Model logging failed for {type(model)}",
+                    f"{artifact_path}/model_summary.txt",
+                )
             
             return run.info.run_id
 
