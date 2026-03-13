@@ -26,5 +26,5 @@ COPY . .
 # Install project
 RUN uv sync --frozen
 
-# Default command (Verification loop)
-CMD ["uv", "run", "python", "scripts/verify_v4_autonomous.py"]
+# Default command (Live Trading Engine)
+CMD ["uv", "run", "python", "scripts/live_engine.py"]
