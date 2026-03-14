@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Literal
@@ -9,6 +10,8 @@ import numpy as np
 import polars as pl
 
 __all__ = ["TearsheetMetrics", "TearsheetGenerator"]
+
+_LOG = logging.getLogger("qtrader.backtest.tearsheet")
 
 
 @dataclass(slots=True)
@@ -277,6 +280,117 @@ class TearsheetGenerator:
         result = pivot.join(ytd, on="year", how="left")
         return result
 
+    def _build_plotly_charts(
+        self,
+        backtest_df: pl.DataFrame,
+        strategy_name: str,
+        rolling_window: int = 21,
+        periods_per_year: int = 252,
+    ) -> str:
+        """Build Plotly charts (Equity Curve, Drawdown Underwater, Rolling Sharpe) as embedded HTML.
+
+        Uses Polars for all series computation; Plotly only for rendering.
+        Returns empty string if Plotly is not installed (analyst optional dep).
+
+        Args:
+            backtest_df: DataFrame with timestamp, equity_curve, drawdown, net_return.
+            strategy_name: Title prefix for charts.
+            rolling_window: Window for rolling Sharpe (e.g. 21 days).
+            periods_per_year: For annualization.
+
+        Returns:
+            HTML string of chart divs to embed, or empty string.
+        """
+        try:
+            import plotly.graph_objects as go
+            from plotly.subplots import make_subplots
+        except ImportError:
+            _LOG.debug("Plotly not installed; skipping charts (install analyst deps for charts).")
+            return ""
+
+        required = {"timestamp", "equity_curve", "drawdown", "net_return"}
+        if not required.issubset(backtest_df.columns) or backtest_df.is_empty():
+            return ""
+
+        ts = backtest_df["timestamp"]
+        eq = backtest_df["equity_curve"]
+        dd = backtest_df["drawdown"]
+        ret = backtest_df["net_return"]
+
+        # Rolling Sharpe (Polars): annualized mean/std over window
+        rolling_mean = ret.rolling_mean(rolling_window)
+        rolling_std = ret.rolling_std(rolling_window)
+        rolling_sharpe = pl.when(rolling_std > 0).then(
+            rolling_mean / rolling_std * (periods_per_year**0.5)
+        ).otherwise(None)
+
+        # Convert to list for Plotly (no numpy loops; single export)
+        ts_list = ts.to_list()
+        eq_list = [float(x) for x in eq.to_list()]
+        dd_list = [float(x) for x in dd.to_list()]
+        sharpe_list = [float(x) if x is not None else None for x in rolling_sharpe.to_list()]
+
+        charts_html: list[str] = []
+
+        # 1) Equity Curve
+        fig_eq = go.Figure()
+        fig_eq.add_trace(go.Scatter(x=ts_list, y=eq_list, mode="lines", name="Equity", line=dict(width=2)))
+        fig_eq.update_layout(
+            title=f"{strategy_name} – Equity Curve",
+            xaxis_title="Date",
+            yaxis_title="Equity",
+            template="plotly_white",
+            height=350,
+            margin=dict(l=60, r=40, t=50, b=50),
+        )
+        charts_html.append(fig_eq.to_html(full_html=False, include_plotlyjs="cdn"))
+
+        # 2) Drawdown Underwater
+        fig_dd = go.Figure()
+        fig_dd.add_trace(
+            go.Scatter(
+                x=ts_list,
+                y=[x * 100.0 for x in dd_list],
+                mode="lines",
+                fill="tozeroy",
+                name="Drawdown %",
+                line=dict(color="crimson", width=1.5),
+            )
+        )
+        fig_dd.update_layout(
+            title=f"{strategy_name} – Drawdown (Underwater)",
+            xaxis_title="Date",
+            yaxis_title="Drawdown %",
+            template="plotly_white",
+            height=350,
+            margin=dict(l=60, r=40, t=50, b=50),
+            yaxis_tickformat=".1f",
+        )
+        charts_html.append(fig_dd.to_html(full_html=False, include_plotlyjs=False))
+
+        # 3) Rolling Sharpe
+        fig_rs = go.Figure()
+        fig_rs.add_trace(
+            go.Scatter(
+                x=ts_list,
+                y=sharpe_list,
+                mode="lines",
+                name=f"Rolling {rolling_window}d Sharpe",
+                line=dict(width=2),
+            )
+        )
+        fig_rs.update_layout(
+            title=f"{strategy_name} – Rolling Sharpe ({rolling_window}d)",
+            xaxis_title="Date",
+            yaxis_title="Sharpe Ratio",
+            template="plotly_white",
+            height=350,
+            margin=dict(l=60, r=40, t=50, b=50),
+        )
+        charts_html.append(fig_rs.to_html(full_html=False, include_plotlyjs=False))
+
+        return "".join(f'<div class="tearsheet-chart">{h}</div>' for h in charts_html)
+
     def to_html(
         self,
         metrics: TearsheetMetrics,
@@ -284,11 +398,14 @@ class TearsheetGenerator:
         backtest_df: pl.DataFrame,
         output_path: str,
         write_json_sidecar: bool = True,
+        strategy_name: str = "Strategy",
     ) -> str:
-        """Generate a minimal self-contained HTML tearsheet.
+        """Generate a minimal self-contained HTML tearsheet with optional Plotly charts.
 
         The caller is expected to use this in offline research contexts.
         Optionally writes a JSON sidecar with the same base path for LiveMonitor baseline.
+        When Plotly is available (analyst deps), embeds Equity Curve, Drawdown Underwater,
+        and Rolling Sharpe charts.
 
         Args:
             metrics: TearsheetMetrics instance.
@@ -296,6 +413,7 @@ class TearsheetGenerator:
             backtest_df: Backtest DataFrame (used for plots).
             output_path: Path where HTML file will be written.
             write_json_sidecar: If True, write metrics to same path with .json extension.
+            strategy_name: Label for chart titles.
 
         Returns:
             Absolute path to the saved HTML file.
@@ -315,6 +433,7 @@ class TearsheetGenerator:
             "th { background-color: #f2f2f2; }",
             ".pos { background-color: #d4f4dd; }",
             ".neg { background-color: #f8d7da; }",
+            ".tearsheet-chart { margin: 24px 0; min-height: 360px; }",
             "</style></head><body>",
             "<h1>Tearsheet</h1>",
             "<h2>Summary Metrics</h2><table><tbody>",
@@ -340,6 +459,12 @@ class TearsheetGenerator:
                     html.append(f"<td class='{cls}'>{val:.2f}</td>")
             html.append("</tr>")
         html.append("</tbody></table>")
+
+        # Plotly charts (Equity, Drawdown Underwater, Rolling Sharpe)
+        chart_html = self._build_plotly_charts(backtest_df, strategy_name)
+        if chart_html:
+            html.append("<h2>Charts</h2>")
+            html.append(chart_html)
 
         # Simple equity curve listing (table-based).
         html.append("<h2>Equity Curve (sample)</h2><table><thead><tr><th>Timestamp</th><th>Equity</th><th>Drawdown</th></tr></thead><tbody>")
@@ -378,4 +503,21 @@ if __name__ == "__main__":
     _m = _gen.generate(_df, strategy_name="demo")
     _mt = _gen.monthly_returns_table(_df["equity_curve"], _df["timestamp"])
     _ = _gen.to_html(_m, _mt, _df, "/tmp/tearsheet_demo.html")
+
+
+"""
+# Pytest-style examples:
+def test_build_plotly_charts_empty_without_required_cols() -> None:
+    gen = TearsheetGenerator()
+    df = pl.DataFrame({"timestamp": [1, 2], "close": [100.0, 101.0]})
+    assert gen._build_plotly_charts(df, "x") == ""
+
+def test_tearsheet_metrics_from_json_roundtrip(tmp_path) -> None:
+    from pathlib import Path
+    p = Path(tmp_path) / "m.json"
+    m = TearsheetMetrics(0.1, 0.12, 0.15, 0.8, 1.0, 0.5, 1.2, -0.05, 5, 2.0, 3.0, 100, 0.52, 0.01, -0.008, 1.1, 0.0001, 0.02, 0.001, 0.0, 0.0)
+    m.to_json(str(p))
+    loaded = TearsheetMetrics.from_json(str(p))
+    assert loaded.sharpe_ratio == m.sharpe_ratio
+"""
 

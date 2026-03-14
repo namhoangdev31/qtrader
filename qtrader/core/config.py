@@ -1,75 +1,203 @@
-import os
+"""Central configuration via Pydantic Settings with validation and env loading."""
 
-from dotenv import load_dotenv
+from __future__ import annotations
 
-# Load .env file from the root directory
-load_dotenv()
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class Config:
-    """
-    Centralized configuration management for QTrader.
-    Access variables from .env with fallbacks.
-    """
-    
+__all__ = ["QTraderSettings", "settings", "Config"]
+
+
+class QTraderSettings(BaseSettings):
+    """Centralized configuration for QTrader. Loads from .env with validation at startup."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
     # Binance
-    BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
-    BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "")
-    
+    binance_api_key: str = ""
+    binance_api_secret: str = ""
+
     # Coinbase
-    COINBASE_API_KEY = os.getenv("COINBASE_API_KEY", "")
-    COINBASE_API_SECRET = os.getenv("COINBASE_API_SECRET", "")
-    # organizations/{org_id}/apiKeys/{key_id}
-    COINBASE_KEY_NAME = os.getenv("COINBASE_KEY_NAME", "")
-    # PEM, newlines preserved
-    COINBASE_PRIVATE_KEY = os.getenv("COINBASE_PRIVATE_KEY", "")
-    COINBASE_REST_BASE = os.getenv("COINBASE_REST_BASE", "https://api.coinbase.com")
-    
+    coinbase_api_key: str = ""
+    coinbase_api_secret: str = ""
+    coinbase_rest_base: str = "https://api.coinbase.com"
+    coinbase_key_name: str = ""
+    coinbase_private_key: str = ""
+
     # Data Lake
-    DATALAKE_URI = os.getenv("DATALAKE_URI", "./data_lake")
-    S3_ENDPOINT = os.getenv("S3_ENDPOINT", "")
-    S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
-    S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
-    
-    # ML & Simulation
-    MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050")
-    MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "qtrader_v4_autonomous")
-    SIMULATE_MODE = os.getenv("SIMULATE_MODE", "True").lower() == "true"
-    
-    # Ray Resources
-    RAY_ADDRESS = os.getenv("RAY_ADDRESS", "auto")
-    RAY_MEMORY = os.getenv("RAY_MEMORY", "4G")
-    RAY_CPUS = int(os.getenv("RAY_CPUS", "2"))
-    
-    # Operational
-    MONTHLY_BUDGET = float(os.getenv("MONTHLY_CLOUD_BUDGET", "1000.0"))
-    DB_PATH = os.getenv("DB_PATH", "./qtrader.db")
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    datalake_uri: str = "./data_lake"
+    s3_endpoint: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
 
-    # PostgreSQL Persistence
-    DB_DRIVER = os.getenv("DATABASE_DRIVER", "org.postgresql.Driver")
-    DB_TYPE = os.getenv("DATABASE_TYPE", "postgres")
-    DB_HOST = os.getenv("DATABASE_HOST", "host.docker.internal")
-    DB_PORT = os.getenv("DATABASE_PORT", "5432")
-    DB_USER = os.getenv("DATABASE_USERNAME", "sanauto")
-    DB_PASS = os.getenv("DATABASE_PASSWORD", "secret")
-    DB_NAME = os.getenv("DATABASE_NAME", "qtrader")
-    raw_url = os.getenv("DATABASE_URL", "")
-    if raw_url.startswith("jdbc:"):
-        raw_url = raw_url.replace("jdbc:", "")
-    
-    DB_URL = raw_url or f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    DB_MAX_CONN = int(os.getenv("DATABASE_MAX_CONNECTIONS", "100"))
-    DB_SSL = os.getenv("DATABASE_SSL_ENABLED", "false").lower() == "true"
-    DB_SYNC = os.getenv("DATABASE_SYNCHRONIZE", "false").lower() == "true"
+    # ML
+    mlflow_tracking_uri: str = "http://localhost:5050"
+    mlflow_experiment_name: str = "qtrader_v4_autonomous"
+    simulate_mode: bool = True
 
-    # Execution impact defaults
-    IMPACT_DAILY_VOLUME = float(os.getenv("IMPACT_DAILY_VOLUME", "1000000"))
-    IMPACT_SIGMA_DAILY = float(os.getenv("IMPACT_SIGMA_DAILY", "0.02"))
-    IMPACT_Y = float(os.getenv("IMPACT_Y", "1.0"))
+    # PostgreSQL
+    database_url: str = "postgresql://sanauto:secret@localhost:5432/qtrader"
+    database_read_url: str | None = None  # Read replica; falls back to database_url if unset
+    database_max_connections: int = 100
+    database_ssl_enabled: bool = False
 
-    @classmethod
-    def validate(cls):
-        """Basic validation to ensure critical keys are present in production."""
-        if not cls.SIMULATE_MODE:
-            if not cls.BINANCE_API_KEY or not cls.COINBASE_API_KEY:
-                print("WARNING: Live mode enabled but API keys are missing!")
+    # Execution
+    impact_daily_volume: float = 1_000_000.0
+    impact_sigma_daily: float = 0.02
+    impact_y: float = 1.0
+
+    # Bot / Operational
+    log_level: str = "INFO"
+    monthly_cloud_budget: float = 1000.0
+    db_path: str = "./qtrader.db"
+
+    # Ray (optional)
+    ray_address: str = "auto"
+    ray_memory: str = "4G"
+    ray_cpus: int = 2
+
+    @model_validator(mode="after")
+    def validate_live_mode(self) -> QTraderSettings:
+        """If simulate_mode=False, require at least one exchange API key (fail-fast)."""
+        if not self.simulate_mode:
+            if not self.binance_api_key and not self.coinbase_api_key:
+                raise ValueError(
+                    "Live mode requires at least one exchange API key. "
+                    "Set BINANCE_API_KEY or COINBASE_API_KEY in .env."
+                )
+        return self
+
+    # Backward compatibility: uppercase aliases for existing code (Config.BINANCE_API_KEY etc.)
+    @property
+    def BINANCE_API_KEY(self) -> str:
+        return self.binance_api_key
+
+    @property
+    def BINANCE_API_SECRET(self) -> str:
+        return self.binance_api_secret
+
+    @property
+    def COINBASE_API_KEY(self) -> str:
+        return self.coinbase_api_key
+
+    @property
+    def COINBASE_API_SECRET(self) -> str:
+        return self.coinbase_api_secret
+
+    @property
+    def COINBASE_REST_BASE(self) -> str:
+        return self.coinbase_rest_base
+
+    @property
+    def COINBASE_KEY_NAME(self) -> str:
+        return self.coinbase_key_name
+
+    @property
+    def COINBASE_PRIVATE_KEY(self) -> str:
+        return self.coinbase_private_key
+
+    @property
+    def DATALAKE_URI(self) -> str:
+        return self.datalake_uri
+
+    @property
+    def S3_ENDPOINT(self) -> str:
+        return self.s3_endpoint
+
+    @property
+    def S3_ACCESS_KEY(self) -> str:
+        return self.s3_access_key
+
+    @property
+    def S3_SECRET_KEY(self) -> str:
+        return self.s3_secret_key
+
+    @property
+    def MLFLOW_URI(self) -> str:
+        return self.mlflow_tracking_uri
+
+    @property
+    def MLFLOW_EXPERIMENT_NAME(self) -> str:
+        return self.mlflow_experiment_name
+
+    @property
+    def SIMULATE_MODE(self) -> bool:
+        return self.simulate_mode
+
+    @property
+    def DB_URL(self) -> str:
+        return self.database_url
+
+    @property
+    def DB_MAX_CONN(self) -> int:
+        return self.database_max_connections
+
+    @property
+    def DB_SSL(self) -> bool:
+        return self.database_ssl_enabled
+
+    @property
+    def DB_PATH(self) -> str:
+        return self.db_path
+
+    @property
+    def IMPACT_DAILY_VOLUME(self) -> float:
+        return self.impact_daily_volume
+
+    @property
+    def IMPACT_SIGMA_DAILY(self) -> float:
+        return self.impact_sigma_daily
+
+    @property
+    def IMPACT_Y(self) -> float:
+        return self.impact_y
+
+    @property
+    def LOG_LEVEL(self) -> str:
+        return self.log_level
+
+    @property
+    def MONTHLY_BUDGET(self) -> float:
+        return self.monthly_cloud_budget
+
+    @property
+    def RAY_ADDRESS(self) -> str:
+        return self.ray_address
+
+    @property
+    def RAY_MEMORY(self) -> str:
+        return self.ray_memory
+
+    @property
+    def RAY_CPUS(self) -> int:
+        return self.ray_cpus
+
+
+# Module-level singleton; validated at import (fail-fast)
+settings: QTraderSettings = QTraderSettings()
+
+# Backward compatibility alias for existing code using Config.BINANCE_API_KEY etc.
+Config: QTraderSettings = settings
+
+
+"""
+# Pytest-style examples:
+def test_settings_validates_live_mode_requires_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("SIMULATE_MODE", "false")
+    monkeypatch.delenv("BINANCE_API_KEY", raising=False)
+    monkeypatch.delenv("COINBASE_API_KEY", raising=False)
+    from pydantic_settings import BaseSettings
+    # Re-import to get fresh validation; in practice use pytest fixture to clear cache
+    with pytest.raises(ValueError, match="Live mode requires"):
+        QTraderSettings()
+
+def test_settings_loads_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    s = QTraderSettings()
+    assert s.log_level == "DEBUG"
+"""

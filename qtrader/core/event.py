@@ -1,7 +1,22 @@
+"""Event type system for EventBus: market, signals, orders, fills, risk, system, heartbeat."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from typing import Any
+
+__all__ = [
+    "EventType",
+    "Event",
+    "MarketDataEvent",
+    "SignalEvent",
+    "OrderEvent",
+    "FillEvent",
+    "RiskEvent",
+    "RegimeChangeEvent",
+    "SystemEvent",
+    "HeartbeatEvent",
+]
 
 
 class EventType(Enum):
@@ -11,8 +26,9 @@ class EventType(Enum):
     FILL = auto()
     RISK = auto()
     CLOCK = auto()
-    SYSTEM = auto()
-    REGIME_CHANGE = auto()
+    REGIME_CHANGE = auto()  # Emitted by AutonomousLoop on regime shift
+    SYSTEM = auto()  # Bot lifecycle events (start/stop/halt)
+    HEARTBEAT = auto()  # Periodic liveness signal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,9 +85,26 @@ class RiskEvent(Event):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RegimeChangeEvent(Event):
+    """Emitted when regime detector identifies a regime shift."""
+    regime_id: int
+    confidence: float  # posterior probability of current regime
+    previous_regime_id: int | None = None
+    type: EventType = EventType.REGIME_CHANGE
+
+
+@dataclass(frozen=True, kw_only=True)
 class SystemEvent(Event):
-    """System-level events (e.g. EMERGENCY_HALT for monitoring alerts)."""
-    action: str  # e.g., "EMERGENCY_HALT"
+    """Bot lifecycle events: START, STOP, EMERGENCY_HALT, RETRAIN."""
+    action: str  # "START" | "STOP" | "EMERGENCY_HALT" | "RETRAIN"
     reason: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.SYSTEM
+
+
+@dataclass(frozen=True, kw_only=True)
+class HeartbeatEvent(Event):
+    """Periodic liveness signal from a component."""
+    source: str  # Component name ("bot_runner", "risk_engine", etc.)
+    uptime_seconds: float
+    type: EventType = EventType.HEARTBEAT

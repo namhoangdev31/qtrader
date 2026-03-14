@@ -7,13 +7,17 @@ import polars as pl
 
 __all__ = ["VectorizedEngine"]
 
+_ROLLING_VOL_WINDOW = 20
+_PERIODS_PER_YEAR = 252
+
 
 @dataclass(slots=True)
 class VectorizedEngine:
     """High-performance vectorized backtest engine (Polars-native).
 
     All methods operate on full DataFrames without an event loop and enforce
-    **zero lookahead bias** via explicit signal lags.
+    **zero lookahead bias** via explicit signal lags. Supports volume-based
+    market impact (MarketImpactModel) and shorting/borrowing costs.
     """
 
     def backtest(
@@ -25,17 +29,25 @@ class VectorizedEngine:
         slippage_bps: float = 5.0,
         initial_capital: float = 100_000.0,
         allow_short: bool = True,
+        volume_col: str | None = None,
+        impact_model: str = "square_root",
+        borrowing_cost_annual_bps: float = 0.0,
     ) -> pl.DataFrame:
-        """Run a single-asset backtest with transaction costs and slippage.
+        """Run a single-asset backtest with transaction costs, optional impact and shorting costs.
 
         Args:
             df: Time-ordered DataFrame with at least ``timestamp`` and ``price_col``.
             signal_col: Column with trading signals (-1 short, 0 flat, 1 long).
             price_col: Price column used to compute returns.
-            transaction_cost_bps: Transaction costs in basis points per unit turnover.
-            slippage_bps: Additional slippage impact per unit turnover.
+            transaction_cost_bps: Commission in basis points per unit turnover.
+            slippage_bps: Fixed slippage in bps when volume_col is not set.
             initial_capital: Starting equity.
             allow_short: If False, negative signals are clipped.
+            volume_col: Optional column name for bar volume; when set, slippage is replaced
+                by MarketImpactModel (order size vs daily volume).
+            impact_model: One of "square_root", "almgren_chriss", "linear", "three_fifths".
+            borrowing_cost_annual_bps: Annualized borrowing/margin cost in bps when short;
+                applied to notional short each period.
 
         Returns:
             Input DataFrame with additional columns:
@@ -51,6 +63,8 @@ class VectorizedEngine:
             raise ValueError(f"Signal column '{signal_col}' not found.")
         if price_col not in df.columns:
             raise ValueError(f"Price column '{price_col}' not found.")
+        if volume_col is not None and volume_col not in df.columns:
+            raise ValueError(f"Volume column '{volume_col}' not found.")
 
         exec_signal = pl.col(signal_col)
         if not allow_short:
@@ -58,7 +72,6 @@ class VectorizedEngine:
 
         df_out = df.with_columns(
             [
-                # LOOKAHEAD PREVENTION: trade on next bar using lagged signal.
                 exec_signal.shift(1).alias("_exec_signal"),
                 pl.col(price_col).pct_change().alias("_asset_return"),
             ]
@@ -70,30 +83,56 @@ class VectorizedEngine:
             ]
         )
 
-        total_bps = transaction_cost_bps + slippage_bps
-        cost_per_unit = total_bps / 10_000.0
+        if volume_col is not None:
+            # Volume-based market impact (Polars-only): sigma_daily, order_size, impact_bps
+            sigma_daily = (
+                pl.col(price_col).pct_change().rolling_std(_ROLLING_VOL_WINDOW).fill_null(0.0)
+            )
+            order_size_shares = (initial_capital * pl.col("_turnover") / pl.col(price_col)).fill_null(0.0)
+            daily_vol = pl.col(volume_col).replace(0.0, None).fill_null(1e10)
+            ratio = (order_size_shares / daily_vol).clip(upper_bound=1.0)
+            impact_bps = (sigma_daily * ratio.sqrt()).fill_null(0.0)
+            cost_per_unit = (transaction_cost_bps + impact_bps) / 10_000.0
+            df_out = df_out.with_columns(
+                (pl.col("_turnover") * cost_per_unit).alias("_cost"),
+            )
+        else:
+            total_bps = transaction_cost_bps + slippage_bps
+            df_out = df_out.with_columns(
+                (pl.col("_turnover") * (total_bps / 10_000.0)).alias("_cost"),
+            )
 
-        df_out = df_out.with_columns(
-            (pl.col("_turnover") * cost_per_unit).alias("_cost"),
-        )
         df_out = df_out.with_columns(
             (pl.col("_gross_return") - pl.col("_cost")).alias("net_return"),
         )
         df_out = df_out.with_columns(
-            [
-                (pl.col("net_return") + 1.0).cum_prod().mul(initial_capital).alias(
-                    "equity_curve"
-                ),
-            ]
+            (pl.col("net_return") + 1.0).cum_prod().mul(initial_capital).alias("equity_curve"),
         )
+
+        if borrowing_cost_annual_bps > 0.0:
+            # Second pass: subtract shorting/borrowing cost from net return
+            prev_equity = pl.col("equity_curve").shift(1).fill_null(initial_capital)
+            short_notional = (
+                pl.when(pl.col("_exec_signal") < 0)
+                .then(prev_equity * pl.col("_exec_signal").abs())
+                .otherwise(0.0)
+            )
+            short_cost_pct = (
+                short_notional
+                * (borrowing_cost_annual_bps / 10_000.0 / _PERIODS_PER_YEAR)
+                / prev_equity
+            )
+            df_out = df_out.with_columns(
+                (pl.col("net_return") - short_cost_pct).alias("net_return"),
+            )
+            df_out = df_out.with_columns(
+                (pl.col("net_return") + 1.0).cum_prod().mul(initial_capital).alias("equity_curve"),
+            )
+
         df_out = df_out.with_columns(
-            [
-                (
-                    pl.col("equity_curve")
-                    / pl.col("equity_curve").cum_max()
-                    - 1.0
-                ).alias("drawdown"),
-            ]
+            (
+                pl.col("equity_curve") / pl.col("equity_curve").cum_max() - 1.0
+            ).alias("drawdown"),
         )
         return df_out
 

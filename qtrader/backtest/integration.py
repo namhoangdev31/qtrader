@@ -82,6 +82,9 @@ class BacktestHarness:
         benchmark: pl.Series | None = None,
         output_html: bool = True,
         price_col: str = "close",
+        volume_col: str | None = None,
+        impact_model: str = "square_root",
+        borrowing_cost_annual_bps: float = 0.0,
     ) -> BacktestResult:
         """
         Run vectorized backtest, generate tearsheet and optional HTML report.
@@ -90,12 +93,15 @@ class BacktestHarness:
             df: Full feature+signal DataFrame with timestamp, price_col, signal_col.
             signal_col: Column name for trading signal (-1/0/1).
             strategy_name: Label for report.
-            transaction_cost_bps: Transaction cost in bps.
-            slippage_bps: Slippage in bps.
+            transaction_cost_bps: Commission in bps.
+            slippage_bps: Fixed slippage in bps when volume_col is not set.
             initial_capital: Starting equity.
             benchmark: Optional benchmark return series for comparison.
             output_html: Whether to write HTML and JSON sidecar to reports_dir.
             price_col: Price column for returns.
+            volume_col: Optional volume column for market-impact slippage.
+            impact_model: Impact model when volume_col is set (e.g. "square_root").
+            borrowing_cost_annual_bps: Annual borrowing cost in bps when short.
 
         Returns:
             BacktestResult with tearsheet, backtest_df, and cross-check metrics.
@@ -107,6 +113,9 @@ class BacktestHarness:
             transaction_cost_bps=transaction_cost_bps,
             slippage_bps=slippage_bps,
             initial_capital=initial_capital,
+            volume_col=volume_col,
+            impact_model=impact_model,
+            borrowing_cost_annual_bps=borrowing_cost_annual_bps,
         )
         tearsheet = self.tearsheet_gen.generate(
             backtest_df,
@@ -130,6 +139,7 @@ class BacktestHarness:
                 backtest_df,
                 out_path,
                 write_json_sidecar=True,
+                strategy_name=strategy_name,
             )
 
         return BacktestResult(
@@ -202,6 +212,7 @@ class BacktestHarness:
                 backtest_df,
                 out_path,
                 write_json_sidecar=True,
+                strategy_name=strategy_name,
             )
         return WalkForwardResult(
             strategy_name=strategy_name,
@@ -277,6 +288,7 @@ class BacktestHarness:
                 results,
                 out_path,
                 write_json_sidecar=True,
+                strategy_name=strategy_name,
             )
         return BacktestResult(
             strategy_name=strategy_name,

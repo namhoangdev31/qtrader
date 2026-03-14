@@ -56,3 +56,33 @@ def test_tearsheet_metrics_from_json_roundtrip(tmp_path: object) -> None:
     loaded = TearsheetMetrics.from_json(str(p))
     assert loaded.sharpe_ratio == metrics.sharpe_ratio
     assert loaded.win_rate == metrics.win_rate
+
+
+def test_backtest_with_volume_and_borrowing_cost() -> None:
+    """VectorizedEngine accepts volume_col and borrowing_cost_annual_bps."""
+    ts = pl.datetime_range(
+        start=pl.datetime(2024, 1, 1),
+        end=pl.datetime(2024, 3, 1),
+        interval="1d",
+        eager=True,
+    )
+    n = len(ts)
+    df = pl.DataFrame({
+        "timestamp": ts,
+        "close": 100.0 + pl.arange(0, n, eager=True).cast(pl.Float64) * 0.1,
+        "volume": [1_000_000.0] * n,
+        "signal": [0.0] * n,
+    })
+    engine = VectorizedEngine()
+    out = engine.backtest(
+        df,
+        signal_col="signal",
+        price_col="close",
+        volume_col="volume",
+        borrowing_cost_annual_bps=50.0,
+    )
+    assert "equity_curve" in out.columns
+    assert "drawdown" in out.columns
+    # First row can be null due to pct_change; rest should be filled
+    assert out["equity_curve"].null_count() <= 1
+    assert out.height == n

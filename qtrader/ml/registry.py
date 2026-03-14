@@ -12,9 +12,14 @@ from qtrader.core.config import Config
 class ModelRegistry:
     """Wrapper for MLflow to handle systematic model versioning and metadata."""
     
-    def __init__(self, experiment_name: str | None = None) -> None:
+    def __init__(
+        self,
+        experiment_name: str | None = None,
+        tracking_uri: str | None = None,
+    ) -> None:
         try:
-            mlflow.set_tracking_uri(Config.MLFLOW_URI)
+            uri = tracking_uri if tracking_uri is not None else Config.MLFLOW_URI
+            mlflow.set_tracking_uri(uri)
             exp = experiment_name or os.getenv("MLFLOW_EXPERIMENT_NAME", "qtrader_v4_autonomous")
             mlflow.set_experiment(exp)
         except Exception as exc:
