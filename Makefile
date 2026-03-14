@@ -1,4 +1,4 @@
-.PHONY: help install test lint check clean docker-up docker-down rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader
+.PHONY: help install test lint check clean docker-up docker-down rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader bot-start bot-stop
 
 help:
 	@echo "Available commands:"
@@ -15,6 +15,8 @@ help:
 	@echo "  analyst             Install analyst deps + launch Jupyter (all notebooks)"
 	@echo "  analyst-researcher  Launch Jupyter for Researcher notebooks"
 	@echo "  analyst-trader      Launch Jupyter for Trader notebooks"
+	@echo "  bot-start   Start trading bot (paper config)"
+	@echo "  bot-stop    Stop trading bot"
 
 install:
 	uv sync
@@ -59,3 +61,9 @@ analyst-researcher:
 analyst-trader:
 	uv sync --extra analyst
 	uv run jupyter lab notebooks/trader/
+
+bot-start:
+	uv run python -m qtrader.bot.runner configs/bot_paper.yaml
+
+bot-stop:
+	@echo "Send SIGINT (Ctrl+C) to the bot process to stop."

@@ -1,34 +1,70 @@
+from __future__ import annotations
+
 import asyncio
+import logging
+from dataclasses import dataclass, field
 
 from qtrader.core.bus import EventBus
 from qtrader.data.pipeline.base import DataPipeline
 
+__all__ = ["BacktestEngine"]
 
+log = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
 class BacktestEngine:
-    """Event-driven backtesting engine."""
+    """Event-driven backtesting engine.
 
-    def __init__(self, bus: EventBus, pipelines: list[DataPipeline]) -> None:
-        self.bus = bus
-        self.pipelines = pipelines
-        self._running = False
+    Orchestrates one or more data pipelines that publish events onto an
+    :class:`EventBus`. The engine itself is asset-agnostic; strategies and
+    portfolio logic subscribe to events downstream.
+
+    Args:
+        bus: Shared EventBus instance.
+        pipelines: Collection of data pipelines feeding the bus.
+        name: Optional identifier for logging.
+    """
+
+    bus: EventBus
+    pipelines: list[DataPipeline]
+    name: str = "default"
+    _running: bool = field(init=False, default=False)
 
     async def run(self) -> None:
-        """Starts the backtest by running pipelines and processing events."""
+        """Run all pipelines and process events until completion."""
+        if self._running:
+            return
         self._running = True
-        
-        # Start the event bus in the background
+        log.info("BacktestEngine '%s' starting.", self.name)
+
         bus_task = asyncio.create_task(self.bus.start())
-        
-        # Run all data pipelines (these will publish events to the bus)
         pipeline_tasks = [asyncio.create_task(p.run()) for p in self.pipelines]
-        
-        # Wait for all pipelines to finish reading data
-        await asyncio.gather(*pipeline_tasks)
-        
-        # Once data is exhausted, wait a bit for bus to process remaining events
-        await asyncio.sleep(1)
-        
-        await self.bus.shutdown()
-        await bus_task
-        self._running = False
-        print("Backtest completed.")
+
+        try:
+            await asyncio.gather(*pipeline_tasks)
+        finally:
+            # Allow remaining events to be drained before shutdown.
+            await asyncio.sleep(1.0)
+            await self.bus.shutdown()
+            await bus_task
+            self._running = False
+            log.info("BacktestEngine '%s' completed.", self.name)
+
+    def run_until_complete(self) -> None:
+        """Synchronous helper for running the engine in scripts/tests."""
+        asyncio.run(self.run())
+
+
+if __name__ == "__main__":
+    # Minimal smoke test wiring (no real data pipelines).
+    from qtrader.core.bus import EventBus as _Bus  # type: ignore[reimported]
+
+    class _DummyPipeline(DataPipeline):  # type: ignore[misc]
+        async def run(self) -> None:  # type: ignore[override]
+            return None
+
+    _bus = _Bus()
+    _engine = BacktestEngine(bus=_bus, pipelines=[_DummyPipeline()])
+    assert isinstance(_engine, BacktestEngine)
+

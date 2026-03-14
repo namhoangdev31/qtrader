@@ -1,13 +1,18 @@
+"""Factor engine for batch and incremental feature computation."""
+
+from __future__ import annotations
 
 import polars as pl
 
 from qtrader.features.base import Feature
 from qtrader.features.store import FeatureStore
 
+__all__ = ["FactorEngine"]
+
 
 class FactorEngine:
     """Orchestrates batch computation and storage of features."""
-    
+
     def __init__(self, store: FeatureStore) -> None:
         self.store = store
         self.factors: list[Feature] = []
@@ -16,26 +21,36 @@ class FactorEngine:
         """Adds a factor to the engine."""
         self.factors.append(factor)
 
-    def compute_and_save(self, df: pl.DataFrame, symbol: str, timeframe: str) -> pl.DataFrame:
-        """Computes all registered factors and saves to store."""
-        feature_dfs = []
+    def get_all_feature_names(self) -> list[str]:
+        """Return names of all registered factors (for pipeline and bot)."""
+        return [getattr(f, "name", f"factor_{i}") for i, f in enumerate(self.factors)]
+
+    def compute(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Compute all registered factors on df without saving to store."""
+        feature_dfs: list[pl.DataFrame] = []
         for factor in self.factors:
-            # Each compute call returns a Series or DataFrame
             result = factor.compute(df)
             if isinstance(result, pl.Series):
                 feature_dfs.append(result.to_frame())
             else:
                 feature_dfs.append(result)
-
-        # Horizontal concat of features
         if not feature_dfs:
             return pl.DataFrame()
-            
-        final_features = pl.concat(feature_dfs, how="horizontal")
-        
-        # Merge with timestamp from original df to keep it aligned
+        final = pl.concat(feature_dfs, how="horizontal")
         if "timestamp" in df.columns:
-            final_features = pl.concat([df.select("timestamp"), final_features], how="horizontal")
-            
-        self.store.save_features(final_features, symbol, timeframe)
+            final = pl.concat([df.select("timestamp"), final], how="horizontal")
+        return final
+
+    def compute_latest(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Compute features and return only the last row (for live signal loop)."""
+        full = self.compute(df)
+        if full.is_empty():
+            return full
+        return full.tail(1)
+
+    def compute_and_save(self, df: pl.DataFrame, symbol: str, timeframe: str) -> pl.DataFrame:
+        """Computes all registered factors and saves to store."""
+        final_features = self.compute(df)
+        if not final_features.is_empty():
+            self.store.save_features(final_features, symbol, timeframe)
         return final_features

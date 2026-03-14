@@ -11,6 +11,8 @@ class EventType(Enum):
     FILL = auto()
     RISK = auto()
     CLOCK = auto()
+    SYSTEM = auto()
+    REGIME_CHANGE = auto()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,3 +66,12 @@ class RiskEvent(Event):
     action: str  # e.g., "BLOCK", "LIQUIDATE"
     metadata: dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.RISK
+
+
+@dataclass(frozen=True, kw_only=True)
+class SystemEvent(Event):
+    """System-level events (e.g. EMERGENCY_HALT for monitoring alerts)."""
+    action: str  # e.g., "EMERGENCY_HALT"
+    reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    type: EventType = EventType.SYSTEM
