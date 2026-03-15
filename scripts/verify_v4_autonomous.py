@@ -4,7 +4,7 @@ import asyncio
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.rotation import ModelRotator
 from qtrader.execution.oms import UnifiedOMS
-from scripts.generate_data import generate_synthetic_data
+from scripts.generate_test_data import generate_synthetic_data
 
 async def verify_v4_autonomous_intelligence():
     print("🤖 Verifying QTrader v4 Autonomous Intelligence...")

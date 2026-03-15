@@ -20,7 +20,7 @@ from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.input.data.datalake import DataLake
 from qtrader.input.data.datalake_universal import UniversalDataLake
 from qtrader.input.data.duckdb_client import DuckDBClient
-from scripts.generate_data import generate_synthetic_data
+from scripts.generate_test_data import generate_synthetic_data
 
 
 class RoleContext(str, Enum):

@@ -2,7 +2,7 @@ import polars as pl
 from qtrader.data.catalog import DataCatalog
 from qtrader.ml.registry import ModelRegistry
 from qtrader.execution.algos import TWAP
-from scripts.generate_data import generate_synthetic_data
+from scripts.generate_test_data import generate_synthetic_data
 
 def verify_v3_institutional_ready():
     print("🏦 Verifying QTrader v3 Institutional Readiness...")

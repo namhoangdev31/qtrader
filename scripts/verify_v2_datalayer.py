@@ -6,7 +6,7 @@ from qtrader.features.store import FeatureStore
 from qtrader.features.engine import FactorEngine
 from qtrader.features.factors.price import PriceMomentum, RollingVolatility
 from qtrader.features.factors.volume import VolumeZScore
-from scripts.generate_data import generate_synthetic_data
+from scripts.generate_test_data import generate_synthetic_data
 
 async def verify_v2_foundation():
     print("🚀 Verifying QTrader v2 Data Foundation...")

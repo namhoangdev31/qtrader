@@ -70,7 +70,7 @@ if __name__ == "__main__":
     # Create sample data if it doesn't exist
     import os
     if not os.path.exists("sample_data.csv"):
-        from scripts.generate_data import generate_synthetic_data
+        from scripts.generate_test_data import generate_synthetic_data
         df = generate_synthetic_data("AAPL", days=1)
         df.write_csv("sample_data.csv")
         
