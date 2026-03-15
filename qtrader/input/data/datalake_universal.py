@@ -36,6 +36,10 @@ class UniversalDataLake:
         """Saves data to the Data Lake (Local or Cloud)."""
         target_uri = self._get_path(symbol, timeframe)
         
+        # Ensure parent directory exists for local paths
+        if not target_uri.startswith(("s3://", "gs://", "az://")):
+            Path(target_uri).parent.mkdir(parents=True, exist_ok=True)
+
         # Polars write_parquet handles cloud URIs if fsspec/s3fs is installed
         # or natively in some versions.
         df.write_parquet(

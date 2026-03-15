@@ -59,36 +59,58 @@ class CoinbaseMarketDataClient:
         end: str | int | datetime | None = None,
     ) -> pl.DataFrame:
         """
-        Fetch OHLCV candles for a product.
-        granularity: ONE_MINUTE, FIVE_MINUTE, FIFTEEN_MINUTE, THIRTY_MINUTE, ONE_HOUR, TWO_HOUR, SIX_HOUR, ONE_DAY
-        start/end: Unix timestamps in seconds (or datetime)
-        
-        Returns: Polars DataFrame with columns [timestamp, open, high, low, close, volume]
+        Fetch OHLCV candles for a product with pagination.
+        Coinbase returns max 300 candles per request.
         """
-        params: dict[str, Any] = {"granularity": granularity}
+        import time
         
-        if isinstance(start, datetime):
-            params["start"] = str(int(start.timestamp()))
-        elif start:
-            params["start"] = str(int(start))
-            
-        if isinstance(end, datetime):
-            params["end"] = str(int(end.timestamp()))
-        elif end:
-            params["end"] = str(int(end))
-
+        start_ts = int(start.timestamp()) if isinstance(start, datetime) else int(start or 0)
+        end_ts = int(end.timestamp()) if isinstance(end, datetime) else int(end or time.time())
+        
+        all_candles: list[dict] = []
+        current_end = end_ts
+        
         path = f"/brokerage/products/{product_id}/candles"
-        data = self._get(path, params)
         
-        candles = data.get("candles", [])
-        if not candles:
+        while current_end > start_ts:
+            params = {
+                "granularity": granularity,
+                "start": str(start_ts),
+                "end": str(current_end)
+            }
+            try:
+                data = self._get(path, params)
+                batch = data.get("candles", [])
+                if not batch:
+                    break
+                
+                all_candles.extend(batch)
+                
+                # Find the earliest candle in this batch to move current_end back
+                earliest_in_batch = min(int(c["start"]) for c in batch)
+                if earliest_in_batch >= current_end:
+                    # Guard against infinite loops if API returns the same data
+                    break
+                    
+                current_end = earliest_in_batch - 1
+                
+                # Respect rate limits (public API is approx 10 req/sec)
+                # We'll just do a tiny sleep if it's a large request
+                if len(all_candles) > 1000:
+                    time.sleep(0.1)
+                
+                # If we got fewer than 300, we've likely hit the start
+                if len(batch) < 300:
+                    break
+                    
+            except Exception as e:
+                _LOG.error(f"Error fetching candle batch: {e}")
+                break
+
+        if not all_candles:
             return pl.DataFrame()
 
-        # Coinbase response format:
-        # { "start": "1672531200", "low": "15000", "high": "16000", "open": "15500", "close": "15800", "volume": "10.5" }
-        df = pl.DataFrame(candles)
-        
-        # Cast and rename
+        df = pl.DataFrame(all_candles)
         df = df.with_columns([
             pl.from_epoch(pl.col("start").cast(pl.Int64), time_unit="s").alias("timestamp"),
             pl.col("open").cast(pl.Float64),
@@ -98,8 +120,7 @@ class CoinbaseMarketDataClient:
             pl.col("volume").cast(pl.Float64),
         ]).select(["timestamp", "open", "high", "low", "close", "volume"])
         
-        # Sort chronologically
-        return df.sort("timestamp")
+        return df.sort("timestamp").unique(subset=["timestamp"])
 
     def get_product_book(self, product_id: str, limit: int = 10) -> dict[str, Any]:
         """

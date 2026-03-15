@@ -56,6 +56,7 @@ class AnalystSession:
         timeframe: str,
         filter_sql: str | None = None,
         source: str = "duckdb",
+        days: int | None = None,
     ) -> pl.DataFrame:
         """Load OHLCV from the datalake using DuckDB when available."""
         if source == "duckdb":
@@ -63,10 +64,10 @@ class AnalystSession:
                 return self._load_from_duckdb(symbol, timeframe, filter_sql)
             except (FileNotFoundError, RuntimeError, ValueError) as exc:
                 self._log.warning("DuckDB load failed (%s). Falling back to datalake.", exc)
-                return self.load_from_datalake(symbol, timeframe)
-        return self.load_from_datalake(symbol, timeframe)
+                return self.load_from_datalake(symbol, timeframe, days=days)
+        return self.load_from_datalake(symbol, timeframe, days=days)
 
-    def load_from_datalake(self, symbol: str, timeframe: str) -> pl.DataFrame:
+    def load_from_datalake(self, symbol: str, timeframe: str, days: int | None = None) -> pl.DataFrame:
         """Load OHLCV from UniversalDataLake/DataLake fallback."""
         try:
             return self._load_from_universal(symbol, timeframe)
@@ -76,7 +77,12 @@ class AnalystSession:
                 return self._load_from_local_datalake(symbol, timeframe)
             except FileNotFoundError:
                 self._log.warning("DataLake missing. Falling back to Live API.")
-                return self.load_live_ohlcv(symbol, timeframe, days=7)
+                
+                # Determine how many days to fetch if not specified
+                if days is None:
+                    days = 730 if self.role == RoleContext.RESEARCHER else 7
+                
+                return self.load_live_ohlcv(symbol, timeframe, days=days)
 
     def sample_ohlcv(self, symbol: str = "AAPL", days: int = 5) -> pl.DataFrame:
         """Generate synthetic OHLCV for quick analysis (no data source required)."""
@@ -92,6 +98,9 @@ class AnalystSession:
         """Load real Coinbase REST API data and persist it to the DataLake."""
         from qtrader.input.data.market.coinbase_market import CoinbaseMarketDataClient
         from datetime import datetime, timedelta
+        import time
+        
+        self._log.info(f"Requesting {days} days of live data for {symbol}...")
         
         tf_map = {
             "1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
@@ -285,6 +294,7 @@ class AnalystSession:
         signal_col: str,
         price_col: str = "close",
         transaction_cost: float = 0.0001,
+        slippage: float = 0.00005,
     ) -> pl.DataFrame:
         """Run vectorized backtest using VectorizedEngine."""
         engine = VectorizedEngine()
@@ -292,7 +302,16 @@ class AnalystSession:
             df=df,
             signal_col=signal_col,
             price_col=price_col,
-            transaction_cost=transaction_cost,
+            transaction_cost_bps=transaction_cost * 10_000,
+            slippage_bps=slippage * 10_000,
+        )
+
+    def get_monthly_returns(self, backtest_df: pl.DataFrame) -> pl.DataFrame:
+        """Helper to get a clean, robust monthly returns table (pivot year x month)."""
+        gen = TearsheetGenerator()
+        return gen.monthly_returns_table(
+            backtest_df["equity_curve"],
+            backtest_df["timestamp"],
         )
 
     # ──────────────────────────────────────────────────────────────────

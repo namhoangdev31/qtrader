@@ -258,13 +258,25 @@ class TearsheetGenerator:
             .with_columns(((pl.col("end") / pl.col("start") - 1.0) * 100.0).alias("ret_pct"))
         )
 
+        # Pivot with manual filling of missing months
         pivot = monthly.pivot(
             values="ret_pct",
             index="year",
-            columns="month",
+            on="month",
         ).sort("year")
 
-        # Compute YTD column.
+        # Ensure all 12 months are present as columns "1" through "12"
+        existing_cols = set(pivot.columns)
+        for m in range(1, 13):
+            m_str = str(m)
+            if m_str not in existing_cols:
+                pivot = pivot.with_columns(pl.lit(None).cast(pl.Float64).alias(m_str))
+
+        # Reorder columns: year, 1..12
+        cols_ordered = ["year"] + [str(m) for m in range(1, 13)]
+        pivot = pivot.select(cols_ordered)
+
+        # Compute YTD column
         ytd = (
             monthly.group_by("year")
             .agg(
@@ -278,7 +290,13 @@ class TearsheetGenerator:
         )
 
         result = pivot.join(ytd, on="year", how="left")
-        return result
+        
+        # Friendly month names for the final output
+        rename_map = {
+            str(m): ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1]
+            for m in range(1, 13)
+        }
+        return result.rename(rename_map)
 
     def _build_plotly_charts(
         self,
