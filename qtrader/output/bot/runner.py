@@ -23,7 +23,10 @@ from qtrader.output.portfolio.hrp import HRPOptimizer
 from qtrader.output.portfolio.sizing import VolTargetSizer
 from qtrader.output.risk.realtime import RealTimeRiskEngine
 from qtrader.strategy.alpha_combiner import AlphaCombiner
-
+from qtrader.output.analytics.performance import PerformanceAnalytics
+from qtrader.output.analytics.telemetry import Telemetry
+from qtrader.output.analytics.drift import DriftMonitor
+from qtrader.pipeline.monitor import LiveMonitor
 from qtrader.output.bot.config import BotConfig
 from qtrader.output.bot.ev_optimizer import EVOptimizer
 from qtrader.output.bot.performance import PerformanceTracker
@@ -85,10 +88,7 @@ class TradingBot:
         self.backtest_baseline = _load_baseline_metrics()
         self.monitor = None
         if self.backtest_baseline is not None:
-            from qtrader.output.analytics.performance import PerformanceAnalytics
-            from qtrader.output.analytics.telemetry import Telemetry
-            from qtrader.output.analytics.drift import DriftMonitor
-            from qtrader.pipeline.monitor import LiveMonitor
+
             self.monitor = LiveMonitor(
                 tracker=self.performance,
                 analytics=PerformanceAnalytics(),
