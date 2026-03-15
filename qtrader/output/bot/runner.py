@@ -16,6 +16,10 @@ from qtrader.core.bus import EventBus
 from qtrader.core.event import EventType, FillEvent, OrderEvent, RiskEvent, SystemEvent
 from qtrader.input.data.datalake import DataLake
 from qtrader.output.execution.oms import UnifiedOMS
+from qtrader.output.execution.safety import SafetyLayer
+from qtrader.output.execution.sor import SmartOrderRouter
+from qtrader.output.execution.brokers.binance import BinanceBrokerAdapter
+from qtrader.output.execution.brokers.coinbase import CoinbaseBrokerAdapter
 from qtrader.input.features.engine import FactorEngine
 from qtrader.input.features.store import FeatureStore
 from qtrader.ml.regime import RegimeDetector
@@ -62,6 +66,8 @@ class TradingBot:
         self.config = config
         self.bus = EventBus()
         self.oms = UnifiedOMS()
+        self.safety = SafetyLayer()
+        self.sor = SmartOrderRouter(self.oms)
         self.risk_engine = RealTimeRiskEngine()
         self.state = StateMachine()
         self.performance = PerformanceTracker(config.initial_capital)
@@ -104,8 +110,13 @@ class TradingBot:
         self._last_heartbeat: float = 0.0
         self._running = False
         self._tasks: list[asyncio.Task[Any]] = []
+        self._primary_venue: str | None = None
+        self._broker_symbol_map: dict[str, str] = {}
+
+        self._init_execution_venues()
 
         self.bus.subscribe(EventType.FILL, self._on_fill)
+        self.bus.subscribe(EventType.ORDER, self._on_order)
         self.bus.subscribe(EventType.RISK, self._on_risk_event)
         self.bus.subscribe(EventType.SYSTEM, self._on_system_event)
 
@@ -124,6 +135,95 @@ class TradingBot:
         if event.action == "EMERGENCY_HALT":
             _LOG.critical("System EMERGENCY_HALT: %s", event.reason)
             await self.emergency_shutdown(event.reason)
+
+    def _init_execution_venues(self) -> None:
+        """Attach broker adapters based on configured venues (Coinbase default)."""
+        venues = [v.strip().lower() for v in self.config.venues if str(v).strip()]
+        for venue in venues:
+            if venue == "coinbase":
+                self.oms.add_venue("coinbase", CoinbaseBrokerAdapter())
+            elif venue == "binance":
+                self.oms.add_venue("binance", BinanceBrokerAdapter())
+            else:
+                _LOG.warning("Unsupported venue '%s' in config; skipping", venue)
+
+        if not self.oms.adapters:
+            raise ValueError(
+                "No supported venues configured. Set venues to ['coinbase'] "
+                "or ['binance'] in your bot YAML."
+            )
+
+        # Primary venue = first configured supported venue
+        for venue in venues:
+            if venue in self.oms.adapters:
+                self._primary_venue = venue
+                break
+        if self._primary_venue is None:
+            self._primary_venue = next(iter(self.oms.adapters.keys()))
+
+    def _normalize_symbol_for_venue(self, symbol: str, venue: str) -> str:
+        """Normalize symbol format for target venue."""
+        if venue == "coinbase":
+            return symbol.replace("/", "-").upper()
+        if venue == "binance":
+            return symbol.replace("/", "").replace("-", "").upper()
+        return symbol
+
+    def _adapt_order_for_venue(self, order: OrderEvent, venue: str) -> OrderEvent:
+        """Return a venue-specific order (symbol formatting, etc.)."""
+        normalized_symbol = self._normalize_symbol_for_venue(order.symbol, venue)
+        if normalized_symbol == order.symbol:
+            return order
+        return OrderEvent(
+            type=EventType.ORDER,
+            symbol=normalized_symbol,
+            order_type=order.order_type,
+            quantity=order.quantity,
+            price=order.price,
+            side=order.side,
+            order_id=order.order_id,
+        )
+
+    async def _pick_venue(self, order: OrderEvent) -> str:
+        """Select venue for order routing."""
+        if len(self.oms.adapters) == 1:
+            return next(iter(self.oms.adapters.keys()))
+        # Use SOR when multiple venues are configured.
+        return await self.sor.get_best_venue(order.symbol, order.side)
+
+    async def _on_order(self, event: OrderEvent) -> None:
+        """Handle order: safety check -> route -> publish fills."""
+        try:
+            venue = await self._pick_venue(event)
+            order = self._adapt_order_for_venue(event, venue)
+            market_state = self.oms.get_market_state(venue, order.symbol)
+            if not self.safety.check_order(order, market_state):
+                await self.bus.publish(
+                    RiskEvent(
+                        reason="Safety check failed",
+                        action="BLOCK",
+                        metadata={"venue": venue, "symbol": order.symbol},
+                    )
+                )
+                return
+            broker_oid = await self.oms.route_order(venue, order)
+            self._broker_symbol_map[broker_oid] = event.symbol
+            fills = await self.oms.adapters[venue].get_fills(broker_oid)
+            for fill in fills:
+                symbol = self._broker_symbol_map.get(broker_oid, fill.symbol)
+                if symbol != fill.symbol:
+                    fill = FillEvent(
+                        symbol=symbol,
+                        quantity=fill.quantity,
+                        price=fill.price,
+                        commission=fill.commission,
+                        side=fill.side,
+                        order_id=fill.order_id,
+                        fill_id=fill.fill_id,
+                    )
+                await self.bus.publish(fill)
+        except Exception as e:
+            _LOG.error("Order handling failed", exc_info=e)
 
     async def _fetch_latest_bars(self, symbol: str, n_bars: int = 500) -> pl.DataFrame:
         """Load last n_bars for symbol from datalake (run off-thread to avoid blocking)."""
@@ -317,6 +417,7 @@ class TradingBot:
         self.state.transition(BotState.TRADING, "warmup complete")
         self._last_heartbeat = time.time()
         self._tasks = [
+            asyncio.create_task(self.bus.start()),
             asyncio.create_task(self._signal_loop()),
             asyncio.create_task(self._risk_loop()),
             asyncio.create_task(self._rebalance_loop()),
@@ -344,12 +445,21 @@ class TradingBot:
             self.state.transition(BotState.EMERGENCY, reason)
         except ValueError:
             pass
+        await self.bus.shutdown()
         for t in self._tasks:
             t.cancel()
         try:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         except Exception:
             pass
+        # Close broker sessions if supported
+        for adapter in self.oms.adapters.values():
+            close = getattr(adapter, "close", None)
+            if callable(close):
+                try:
+                    await close()
+                except Exception:
+                    pass
         _LOG.info("Emergency shutdown complete")
 
     @property
@@ -386,7 +496,7 @@ if __name__ == "__main__":
 """
 # Pytest-style examples:
 async def test_bot_start_transitions() -> None:
-    cfg = BotConfig(symbols=["A"], venues=["v"])
+    cfg = BotConfig(symbols=["A"], venues=["coinbase"])
     bot = TradingBot(cfg)
     await bot.start()
     assert bot.state.can_trade()

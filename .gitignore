@@ -22,3 +22,4 @@ mlruns/
 .env
 .DS_Store
 qtrader/api/__init__.py
+rust_core/.cargo

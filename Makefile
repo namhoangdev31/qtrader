@@ -63,7 +63,7 @@ analyst-trader:
 	uv run jupyter lab notebooks/trader/
 
 bot-start:
-	uv run python -m qtrader.bot.runner configs/bot_paper.yaml
+	uv run python -m qtrader.output.bot.runner configs/bot_paper.yaml
 
 bot-stop:
 	@echo "Send SIGINT (Ctrl+C) to the bot process to stop."

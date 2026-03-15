@@ -1,5 +1,5 @@
-symbols: ["BTC/USDT", "ETH/USDT"]
-venues: ["binance"]
+symbols: ["BTC-USD", "ETH-USD"]
+venues: ["coinbase"]
 signal_interval_s: 60
 rebalance_interval_s: 300
 risk_check_interval_s: 10
