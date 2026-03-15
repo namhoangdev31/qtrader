@@ -6,7 +6,7 @@ import logging
 import polars as pl
 
 from qtrader.backtest.integration import BacktestHarness
-from qtrader.bot.performance import PerformanceTracker
+from qtrader.output.bot.performance import PerformanceTracker
 from qtrader.pipeline.deployment import DeploymentBridge
 from qtrader.pipeline.research import ResearchPipeline, ResearchResult
 

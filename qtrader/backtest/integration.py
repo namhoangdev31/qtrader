@@ -9,7 +9,7 @@ from typing import Callable, Protocol, runtime_checkable
 
 import polars as pl
 
-from qtrader.analytics.performance import PerformanceAnalytics
+from qtrader.output.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.multi_asset import PortfolioBacktest
 from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
@@ -249,7 +249,7 @@ class BacktestHarness:
         Returns:
             BacktestResult with tearsheet and backtest_df.
         """
-        from qtrader.portfolio.hrp import HRPOptimizer
+        from qtrader.output.portfolio.hrp import HRPOptimizer
 
         symbol_cols = [c for c in prices.columns if c != "timestamp"]
         allowed = {"rebalance_freq", "allow_leverage", "max_position_pct"}

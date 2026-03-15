@@ -10,13 +10,13 @@ from typing import Any
 import polars as pl
 import yaml
 
-from qtrader.alpha.registry import AlphaEngine
-from qtrader.analytics.drift import DriftMonitor
+from qtrader.input.alpha.registry import AlphaEngine
+from qtrader.output.analytics.drift import DriftMonitor
 from qtrader.backtest.integration import BacktestHarness, BacktestResult
 from qtrader.backtest.tearsheet import TearsheetMetrics
-from qtrader.data.datalake import DataLake
-from qtrader.features.engine import FactorEngine
-from qtrader.features.store import FeatureStore
+from qtrader.input.data.datalake import DataLake
+from qtrader.input.features.engine import FactorEngine
+from qtrader.input.features.store import FeatureStore
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.walk_forward import WalkForwardPipeline
 
