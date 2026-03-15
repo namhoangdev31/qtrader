@@ -49,8 +49,9 @@ class SafetyLayer:
         self.order_count_window.append(now)
         return True
 
-    def halt_system(self, reason: str) -> None:
+    async def halt_system(self, reason: str, oms: Any | None = None) -> None:
         """Triggers a global emergency halt."""
         logging.critical(f"SAFETY | EMERGENCY HALT TRIGGERED: {reason}")
         self.is_halted = True
-        # Future: Trigger 'Flatten All' command to OMS
+        if oms:
+            await oms.cancel_all_orders()

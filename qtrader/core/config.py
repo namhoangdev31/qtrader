@@ -25,7 +25,7 @@ class QTraderSettings(BaseSettings):
     # Coinbase
     coinbase_api_key: str = ""
     coinbase_api_secret: str = ""
-    coinbase_rest_base: str = "https://api.coinbase.com"
+    coinbase_rest_base: str = "https://api.coinbase.com/api/v3"
     coinbase_key_name: str = ""
     coinbase_private_key: str = ""
 

@@ -62,12 +62,20 @@ class CoinbaseBrokerAdapter:
     def _auth_headers(self, *, method: str, path: str) -> dict[str, str]:
         if not self._key_name or not self._private_key_pem:
             raise PermissionError("Missing COINBASE_KEY_NAME / COINBASE_PRIVATE_KEY for live REST mode")
+        
+        from urllib.parse import urlparse
+        parsed = urlparse(self._rest_base)
+        full_path = f"{parsed.path.rstrip('/')}{path}"
+        
+        # fix literal \n
+        raw_key = self._private_key_pem.replace("\\n", "\n")
+
         token = build_rest_jwt(
             rest_base=self._rest_base,
             method=method,
-            path=path,
+            path=full_path,
             key_name=self._key_name,
-            private_key_pem=self._private_key_pem,
+            private_key_pem=raw_key,
         )
         return {"Authorization": f"Bearer {token}"}
 
@@ -95,7 +103,7 @@ class CoinbaseBrokerAdapter:
             return broker_oid
 
         # Live mode: Coinbase Advanced Trade REST (JWT).
-        path = "/api/v3/brokerage/orders"
+        path = "/brokerage/orders"
         url = f"{self._rest_base}{path}"
 
         client_order_id = order.order_id or broker_oid
@@ -151,7 +159,7 @@ class CoinbaseBrokerAdapter:
         if self.simulate:
             self._orders.pop(order_id, None)
             return True
-        path = "/api/v3/brokerage/orders/batch_cancel"
+        path = "/brokerage/orders/batch_cancel"
         url = f"{self._rest_base}{path}"
         session = await self._get_session()
         resp = await request_json(
@@ -175,7 +183,7 @@ class CoinbaseBrokerAdapter:
     async def get_fills(self, order_id: str) -> list[FillEvent]:
         if self.simulate:
             return list(self._fills.get(order_id, []))
-        path = "/api/v3/brokerage/orders/historical/fills"
+        path = "/brokerage/orders/historical/fills"
         url = f"{self._rest_base}{path}"
         session = await self._get_session()
 
@@ -215,7 +223,7 @@ class CoinbaseBrokerAdapter:
     async def get_balance(self) -> dict:
         if self.simulate:
             return dict(self._positions)
-        path = "/api/v3/brokerage/accounts"
+        path = "/brokerage/accounts"
         url = f"{self._rest_base}{path}"
         session = await self._get_session()
         resp = await request_json(

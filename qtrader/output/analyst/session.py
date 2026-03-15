@@ -72,11 +72,82 @@ class AnalystSession:
             return self._load_from_universal(symbol, timeframe)
         except FileNotFoundError as exc:
             self._log.warning("UniversalDataLake missing (%s). Falling back to DataLake.", exc)
-            return self._load_from_local_datalake(symbol, timeframe)
+            try:
+                return self._load_from_local_datalake(symbol, timeframe)
+            except FileNotFoundError:
+                self._log.warning("DataLake missing. Falling back to Live API.")
+                return self.load_live_ohlcv(symbol, timeframe, days=7)
 
     def sample_ohlcv(self, symbol: str = "AAPL", days: int = 5) -> pl.DataFrame:
         """Generate synthetic OHLCV for quick analysis (no data source required)."""
-        return generate_synthetic_data(symbol=symbol, days=days)
+        self._log.warning(f"⚠️ DATA_SOURCE: Generating SYNTHETIC data for {symbol}.")
+        try:
+            from scripts.generate_test_data import generate_synthetic_data
+            return generate_synthetic_data(symbol=symbol, days=days)
+        except ImportError:
+            self._log.error("generate_synthetic_data function missing. Return empty df.")
+            return pl.DataFrame()
+
+    def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
+        """Load real Coinbase REST API data and persist it to the DataLake."""
+        from qtrader.input.data.market.coinbase_market import CoinbaseMarketDataClient
+        from datetime import datetime, timedelta
+        
+        tf_map = {
+            "1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
+            "30m": "THIRTY_MINUTE", "1h": "ONE_HOUR", "2h": "TWO_HOUR", 
+            "6h": "SIX_HOUR", "1d": "ONE_DAY"
+        }
+        granularity = tf_map.get(timeframe, "ONE_HOUR")
+        
+        client = CoinbaseMarketDataClient()
+        end_dt = datetime.utcnow()
+        start_dt = end_dt - timedelta(days=days)
+        df = client.get_candles(symbol, granularity, start=start_dt, end=end_dt)
+        if not df.is_empty():
+            self._log.info(f"Loaded {len(df)} live candles for {symbol} ({granularity})")
+            
+            # Persist to datalake
+            try:
+                from qtrader.input.data.datalake_universal import UniversalDataLake
+                lake = UniversalDataLake()
+                lake.save_data(df, symbol, timeframe)
+            except Exception as e:
+                self._log.warning(f"Failed to persist live data to DataLake: {e}")
+                
+        else:
+            self._log.warning(f"No live data returned for {symbol}. Falling back to synthetic mock data.")
+            df = self.sample_ohlcv(symbol, days)
+        return df
+
+    def get_live_orderbook(self, symbol: str, limit: int = 20) -> dict[str, Any]:
+        """Fetch the live L2 orderbook from Coinbase."""
+        from qtrader.input.data.market.coinbase_market import CoinbaseMarketDataClient
+        client = CoinbaseMarketDataClient()
+        return client.get_product_book(symbol, limit)
+
+    def run_paper_simulation(self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7) -> Any:
+        """Run a strategy logic function against live data to compute expected EV."""
+        from qtrader.output.execution.paper_engine import PaperTradingEngine
+        from qtrader.output.analytics.ev_calculator import EVCalculator
+        
+        df = self.load_live_ohlcv(symbol, timeframe, days)
+        engine = PaperTradingEngine(starting_capital=10000.0)
+        
+        # applying strategy
+        for row in df.iter_rows(named=True):
+            market_state = {
+                "bid": float(row["close"]) * 0.9999,
+                "ask": float(row["close"]) * 1.0001,
+                "top_depth": 5.0,
+                "venue": "Coinbase_Sim"
+            }
+            order = strategy_fn(row)
+            if order:
+                engine.simulate_fill(order, market_state)
+                
+        calculator = EVCalculator(engine.closed_trades)
+        return calculator.diagnose(symbol)
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
         """Load pre-computed features from the FeatureStore.

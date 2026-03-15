@@ -35,6 +35,9 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "statsmodels>=0.14.6",
+    "plotly>=6.6.0",
+    "nbformat>=5.10.4",
+    "nbclient>=0.10.4",
 ]
 
 [project.optional-dependencies]

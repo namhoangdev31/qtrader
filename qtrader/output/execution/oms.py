@@ -196,6 +196,24 @@ class UnifiedOMS:
             total += venue_pos.get(asset, 0.0)
         return total
 
+    async def cancel_order(self, venue: str, order_id: str) -> bool:
+        if venue not in self.adapters:
+            return False
+        res = await self.adapters[venue].cancel_order(order_id)
+        if res:
+            self.live_orders.pop(order_id, None)
+        return res
+
+    async def cancel_all_orders(self) -> None:
+        """Cancel all live orders across all venues."""
+        import asyncio
+        tasks = []
+        for venue, adapter in self.adapters.items():
+            for oid in list(self.live_orders.keys()):
+                tasks.append(self.cancel_order(venue, oid))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
 
 """
 # Pytest-style examples:
