@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import polars as pl
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from pydantic import BaseModel
 
 from qtrader.core.config import Config
@@ -39,17 +40,24 @@ class CoinbaseMarketDataClient:
         )
         return {"Authorization": f"Bearer {token}"}
 
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
+        before_sleep=before_sleep_log(_LOG, logging.WARNING),
+        reraise=True
+    )
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         url = f"{self.rest_base}{path}"
         headers = self._auth_headers("GET", path)
-        try:
-            with httpx.Client(timeout=self.timeout) as client:
-                resp = client.get(url, params=params, headers=headers)
+        with httpx.Client(timeout=self.timeout) as client:
+            resp = client.get(url, params=params, headers=headers)
+            if resp.status_code == 429 or resp.status_code >= 500:
                 resp.raise_for_status()
-                return resp.json()
-        except Exception as e:
-            _LOG.error(f"Coinbase GET {path} failed: {e}")
-            raise
+            elif resp.status_code != 200:
+                resp.raise_for_status()
+            
+            return resp.json()
 
     def get_candles(
         self,
@@ -100,7 +108,6 @@ class CoinbaseMarketDataClient:
                 data = self._get(path, params)
                 batch = data.get("candles", [])
                 if not batch:
-                    # No data in this range, move back for next iteration
                     if current_end > chunk_start:
                         current_end = chunk_start
                     else:
@@ -109,26 +116,21 @@ class CoinbaseMarketDataClient:
                 
                 all_candles.extend(batch)
                 
-                # Move current_end to the earliest candle in this batch
                 earliest_in_batch = min(int(c["start"]) for c in batch)
                 
-                # Ensure monotonic progress
                 if earliest_in_batch < current_end:
                     current_end = earliest_in_batch
                 else:
-                    # Force move if we didn't get earlier data
                     current_end = chunk_start
                 
-                # If we've reached or passed the global start, stop
                 if current_end <= start_ts:
                     break
                     
-                # Respect rate limits for long history fetches
-                if len(all_candles) > 1000:
-                    time.sleep(0.1)
+                time.sleep(0.15)
                 
             except Exception as e:
-                _LOG.error(f"Error fetching candle batch: {e}")
+                _LOG.error(f"Error fetching candle batch at {current_end}: {e}")
+                time.sleep(1.0)
                 break
 
         if not all_candles:
@@ -157,7 +159,6 @@ class CoinbaseMarketDataClient:
         params = {"product_id": product_id, "limit": limit}
         data = self._get(path, params)
         
-        # Format: {"pricebook": {"product_id": "BTC-USD", "bids": [...], "asks": [...], "time": "..."}}
         pb = data.get("pricebook", {})
         
         return {
@@ -172,8 +173,6 @@ class CoinbaseMarketDataClient:
         """
         path = "/brokerage/best_bid_ask"
         params = {"product_ids": product_ids}
-        # Note: product_ids is passed as a repeated query param: ?product_ids=BTC-USD&product_ids=ETH-USD
-        # httpx handles list params automatically
         data = self._get(path, params)
         
         pricebooks = data.get("pricebooks", [])
