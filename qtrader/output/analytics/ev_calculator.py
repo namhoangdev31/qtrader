@@ -56,6 +56,12 @@ class EVReport:
     avg_loss: float              # avg net loss of losing trades (positive number)
     profit_factor: float         # gross_wins / gross_losses
     sharpe_ratio: float          # annualised Sharpe on trade returns
+    sortino_ratio: float         # mean return / downside std * sqrt(annualization)
+    calmar_ratio: float          # annualised return / max_drawdown
+    payoff_ratio: float          # avg_win / avg_loss
+    break_even_win_rate: float   # 1 / (1 + payoff_ratio)
+    cost_to_profit_ratio: float  # total_fees / (gross_wins if gross_wins > 0 else 1)
+    ev_confidence_interval: float # 95% CI bound: EV ± CI
     max_drawdown: float          # peak-to-trough on cumulative PnL (positive = bad)
     kelly_fraction: float        # optimal bet size fraction
 
@@ -80,15 +86,17 @@ class EVCalculator:
     """
 
     # Default Coinbase Advanced Trade taker fee
-    DEFAULT_FEE_RATE: float = 0.0006  # 0.06%
+    DEFAULT_FEE_RATE: float = 0.0004  # 0.04%
 
     def __init__(
         self,
         trades: list[TradeRecord] | None = None,
         fee_rate: float = DEFAULT_FEE_RATE,
+        annualization_factor: float = 252.0 * 78.0,  # Default for 5m standard market (252 days * 78 bars)
     ) -> None:
         self.trades = trades or []
         self.fee_rate = fee_rate
+        self.annualization_factor = annualization_factor
 
     # ------------------------------------------------------------------
     # Public API
@@ -126,12 +134,13 @@ class EVCalculator:
         loss_count = 0
 
         for t in self.trades:
-            # Gross directional profit (already accounts for execution slippage
-            # via the fill prices set by PaperTradingEngine)
+            # Gross directional profit
+            # Note: t.side is the side of the EXITING trade.
+            # SELL/SHORT exit means we were LONG. BUY exit means we were SHORT.
             if t.side.upper() in ("SELL", "SHORT"):
-                gross = (t.entry_price - t.exit_price) * t.qty
-            else:
                 gross = (t.exit_price - t.entry_price) * t.qty
+            else:
+                gross = (t.entry_price - t.exit_price) * t.qty
 
             # Round-trip trading fees only
             fees = (t.entry_price * t.qty * self.fee_rate
@@ -174,17 +183,41 @@ class EVCalculator:
         # Profit Factor
         profit_factor = gross_wins / gross_losses if gross_losses > 0 else float("inf")
 
-        # Sharpe Ratio (annualised, ~252 trading days)
+        # Payoff & Break-even
+        payoff_ratio = (avg_win / avg_loss) if avg_loss > 0 else float("inf")
+        break_even_win_rate = 1.0 / (1.0 + payoff_ratio) if payoff_ratio != float("inf") else 0.0
+        
+        # Cost to profit
+        cost_to_profit_ratio = total_fees / gross_wins if gross_wins > 0 else float("inf")
+
+        # Sharpe Ratio
         n = len(net_returns)
-        mean_r = sum(net_returns) / n
-        variance = sum((r - mean_r) ** 2 for r in net_returns) / n
+        mean_r = sum(net_returns) / n if n > 0 else 0.0
+        variance = sum((r - mean_r) ** 2 for r in net_returns) / n if n > 0 else 0.0
         std_r = math.sqrt(variance) if variance > 0 else 0.0
-        sharpe = (mean_r / std_r) * math.sqrt(252) if std_r > 0 else 0.0
+        sharpe = (mean_r / std_r) * math.sqrt(self.annualization_factor) if std_r > 0 else 0.0
+
+        # Sortino Ratio
+        target = 0.0
+        downside_variance = sum(min(r - target, 0.0) ** 2 for r in net_returns) / n if n > 0 else 0.0
+        downside_std = math.sqrt(downside_variance)
+        sortino = (mean_r / downside_std) * math.sqrt(self.annualization_factor) if downside_std > 0 else 0.0
+
+        # EV Confidence Interval (95%)
+        # For EV per trade: mean(net_profits) +- 1.96 * std / sqrt(N)
+        net_profits_mean = sum(net_profits) / total_trades
+        net_profits_var = sum((p - net_profits_mean)**2 for p in net_profits) / total_trades
+        net_profits_std = math.sqrt(net_profits_var)
+        ev_confidence_interval = 1.96 * net_profits_std / math.sqrt(total_trades) if total_trades > 0 else 0.0
 
         # Max Drawdown — use average capital as equity baseline
         # so drawdown is meaningful even when all trades are losses
         avg_capital = total_cap / total_trades if total_trades > 0 else 1.0
         max_drawdown = self._max_drawdown(net_profits, initial_equity=avg_capital)
+
+        # Calmar Ratio
+        annualised_return = mean_r * self.annualization_factor
+        calmar = (annualised_return / max_drawdown) if max_drawdown > 0 else float("inf")
 
         # Kelly Fraction
         kelly = 0.0
@@ -208,6 +241,12 @@ class EVCalculator:
             "total_net_profit": total_net,
             "profit_factor": profit_factor,
             "sharpe_ratio": sharpe,
+            "sortino_ratio": sortino,
+            "calmar_ratio": calmar,
+            "payoff_ratio": payoff_ratio,
+            "break_even_win_rate": break_even_win_rate,
+            "cost_to_profit_ratio": cost_to_profit_ratio,
+            "ev_confidence_interval": ev_confidence_interval,
             "max_drawdown": max_drawdown,
             "kelly_fraction": kelly,
             "max_slippage_bps": max_slip,
@@ -305,6 +344,12 @@ class EVCalculator:
             avg_loss=s["avg_loss"],
             profit_factor=s["profit_factor"],
             sharpe_ratio=s["sharpe_ratio"],
+            sortino_ratio=s["sortino_ratio"],
+            calmar_ratio=s["calmar_ratio"],
+            payoff_ratio=s["payoff_ratio"],
+            break_even_win_rate=s["break_even_win_rate"],
+            cost_to_profit_ratio=s["cost_to_profit_ratio"],
+            ev_confidence_interval=s["ev_confidence_interval"],
             max_drawdown=s["max_drawdown"],
             kelly_fraction=s["kelly_fraction"],
             max_slippage_bps=s["max_slippage_bps"],
@@ -346,5 +391,8 @@ class EVCalculator:
             "ev_per_trade": 0.0, "ev_pct": 0.0, "ev_weighted": 0.0,
             "total_gross_profit": 0.0, "total_fees_slippage": 0.0, "total_net_profit": 0.0,
             "profit_factor": 0.0, "sharpe_ratio": 0.0,
+            "sortino_ratio": 0.0, "calmar_ratio": 0.0,
+            "payoff_ratio": 0.0, "break_even_win_rate": 0.0,
+            "cost_to_profit_ratio": 0.0, "ev_confidence_interval": 0.0,
             "max_drawdown": 0.0, "kelly_fraction": 0.0, "max_slippage_bps": 0.0,
         }

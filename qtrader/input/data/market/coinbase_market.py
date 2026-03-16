@@ -71,6 +71,7 @@ class CoinbaseMarketDataClient:
         
         # Granularity mapping to seconds to calculate chunk sizes
         G_MAP = {
+            "ONE_SECOND": 1,
             "ONE_MINUTE": 60,
             "FIVE_MINUTE": 300,
             "FIFTEEN_MINUTE": 900,
