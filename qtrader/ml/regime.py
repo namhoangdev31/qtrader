@@ -74,7 +74,7 @@ class RegimeDetector:
             raise ValueError("feature_cols must be a non-empty list.")
 
         features = df.select(feature_cols).to_numpy()
-        features = np.nan_to_num(features, copy=False)
+        features = np.nan_to_num(features, copy=True)
 
         self._means = features.mean(axis=0)
         self._stds = features.std(axis=0)
@@ -85,6 +85,7 @@ class RegimeDetector:
             n_components=self.n_regimes,
             covariance_type="full",
             random_state=self.random_state,
+            reg_covar=1e-06,
         )
         self._gmm.fit(x_std)
 
@@ -106,7 +107,7 @@ class RegimeDetector:
         if not feature_cols:
             raise ValueError("feature_cols must be a non-empty list.")
         features = df.select(feature_cols).to_numpy()
-        features = np.nan_to_num(features, copy=False)
+        features = np.nan_to_num(features, copy=True)
         x_std = self._standardize(features)
 
         if self.method == "gmm":
@@ -225,7 +226,7 @@ class RegimeDetector:
                 (
                     pl.col("avg_return")
                     / (pl.col("vol") + 1e-12)
-                    * (252.0**0.5)
+                    * (365.25 * 24 * 12)**0.5  # Crypto-tailored annualization (5-min intervals)
                 ).alias("sharpe")
             )
             .sort("regime")

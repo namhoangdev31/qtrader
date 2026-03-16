@@ -25,9 +25,9 @@ class ModelEvaluator:
         Returns:
             Spearman rank correlation coefficient.
         """
-        if predicted.len() != realized.len():
+        if len(predicted) != len(realized):
             raise ValueError("predicted and realized must have the same length.")
-        if predicted.len() == 0:
+        if len(predicted) == 0:
             return 0.0
         pred_np = predicted.to_numpy()
         real_np = realized.to_numpy()
@@ -197,8 +197,8 @@ class ModelEvaluator:
 
         # IC vs next-period returns
         realized = df_local["_asset_return"].shift(-1).drop_nulls()
-        aligned_pred = df_local[signal_col].shift(0).head(realized.len())
-        ic = self.compute_ic(aligned_pred, realized) if realized.len() > 0 else 0.0
+        aligned_pred = df_local[signal_col].shift(0).head(len(realized))
+        ic = self.compute_ic(aligned_pred, realized) if len(realized) > 0 else 0.0
 
         return {"sharpe": sharpe, "total_return": total_return, "max_dd": max_dd, "ic": ic}
 
