@@ -68,12 +68,14 @@ class NautilusEngineAdapter:
         if not self._engine:
             raise RuntimeError("Engine not built. Call build() first.")
             
-        from nautilus_trader.model.data import Bar, BarType
+        from nautilus_trader.model.data import Bar, BarType, BarSpecification
         from nautilus_trader.model.enums import PriceType, AggregationSource
         from nautilus_trader.model.identifiers import InstrumentId
         
         instrument_id = InstrumentId.from_str(f"{self.symbol.replace('/', '')}.{self.venue}")
-        bar_type = BarType(instrument_id, 3600, PriceType.LAST, AggregationSource.INTERNAL) # Default 1h
+        # Fix: BarType requires BarSpecification instance
+        bar_spec = BarSpecification.from_str("1-HOUR-LAST-INTERNAL") 
+        bar_type = BarType(instrument_id, bar_spec)
         
         bars = []
         for row in df.to_dicts():

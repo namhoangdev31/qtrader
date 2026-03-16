@@ -60,14 +60,27 @@ class AnalystSession:
         source: str = "duckdb",
         days: int | None = None,
     ) -> pl.DataFrame:
-        """Load OHLCV from the datalake using DuckDB when available."""
+        """Load OHLCV from the datalake using DuckDB when available.
+        
+        Checks if data is sufficient (if 'days' provided) and falls back to live loading if not.
+        """
+        df = pl.DataFrame()
         if source == "duckdb":
             try:
-                return self._load_from_duckdb(symbol, timeframe, filter_sql)
+                df = self._load_from_duckdb(symbol, timeframe, filter_sql)
             except (FileNotFoundError, RuntimeError, ValueError) as exc:
                 self._log.warning("DuckDB load failed (%s). Falling back to datalake.", exc)
-                return self.load_from_datalake(symbol, timeframe, days=days)
-        return self.load_from_datalake(symbol, timeframe, days=days)
+                df = self.load_from_datalake(symbol, timeframe, days=days)
+        else:
+            df = self.load_from_datalake(symbol, timeframe, days=days)
+
+        # Check if we have enough data (if days is specified)
+        if days is not None and not df.is_empty():
+            if len(df) < (days * 0.8): # Allow 20% slack for weekends/holidays if applicable
+                self._log.warning(f"Local data insufficient for {symbol} ({len(df)} rows found, {days} days requested). Fetching live.")
+                return self.load_live_ohlcv(symbol, timeframe, days=days)
+
+        return df
 
     def load_from_datalake(self, symbol: str, timeframe: str, days: int | None = None) -> pl.DataFrame:
         """Load OHLCV from UniversalDataLake/DataLake fallback."""
@@ -206,6 +219,7 @@ class AnalystSession:
         for w in windows:
             cols.append(pl.col(price_col).rolling_mean(w).alias(f"sma_{w}"))
             cols.append(pl.col(price_col).rolling_std(w).alias(f"vol_{w}"))
+            cols.append(pl.col("returns").rolling_std(w).alias(f"ret_vol_{w}"))
         # Simple RSI (default 14)
         if "returns" not in df.columns:
             df = self.make_returns(df, price_col)
