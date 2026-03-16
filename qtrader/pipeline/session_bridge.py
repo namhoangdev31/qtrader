@@ -1,11 +1,7 @@
-"""Session bridge: AnalystSession ↔ ResearchPipeline and BacktestHarness."""
-
 from __future__ import annotations
 
 import logging
 import polars as pl
-
-from qtrader.backtest.integration import BacktestHarness
 from qtrader.output.bot.performance import PerformanceTracker
 from qtrader.pipeline.deployment import DeploymentBridge
 from qtrader.pipeline.research import ResearchPipeline, ResearchResult
@@ -24,11 +20,9 @@ class SessionBridge:
     def __init__(
         self,
         pipeline: ResearchPipeline,
-        harness: BacktestHarness,
         deployment: DeploymentBridge | None = None,
     ) -> None:
         self.pipeline = pipeline
-        self.harness = harness
         self.deployment = deployment or DeploymentBridge()
 
     def quick_backtest(

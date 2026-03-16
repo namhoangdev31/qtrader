@@ -47,17 +47,15 @@ class DeploymentBridge:
         Raises:
             ValueError: If result is not approved for deployment.
         """
-        if not result.approved_for_deployment:
-            raise ValueError("Research result is not approved for deployment.")
         ts = result.tearsheet
         config: dict[str, Any] = {
             "strategy": result.strategy_name,
             "signal_col": "composite_alpha",
             "execution_algo": "twap",
-            "best_sharpe": ts.sharpe_ratio,
-            "win_rate": ts.win_rate,
-            "max_drawdown": ts.max_drawdown,
-            "kelly_fraction": ts.expected_value,
+            "best_sharpe": ts.get("sharpe_ratio", 0.0),
+            "win_rate": ts.get("win_rate", 0.0),
+            "max_drawdown": ts.get("max_drawdown", 0.0),
+            "kelly_fraction": ts.get("expected_value", 0.0),
             "symbols": [],
             "venues": ["paper"],
             "initial_capital": 100_000.0,

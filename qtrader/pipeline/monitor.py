@@ -11,8 +11,6 @@ import polars as pl
 from qtrader.output.analytics.drift import DriftMonitor
 from qtrader.output.analytics.performance import PerformanceAnalytics
 from qtrader.output.analytics.telemetry import Telemetry
-from qtrader.backtest.tearsheet import TearsheetMetrics
-from qtrader.output.bot.performance import PerformanceTracker
 from qtrader.core.bus import EventBus
 from qtrader.core.event import SystemEvent
 
@@ -55,7 +53,7 @@ class LiveMonitor:
         drift_monitor: DriftMonitor,
         telemetry: Telemetry,
         bus: EventBus,
-        backtest_baseline: TearsheetMetrics,
+        backtest_baseline: dict[str, float],
     ) -> None:
         self.tracker = tracker
         self.analytics = analytics
@@ -65,11 +63,11 @@ class LiveMonitor:
         self.backtest_baseline = backtest_baseline
 
     def _baseline_to_dict(self) -> dict[str, float]:
-        """Convert TearsheetMetrics to dict for comparison."""
+        """Baseline metrics (expected keys: sharpe_ratio, win_rate, max_drawdown)."""
         return {
-            "sharpe_ratio": self.backtest_baseline.sharpe_ratio,
-            "win_rate": self.backtest_baseline.win_rate,
-            "max_drawdown": self.backtest_baseline.max_drawdown,
+            "sharpe_ratio": float(self.backtest_baseline.get("sharpe_ratio", 0.0)),
+            "win_rate": float(self.backtest_baseline.get("win_rate", 0.0)),
+            "max_drawdown": float(self.backtest_baseline.get("max_drawdown", 0.0)),
         }
 
     async def run_cycle(self, feature_snapshot: pl.DataFrame) -> MonitorReport:
@@ -82,6 +80,7 @@ class LiveMonitor:
         Returns:
             MonitorReport with metrics and any alerts.
         """
+        from qtrader.output.bot.performance import PerformanceTracker
         live = self.tracker.to_dict()
         baseline = self._baseline_to_dict()
         sharpe_pct = (

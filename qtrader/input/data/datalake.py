@@ -66,7 +66,19 @@ class DataLake:
                 continue
             if "timestamp" not in df.columns and "date" in df.columns:
                 df = df.rename({"date": "timestamp"})
-            df = df.with_columns(pl.lit(sym).alias("symbol"))
+            
+            # Ensure price columns are float64 and timestamp is datetime
+            df = df.with_columns([
+                pl.col("timestamp").cast(pl.Datetime),
+                pl.lit(sym).alias("symbol")
+            ])
+            
+            # Cast OHLCV columns if they exist
+            price_cols = ["open", "high", "low", "close", "volume"]
+            df = df.with_columns([
+                pl.col(c).cast(pl.Float64) for c in price_cols if c in df.columns
+            ])
+
             if start_date is not None or end_date is not None or last_n_days is not None:
                 if last_n_days is not None:
                     max_str = df.select(pl.col("timestamp").dt.strftime("%Y-%m-%d").max()).item()

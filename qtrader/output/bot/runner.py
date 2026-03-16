@@ -42,13 +42,17 @@ __all__ = ["TradingBot"]
 _LOG = logging.getLogger("qtrader.output.bot.runner")
 
 
-def _load_baseline_metrics(path: str | None = None) -> object | None:
-    """Load TearsheetMetrics from JSON if present (avoids backtest import in bot)."""
-    from qtrader.backtest.tearsheet import TearsheetMetrics
+def _load_baseline_metrics(path: str | None = None) -> dict[str, float] | None:
+    """Load baseline metrics from JSON if present."""
+    import json
     p = Path(path or "reports/latest_baseline.json").expanduser().absolute()
     if not p.exists():
         return None
-    return TearsheetMetrics.from_json(p)
+    try:
+        with open(p, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 class TradingBot:
@@ -119,12 +123,37 @@ class TradingBot:
         self.bus.subscribe(EventType.ORDER, self._on_order)
         self.bus.subscribe(EventType.RISK, self._on_risk_event)
         self.bus.subscribe(EventType.SYSTEM, self._on_system_event)
+        self.bus.subscribe(EventType.MARKET_DATA, self._on_market_data)
+
+    async def _on_market_data(self, event: MarketDataEvent) -> None:
+        """Feed live quotes into Simulator if present."""
+        for adapter in self.oms.adapters.values():
+            if isinstance(adapter, SimulatorBrokerAdapter):
+                bid = event.data.get("bid")
+                ask = event.data.get("ask")
+                if bid is not None and ask is not None:
+                    adapter.update_quote(event.symbol, float(bid), float(ask))
 
     async def _on_fill(self, event: FillEvent) -> None:
-        """Handle fill: update OMS and performance."""
+        """Handle fill: update OMS, Risk Engine, Strategy, and Performance."""
+        # 1. Update OMS (Position tracking)
         await self.oms.on_fill(event)
-        self.performance.record_fill(event, 0.0)
-        _LOG.debug("Recorded fill %s %s @ %s", event.symbol, event.quantity, event.price)
+        
+        # 2. Update Risk Engine (Real-time monitoring)
+        qty_signed = event.quantity if event.side.upper() == "BUY" else -event.quantity
+        self.risk_engine.update_position(event.symbol, qty_signed, event.price)
+        
+        # 3. Notify Strategy (Internal accounting)
+        if hasattr(self.strategy, "on_fill"):
+            self.strategy.on_fill(event)
+            
+        # 4. Record for Performance Tracking
+        # Fetch realized PnL from OMS if available (FIFO)
+        pos = self.oms.position_manager.get_position(event.symbol)
+        realized_pnl = pos.realized_pnl if pos else 0.0
+        self.performance.record_fill(event, realized_pnl)
+        
+        _LOG.debug("Recorded fill %s %s @ %s | PnL: %s", event.symbol, event.quantity, event.price, realized_pnl)
 
     async def _on_risk_event(self, event: RiskEvent) -> None:
         """Handle risk breach: optionally transition to RISK_HALTED."""
@@ -144,6 +173,8 @@ class TradingBot:
                 self.oms.add_venue("coinbase", CoinbaseBrokerAdapter())
             elif venue == "binance":
                 self.oms.add_venue("binance", BinanceBrokerAdapter())
+            elif venue in ("simulator", "paper"):
+                self.oms.add_venue(venue, SimulatorBrokerAdapter())
             else:
                 _LOG.warning("Unsupported venue '%s' in config; skipping", venue)
 

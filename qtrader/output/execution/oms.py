@@ -10,6 +10,7 @@ import polars as pl
 
 from qtrader.core.event import FillEvent, OrderEvent
 from qtrader.output.execution.brokers.base import BrokerAdapter
+from qtrader.output.execution.brokers.simulator import SimulatorBrokerAdapter
 
 __all__ = ["Position", "PositionManager", "UnifiedOMS"]
 

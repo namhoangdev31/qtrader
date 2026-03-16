@@ -1,8 +1,22 @@
-
-from qtrader.backtest.impact import MarketImpactModel
 from qtrader.core.config import Config
 from qtrader.core.event import OrderEvent
 from qtrader.output.execution.oms import UnifiedOMS
+
+
+class MarketImpactModel:
+    """Isolated market impact math restored from legacy engine."""
+    @staticmethod
+    def square_root_impact(
+        order_size: float,
+        daily_vol: float,
+        daily_volume: float,
+        sigma_daily: float,
+        y: float = 0.6,
+    ) -> float:
+        """Estimate impact in bps using Barra square-foot model: Impact = y * sigma * sqrt(size / volume)."""
+        if daily_volume <= 0:
+            return 0.0
+        return float(y * sigma_daily * (abs(order_size) / daily_volume) ** 0.5)
 
 
 class SmartOrderRouter:

@@ -12,8 +12,6 @@ import yaml
 
 from qtrader.input.alpha.registry import AlphaEngine
 from qtrader.output.analytics.drift import DriftMonitor
-from qtrader.backtest.integration import BacktestHarness, BacktestResult
-from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.input.data.datalake import DataLake
 from qtrader.input.features.engine import FactorEngine
 from qtrader.input.features.store import FeatureStore
@@ -30,7 +28,7 @@ class ResearchResult:
     """Result of a full research pipeline run."""
 
     strategy_name: str
-    tearsheet: TearsheetMetrics
+    tearsheet: dict[str, float]
     backtest_df: pl.DataFrame
     drift_report: dict[str, float]
     approved_for_deployment: bool
@@ -119,7 +117,6 @@ class ResearchPipeline:
         feature_engine: FactorEngine,
         alpha_engine: AlphaEngine,
         regime_detector: RegimeDetector,
-        backtest_harness: BacktestHarness,
         drift_monitor: DriftMonitor,
         model_registry: object | None = None,
     ) -> None:
@@ -127,7 +124,6 @@ class ResearchPipeline:
         self.feature_engine = feature_engine
         self.alpha_engine = alpha_engine
         self.regime_detector = regime_detector
-        self.backtest_harness = backtest_harness
         self.drift_monitor = drift_monitor
         self.model_registry = model_registry
 
@@ -170,14 +166,9 @@ class ResearchPipeline:
         )
         if raw_df.is_empty():
             _LOG.warning("No data loaded for %s %s–%s", symbols, start_date, end_date)
-            empty_tearsheet = TearsheetMetrics(
-                total_return=0.0, ann_return=0.0, ann_volatility=0.0,
-                sharpe_ratio=0.0, sortino_ratio=0.0, calmar_ratio=0.0, omega_ratio=0.0,
-                max_drawdown=0.0, max_dd_duration_days=0, avg_dd_duration_days=0.0, recovery_time_days=0.0,
-                total_trades=0, win_rate=0.0, avg_win_pct=0.0, avg_loss_pct=0.0,
-                profit_factor=0.0, expected_value=0.0, avg_turnover_daily=0.0, total_cost_pct=0.0,
-                skewness=0.0, kurtosis=0.0,
-            )
+            empty_tearsheet = {
+                "total_return": 0.0, "sharpe_ratio": 0.0, "max_drawdown": 0.0, "win_rate": 0.0
+            }
             return ResearchResult(
                 strategy_name=strategy_name,
                 tearsheet=empty_tearsheet,
@@ -241,15 +232,28 @@ class ResearchPipeline:
         if signal_col not in single_df.columns:
             single_df = single_df.with_columns(pl.lit(0.0).alias(signal_col))
 
-        bt_result = self.backtest_harness.run(
+        # VectorBT Integration for Pipeline
+        from qtrader.backtest.vbt_engine import VBTEngine
+        engine = VBTEngine()
+        portfolio = engine.backtest(
             df=single_df,
             signal_col=signal_col,
-            strategy_name=strategy_name,
-            transaction_cost_bps=transaction_cost_bps,
-            output_html=True,
             price_col="close",
+            fees=transaction_cost_bps / 10000.0,
         )
-        result = bt_result
+        
+        # Extract metrics into dictionary
+        vbt_stats = portfolio.stats()
+        tearsheet_dict = {
+            "total_return": float(vbt_stats.get("Total Return [%]", 0.0) / 100.0),
+            "ann_return": float(vbt_stats.get("Benchmark Return [%]", 0.0) / 100.0), # Placeholder or use realized
+            "sharpe_ratio": float(vbt_stats.get("Sharpe Ratio", 0.0)),
+            "sortino_ratio": float(vbt_stats.get("Sortino Ratio", 0.0)),
+            "max_drawdown": float(vbt_stats.get("Max Drawdown [%]", 0.0) / 100.0),
+            "win_rate": float(vbt_stats.get("Win Rate [%]", 0.0) / 100.0),
+            "profit_factor": float(vbt_stats.get("Profit Factor", 0.0)),
+            "expected_value": float(vbt_stats.get("Expectancy", 0.0)),
+        }
 
         ic_report: dict[str, float] = {}
         for name in self.alpha_engine.alpha_names:
@@ -284,48 +288,45 @@ class ResearchPipeline:
                 [c for c in feature_cols if c in full_df.columns and c in live_features.columns],
             )
 
-        ts = result.tearsheet
+        ts = tearsheet_dict
         approved = (
-            ts.sharpe_ratio >= target_sharpe
-            and ts.max_drawdown <= target_max_dd
-            and ts.win_rate >= target_win_rate
+            ts["sharpe_ratio"] >= target_sharpe
+            and ts["max_drawdown"] <= target_max_dd
+            and ts["win_rate"] >= target_win_rate
         )
         config_path = None
         if approved:
-            config_path = self._export_to_bot_config(bt_result, strategy_name)
+            config_path = self._export_to_bot_config(tearsheet_dict, strategy_name)
 
         return ResearchResult(
             strategy_name=strategy_name,
-            tearsheet=bt_result.tearsheet,
-            backtest_df=bt_result.backtest_df,
+            tearsheet=tearsheet_dict,
+            backtest_df=single_df, # Use single_df with signals
             drift_report=drift_report,
             approved_for_deployment=approved,
             config_path=config_path,
             ic_report=ic_report,
             regime_stats=regime_stats,
-            html_report_path=bt_result.html_report_path,
+            html_report_path=None, # VBT HTML export can be added later
         )
 
-    def _export_to_bot_config(self, result: BacktestResult, strategy_name: str) -> str:
+    def _export_to_bot_config(self, ts: dict[str, float], strategy_name: str) -> str:
         """Write approved backtest params to configs/bot_paper.yaml. Returns path."""
         path = Path("configs/bot_paper.yaml")
         path.parent.mkdir(parents=True, exist_ok=True)
-        ts = result.tearsheet
         config: dict[str, object] = {
             "strategy": strategy_name,
             "signal_col": "composite_alpha",
             "execution_algo": "twap",
-            "best_sharpe": ts.sharpe_ratio,
-            "win_rate": ts.win_rate,
-            "max_drawdown": ts.max_drawdown,
-            "kelly_fraction": ts.expected_value,
+            "best_sharpe": ts["sharpe_ratio"],
+            "win_rate": ts["win_rate"],
+            "max_drawdown": ts["max_drawdown"],
+            "kelly_fraction": ts["expected_value"],
         }
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(config, f, default_flow_style=False)
-        baseline_path = Path("reports/latest_baseline.json")
-        baseline_path.parent.mkdir(parents=True, exist_ok=True)
-        ts.to_json(str(baseline_path))
-        _LOG.info("Exported bot config to %s and baseline to %s", path, baseline_path)
+        
+        _LOG.info("Exported bot config to %s", path)
         return str(path)
 
 

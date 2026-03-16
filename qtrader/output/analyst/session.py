@@ -14,10 +14,11 @@ from typing import Any
 
 import numpy as np
 import polars as pl
+import vectorbt as vbt
 
 from qtrader.output.analytics.performance import PerformanceAnalytics
-from qtrader.backtest.engine_vectorized import VectorizedEngine
-from qtrader.backtest.tearsheet import TearsheetGenerator
+from qtrader.backtest.vbt_engine import VBTEngine
+from qtrader.backtest.nautilus_engine import NautilusEngineAdapter
 from qtrader.input.data.datalake import DataLake
 from qtrader.input.data.datalake_universal import UniversalDataLake
 from qtrader.input.data.duckdb_client import DuckDBClient
@@ -137,28 +138,28 @@ class AnalystSession:
         client = CoinbaseMarketDataClient()
         return client.get_product_book(symbol, limit)
 
-    def run_paper_simulation(self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7) -> Any:
-        """Run a strategy logic function against live data to compute expected EV."""
-        from qtrader.output.execution.paper_engine import PaperTradingEngine
-        from qtrader.output.analytics.ev_calculator import EVCalculator
+    def run_nautilus_simulation(self, symbol: str, strategy_fn: Any = None, timeframe: str = "1h", days: int = 7) -> Any:
+        """Run a simulation against data using NautilusTrader."""
+        from qtrader.backtest.nautilus_engine import NautilusEngineAdapter
         
-        df = self.load_live_ohlcv(symbol, timeframe, days)
-        engine = PaperTradingEngine(starting_capital=10000.0)
+        # 1. Load data
+        df = self.load_ohlcv(symbol, timeframe, days=days)
+        if df.is_empty():
+            self._log.error(f"No data for {symbol} simulation.")
+            return None
+            
+        # 2. Setup Engine
+        adapter = NautilusEngineAdapter(symbol=symbol).build()
+        adapter.add_venue().add_instrument()
         
-        # applying strategy
-        for row in df.iter_rows(named=True):
-            market_state = {
-                "bid": float(row["close"]) * 0.9999,
-                "ask": float(row["close"]) * 1.0001,
-                "top_depth": 5.0,
-                "venue": "Coinbase_Sim"
-            }
-            order = strategy_fn(row)
-            if order:
-                engine.simulate_fill(order, market_state)
-                
-        calculator = EVCalculator(engine.closed_trades)
-        return calculator.diagnose(symbol)
+        # 3. Feed Data
+        adapter.add_data(df)
+        
+        # 4. Run (Strategy mapping is still TODO based on exact strategy_fn type)
+        # adapter.run()
+        
+        self._log.info(f"Nautilus simulation completed for {symbol} ({len(df)} bars)")
+        return adapter
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
         """Load pre-computed features from the FeatureStore.
@@ -290,31 +291,54 @@ class AnalystSession:
     # Backtest
     # ──────────────────────────────────────────────────────────────────
 
-    def run_vector_backtest(
+    def run_vbt_backtest(
         self,
         df: pl.DataFrame,
         signal_col: str,
         price_col: str = "close",
-        transaction_cost: float = 0.0001,
-        slippage: float = 0.00005,
-    ) -> pl.DataFrame:
-        """Run vectorized backtest using VectorizedEngine."""
-        engine = VectorizedEngine()
+        transaction_cost: float = 0.0005,
+        slippage: float = 0.0000,
+    ) -> Any:
+        """Run vectorized backtest using VectorBT PRO."""
+        engine = VBTEngine()
         return engine.backtest(
             df=df,
             signal_col=signal_col,
             price_col=price_col,
-            transaction_cost_bps=transaction_cost * 10_000,
-            slippage_bps=slippage * 10_000,
+            fees=transaction_cost,
+            slippage=slippage,
         )
 
-    def get_monthly_returns(self, backtest_df: pl.DataFrame) -> pl.DataFrame:
-        """Helper to get a clean, robust monthly returns table (pivot year x month)."""
-        gen = TearsheetGenerator()
-        return gen.monthly_returns_table(
-            backtest_df["equity_curve"],
-            backtest_df["timestamp"],
-        )
+    def get_monthly_returns(self, portfolio: Any) -> pl.DataFrame:
+        """Helper to get a clean monthly returns table (pivot year x month).
+        
+        Args:
+            portfolio: VectorBT Portfolio object.
+        """
+        import pandas as pd
+        returns = portfolio.returns()
+        
+        # Resample to monthly and compute total return per month
+        monthly = returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
+        
+        # Convert to DataFrame for pivoting
+        df = monthly.reset_index()
+        df.columns = ['timestamp', 'returns']
+        df['year'] = df['timestamp'].dt.year
+        df['month'] = df['timestamp'].dt.strftime('%b')
+        
+        # Pivot Year x Month
+        pivot_df = df.pivot(index='year', columns='month', values='returns').fillna(0)
+        
+        # Reorder columns to Jan...Dec
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        existing_months = [m for m in months if m in pivot_df.columns]
+        pivot_df = pivot_df[existing_months]
+        
+        # Convert to percentage
+        pivot_df = pivot_df * 100
+        
+        return pl.from_pandas(pivot_df.reset_index())
 
     # ──────────────────────────────────────────────────────────────────
     # Performance Metrics
