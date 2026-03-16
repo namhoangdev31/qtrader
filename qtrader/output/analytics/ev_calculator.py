@@ -28,6 +28,7 @@ class EVReport:
     total_net_profit: float
 
     win_rate: float
+    loss_rate: float
     avg_win: float               
     avg_loss: float              
     profit_factor: float         
@@ -44,6 +45,43 @@ class EVReport:
     max_slippage_bps: float
     status: str                  
     warnings: list[str] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        """Beautifully formatted terminal report."""
+        header = "=" * 50
+        output = [
+            header,
+            f"🧠 STRATEGY DIAGNOSIS: {self.status}",
+            header,
+            f"Total Trades    : {self.total_trades}",
+            f"Win / Loss      : {self.win_count} W / {self.loss_count} L",
+            f"Win Rate        : {self.win_rate:.2%}",
+            f"Loss Rate       : {self.loss_rate:.2%}",
+            "",
+            "── EV (Expected Value) ─────────────────────────",
+            f"  EV per trade  : {self.ev_per_trade:.6f} (base currency)",
+            f"  EV %          : {self.ev_pct:.4f}%  (net return per trade)",
+            f"  EV weighted   : {self.ev_weighted:.4f}%  (vs capital used)",
+            "",
+            "── PnL Breakdown ───────────────────────────────",
+            f"  Gross Profit  : {self.total_gross_profit:.4f}",
+            f"  Fees+Slippage : {self.total_fees_slippage:.4f}",
+            f"  Net Profit    : {self.total_net_profit:.4f}",
+            "",
+            "── Quant Metrics ───────────────────────────────",
+            f"  Profit Factor : {self.profit_factor:.3f}  (target > 1.3)",
+            f"  Sharpe Ratio  : {self.sharpe_ratio:.3f}  (target > 1.5, annualised)",
+            f"  Max Drawdown  : {self.max_drawdown:.2%}",
+            f"  Kelly Fraction: {self.kelly_fraction:.4f}",
+            f"  Max Slippage  : {self.max_slippage_bps:.1f} bps",
+            ""
+        ]
+        
+        if self.warnings:
+            for w in self.warnings:
+                output.append(f"  ⚠️  {w}")
+        
+        return "\n".join(output)
 
 
 class EVCalculator:
@@ -73,26 +111,34 @@ class EVCalculator:
         win_rate = win_count / total_trades if total_trades > 0 else 0
         loss_rate = 1.0 - win_rate
         
-        # PnL
-        total_net = pf.total_profit()
-        # VBT tracks fees internally. We can approximate total fees if needed, but 
-        # for now we focus on the core net metrics.
-        total_fees = pf.fees.sum() if hasattr(pf, 'fees') and pf.fees is not None else 0.0
+        # PnL (Strictly based on Closed Trades per Quant standard)
+        total_net = float(trades.pnl.sum())
+        total_fees = float(pf.close_trades.fees.sum()) if hasattr(pf, 'close_trades') else 0.0
         
-        # In VBT, total_profit is net. Gross is roughly total_profit + total_fees
+        # Gross = Net + Fees (Reversing the Net calculation)
         total_gross = total_net + total_fees
         
-        # Averages
-        avg_win = trades.winning.pnl.mean() if win_count > 0 else 0.0
-        avg_loss = abs(trades.losing.pnl.mean()) if loss_count > 0 else 0.0
+        # Averages (Net per trade)
+        avg_win = float(trades.winning.pnl.mean()) if win_count > 0 else 0.0
+        avg_loss = float(abs(trades.losing.pnl.mean())) if loss_count > 0 else 0.0
         
-        gross_wins = trades.winning.pnl.sum()
-        gross_losses = abs(trades.losing.pnl.sum())
+        gross_wins = float(trades.winning.pnl.sum())
+        gross_losses = float(abs(trades.losing.pnl.sum()))
         profit_factor = gross_wins / gross_losses if gross_losses > 0 else float("inf")
         
-        ev_per_trade = trades.pnl.mean()
-        ev_pct = trades.returns.mean() * 100
-        ev_weighted = total_net / pf.init_cash
+        # EV Formulas (Standard: Σ NetProfit / N)
+        ev_per_trade = total_net / total_trades if total_trades > 0 else 0.0
+        
+        # EV % (Σ Return_i / N)
+        ev_pct = float(trades.returns.mean() * 100) if total_trades > 0 else 0.0
+        
+        # EV Weighted (Σ NetProfit / Σ CapitalUsed)
+        try:
+            # Capital Used = Σ (Position Size * Entry Price)
+            total_capital_used = float((trades.size * trades.entry_price).sum())
+            ev_weighted = (total_net / total_capital_used * 100) if total_capital_used > 0 else 0.0
+        except Exception:
+            ev_weighted = (total_net / pf.init_cash * 100) if pf.init_cash > 0 else 0.0
         
         # Ratios
         payoff_ratio = (avg_win / avg_loss) if avg_loss > 0 else float("inf")
@@ -130,6 +176,7 @@ class EVCalculator:
             "win_count": win_count,
             "loss_count": loss_count,
             "win_rate": win_rate,
+            "loss_rate": loss_rate,
             "avg_win": avg_win,
             "avg_loss": avg_loss,
             "ev_per_trade": ev_per_trade,
@@ -192,9 +239,44 @@ class EVCalculator:
         report_data["warnings"] = warnings
         return EVReport(**report_data)
 
+
+    @staticmethod
+    def build_report_from_stats(symbol: str, stats: dict, min_trades: int = 300, min_profit_factor: float = 1.3, min_sharpe: float = 1.5) -> EVReport:
+        warnings = []
+        status = "PASS"
+
+        def _fail(msg: str) -> None:
+            nonlocal status
+            warnings.append(msg)
+            status = "FAIL"
+
+        def _warn(msg: str) -> None:
+            nonlocal status
+            warnings.append(msg)
+            if status == "PASS":
+                status = "WARN"
+
+        if stats.get("total_trades", 0) < min_trades:
+            _warn(f"Insufficient trade count ({stats.get('total_trades', 0)} / {min_trades}).")
+
+        if stats.get("ev_per_trade", 0) <= 0:
+            _fail(f"Negative EV ({stats.get('ev_per_trade', 0):.6f}).")
+
+        if stats.get("profit_factor", 0) < min_profit_factor:
+            _warn(f"Low Profit Factor ({stats.get('profit_factor', 0):.2f} < {min_profit_factor}).")
+
+        if stats.get("sharpe_ratio", 0) < min_sharpe:
+            _warn(f"Low Sharpe Ratio ({stats.get('sharpe_ratio', 0):.2f} < {min_sharpe}).")
+
+        report_data = {k: v for k, v in stats.items()}
+        report_data["symbol"] = symbol
+        report_data["status"] = status
+        report_data["warnings"] = warnings
+        return EVReport(**report_data)
+
     def _empty_stats(self) -> dict[str, Any]:
         return {
-            "total_trades": 0, "win_count": 0, "loss_count": 0, "win_rate": 0.0,
+            "total_trades": 0, "win_count": 0, "loss_count": 0, "win_rate": 0.0, "loss_rate": 0.0,
             "avg_win": 0.0, "avg_loss": 0.0, "ev_per_trade": 0.0, "ev_pct": 0.0,
             "ev_weighted": 0.0, "total_gross_profit": 0.0, "total_fees_slippage": 0.0,
             "total_net_profit": 0.0, "profit_factor": 0.0, "sharpe_ratio": 0.0,

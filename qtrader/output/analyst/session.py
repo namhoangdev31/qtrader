@@ -52,6 +52,17 @@ class AnalystSession:
     # Data Loading
     # ──────────────────────────────────────────────────────────────────
 
+    def get_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        filter_sql: str | None = None,
+        source: str = "duckdb",
+        days: int | None = None,
+    ) -> pl.DataFrame:
+        """Alias for load_ohlcv."""
+        return self.load_ohlcv(symbol, timeframe, filter_sql, source, days)
+
     def load_ohlcv(
         self,
         symbol: str,
@@ -168,11 +179,15 @@ class AnalystSession:
         # 3. Feed Data
         adapter.add_data(df)
         
-        # 4. Run (Strategy mapping is still TODO based on exact strategy_fn type)
-        # adapter.run()
+        # 4. Setup Strategy
+        if strategy_fn:
+            adapter.add_strategy(strategy_fn)
+        
+        # 5. Run
+        adapter.run()
         
         self._log.info(f"Nautilus simulation completed for {symbol} ({len(df)} bars)")
-        return adapter
+        return adapter.get_report()
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
         """Load pre-computed features from the FeatureStore.

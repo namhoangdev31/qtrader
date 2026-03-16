@@ -61,7 +61,12 @@ class VBTEngine:
             slippage=slippage,
             freq=freq,
         )
-        return pf
+        
+        from qtrader.output.analytics.ev_calculator import EVCalculator
+        calc = EVCalculator(portfolio=pf)
+        report = calc.diagnose(target_symbol="VBT-BACKTEST", min_trades=30)
+        
+        return report, pf
 
     def optimize_crossover(
         self,
@@ -87,8 +92,12 @@ class VBTEngine:
             
         price = pdf[price_col]
         
+        # Convert ranges to lists (Numba workaround for VectorBT)
+        fast_list = list(fast_range)
+        slow_list = list(slow_range)
+        
         # Run all combinations of fast and slow MAs simultaneously
-        fast_ma, slow_ma = vbt.MA.run_combs(price, fast_range, slow_range)
+        fast_ma, slow_ma = vbt.MA.run_combs(price, fast_list, slow_list)
         
         # Determine signals across all combinations
         entries = fast_ma.ma_crossed_above(slow_ma)
