@@ -17,6 +17,7 @@ import polars as pl
 
 from qtrader.output.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
+from qtrader.backtest.tearsheet import TearsheetGenerator
 from qtrader.input.data.datalake import DataLake
 from qtrader.input.data.datalake_universal import UniversalDataLake
 from qtrader.input.data.duckdb_client import DuckDBClient
