@@ -50,9 +50,9 @@ class SessionBridge:
         Returns:
             ResearchResult from pipeline.run().
         """
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
-        end = datetime.now()
+        end = datetime.now(timezone.utc)
         start = end - timedelta(days=lookback_days)
         result = self.pipeline.run(
             symbols=[symbol],

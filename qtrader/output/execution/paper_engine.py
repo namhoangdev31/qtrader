@@ -46,8 +46,8 @@ class PaperTradingEngine:
         ratio = order_qty / top_depth
         impact = 0.00005 + (0.0002 * ratio)
         
-        # Max slippage capped at 5% for safety in simulation
-        return min(impact, 0.05)
+        # Max slippage capped at 20 bps (0.2%) for reality in BTC-USD liquid books
+        return min(impact, 0.0020)
 
     def simulate_fill(self, order: OrderEvent, market_state: dict[str, Any]) -> FillEvent:
         """

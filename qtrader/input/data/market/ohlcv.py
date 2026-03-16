@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from qtrader.core.event import MarketDataEvent
@@ -30,7 +30,8 @@ class OHLCVNormalizer(DataNormalizer):
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
         elif ts is None:
-            ts = datetime.now()
+            from qtrader.core.config import Config
+            ts = datetime.now(Config.tz)
 
         return MarketDataEvent(
             symbol=self.symbol,

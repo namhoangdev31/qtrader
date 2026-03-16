@@ -3,6 +3,7 @@ from datetime import datetime
 
 import polars as pl
 
+from qtrader.core.config import Config
 from qtrader.core.db import DBClient
 
 
@@ -62,7 +63,7 @@ class DataCatalog:
             end_ts.to_datetime() if hasattr(end_ts, "to_datetime") else end_ts,
             row_count,
             schema_version,
-            datetime.now(),
+            datetime.now(Config.tz),
         )
 
     async def list_available_data(self) -> pl.DataFrame:

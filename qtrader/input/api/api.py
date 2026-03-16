@@ -3,13 +3,14 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI
+from qtrader.core.config import Config
 
 app = FastAPI(title="QTrader v4 Live Monitoring")
 
 # Global state tracker (ideally this would be a shared object or singleton)
 # For now, we'll use a simple dictionary that the engine will update
 stats = {
-    "start_time": datetime.now(),
+    "start_time": datetime.now(Config.tz),
     "last_heartbeat": None,
     "iteration": 0,
     "regime": "None",
@@ -24,11 +25,11 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now()}
+    return {"status": "healthy", "timestamp": datetime.now(Config.tz)}
 
 @app.get("/status")
 async def get_status() -> dict[str, Any]:
-    uptime = datetime.now() - stats["start_time"]
+    uptime = datetime.now(Config.tz) - stats["start_time"]
     return {
         "uptime_seconds": uptime.total_seconds(),
         "iteration": stats["iteration"],

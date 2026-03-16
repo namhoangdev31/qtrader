@@ -30,36 +30,49 @@ class QTraderSettings(BaseSettings):
     coinbase_private_key: str = ""
 
     # Data Lake
-    datalake_uri: str = "./data_lake"
+    datalake_uri: str = "data_lake"
     s3_endpoint: str = ""
     s3_access_key: str = ""
     s3_secret_key: str = ""
-
+    
     # ML
     mlflow_tracking_uri: str = "http://localhost:5050"
     mlflow_experiment_name: str = "qtrader_v4_autonomous"
     simulate_mode: bool = True
-
+    
     # PostgreSQL
     database_url: str = "postgresql://sanauto:secret@localhost:5432/qtrader"
     database_read_url: str | None = None  # Read replica; falls back to database_url if unset
     database_max_connections: int = 100
     database_ssl_enabled: bool = False
-
+    
     # Execution
     impact_daily_volume: float = 1_000_000.0
     impact_sigma_daily: float = 0.02
     impact_y: float = 1.0
-
+    
     # Bot / Operational
     log_level: str = "INFO"
     monthly_cloud_budget: float = 1000.0
-    db_path: str = "./qtrader.db"
+    db_path: str = "qtrader.db"
+    timezone: str = "Asia/Ho_Chi_Minh"
 
-    # Ray (optional)
-    ray_address: str = "auto"
-    ray_memory: str = "4G"
-    ray_cpus: int = 2
+    @model_validator(mode="after")
+    def resolve_paths(self) -> QTraderSettings:
+        """Ensure paths are absolute relative to project root."""
+        import os
+        from pathlib import Path
+        
+        # Find project root (where .env or .git exists, or just parent of qtrader/)
+        root = Path(__file__).parent.parent.parent
+        
+        if not Path(self.datalake_uri).is_absolute():
+            self.datalake_uri = str((root / self.datalake_uri).resolve())
+            
+        if not Path(self.db_path).is_absolute():
+            self.db_path = str((root / self.db_path).resolve())
+            
+        return self
 
     @model_validator(mode="after")
     def validate_live_mode(self) -> QTraderSettings:
@@ -176,6 +189,16 @@ class QTraderSettings(BaseSettings):
     @property
     def RAY_CPUS(self) -> int:
         return self.ray_cpus
+
+    @property
+    def TIMEZONE(self) -> str:
+        return self.timezone
+
+    @property
+    def tz(self):
+        """Returns the tzinfo object (ZoneInfo)."""
+        import zoneinfo
+        return zoneinfo.ZoneInfo(self.timezone)
 
 
 # Module-level singleton; validated at import (fail-fast)

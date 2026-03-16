@@ -62,10 +62,24 @@ class CoinbaseMarketDataClient:
         Fetch OHLCV candles for a product with pagination.
         Coinbase returns max 300 candles per request.
         """
+        from qtrader.core.config import Config
+        from datetime import datetime
         import time
         
         start_ts = int(start.timestamp()) if isinstance(start, datetime) else int(start or 0)
-        end_ts = int(end.timestamp()) if isinstance(end, datetime) else int(end or time.time())
+        end_ts = int(end.timestamp()) if isinstance(end, datetime) else int(end or datetime.now(Config.tz).timestamp())
+        
+        # Granularity mapping to seconds to calculate chunk sizes
+        G_MAP = {
+            "ONE_MINUTE": 60,
+            "FIVE_MINUTE": 300,
+            "FIFTEEN_MINUTE": 900,
+            "THIRTY_MINUTE": 1800,
+            "ONE_HOUR": 3600,
+            "SIX_HOUR": 21600,
+            "ONE_DAY": 86400,
+        }
+        step_secs = G_MAP.get(granularity, 3600) * 300
         
         all_candles: list[dict] = []
         current_end = end_ts
@@ -73,36 +87,45 @@ class CoinbaseMarketDataClient:
         path = f"/brokerage/products/{product_id}/candles"
         
         while current_end > start_ts:
+            # We request from current_end back to (current_end - 300 intervals)
+            chunk_start = max(start_ts, current_end - step_secs)
+            
             params = {
                 "granularity": granularity,
-                "start": str(start_ts),
+                "start": str(chunk_start),
                 "end": str(current_end)
             }
             try:
                 data = self._get(path, params)
                 batch = data.get("candles", [])
                 if not batch:
-                    break
+                    # No data in this range, move back for next iteration
+                    if current_end > chunk_start:
+                        current_end = chunk_start
+                    else:
+                        break
+                    continue
                 
                 all_candles.extend(batch)
                 
-                # Find the earliest candle in this batch to move current_end back
+                # Move current_end to the earliest candle in this batch
                 earliest_in_batch = min(int(c["start"]) for c in batch)
-                if earliest_in_batch >= current_end:
-                    # Guard against infinite loops if API returns the same data
+                
+                # Ensure monotonic progress
+                if earliest_in_batch < current_end:
+                    current_end = earliest_in_batch
+                else:
+                    # Force move if we didn't get earlier data
+                    current_end = chunk_start
+                
+                # If we've reached or passed the global start, stop
+                if current_end <= start_ts:
                     break
                     
-                current_end = earliest_in_batch - 1
-                
-                # Respect rate limits (public API is approx 10 req/sec)
-                # We'll just do a tiny sleep if it's a large request
+                # Respect rate limits for long history fetches
                 if len(all_candles) > 1000:
                     time.sleep(0.1)
                 
-                # If we got fewer than 300, we've likely hit the start
-                if len(batch) < 300:
-                    break
-                    
             except Exception as e:
                 _LOG.error(f"Error fetching candle batch: {e}")
                 break
@@ -112,7 +135,10 @@ class CoinbaseMarketDataClient:
 
         df = pl.DataFrame(all_candles)
         df = df.with_columns([
-            pl.from_epoch(pl.col("start").cast(pl.Int64), time_unit="s").alias("timestamp"),
+            pl.from_epoch(pl.col("start").cast(pl.Int64), time_unit="s")
+            .dt.replace_time_zone("UTC")
+            .dt.convert_time_zone(Config.TIMEZONE)
+            .alias("timestamp"),
             pl.col("open").cast(pl.Float64),
             pl.col("high").cast(pl.Float64),
             pl.col("low").cast(pl.Float64),

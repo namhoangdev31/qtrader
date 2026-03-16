@@ -58,7 +58,7 @@ class ModelRegistry:
                 {
                     "model_type": str(type(model)),
                     "params_hash": params_hash,
-                    "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+                    "trained_at": datetime.now(Config.tz).isoformat(),
                 }
             )
 

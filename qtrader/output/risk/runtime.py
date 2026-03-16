@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
+from qtrader.core.config import Config
+
 from qtrader.core.bus import EventBus
 from qtrader.core.event import RiskEvent
 
@@ -41,7 +43,7 @@ class RuntimeRiskEngine:
     intraday_pnl: float = 0.0
     is_active: bool = True
     current_day: date = field(
-        default_factory=lambda: datetime.now(timezone.utc).date(),
+        default_factory=lambda: datetime.now(Config.tz).date(),
     )
 
     def check_breach(self) -> bool:
@@ -79,7 +81,7 @@ class RuntimeRiskEngine:
             now: Optional timestamp; defaults to current UTC time.
         """
         if now is None:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(Config.tz)
         today = now.date()
         if today != self.current_day:
             self.current_day = today

@@ -80,7 +80,7 @@ class AnalystSession:
                 
                 # Determine how many days to fetch if not specified
                 if days is None:
-                    days = 730 if self.role == RoleContext.RESEARCHER else 7
+                    days = 365 if self.role == RoleContext.RESEARCHER else 7
                 
                 return self.load_live_ohlcv(symbol, timeframe, days=days)
 
@@ -97,7 +97,7 @@ class AnalystSession:
     def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
         """Load real Coinbase REST API data and persist it to the DataLake."""
         from qtrader.input.data.market.coinbase_market import CoinbaseMarketDataClient
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         import time
         
         self._log.info(f"Requesting {days} days of live data for {symbol}...")
@@ -109,8 +109,9 @@ class AnalystSession:
         }
         granularity = tf_map.get(timeframe, "ONE_HOUR")
         
+        from qtrader.core.config import Config
         client = CoinbaseMarketDataClient()
-        end_dt = datetime.utcnow()
+        end_dt = datetime.now(Config.tz)
         start_dt = end_dt - timedelta(days=days)
         df = client.get_candles(symbol, granularity, start=start_dt, end=end_dt)
         if not df.is_empty():

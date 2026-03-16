@@ -29,7 +29,8 @@ class JsonFormatter(logging.Formatter):
         self._service_name = service_name
 
     def format(self, record: logging.LogRecord) -> str:
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
+        from qtrader.core.config import Config
+        ts = datetime.fromtimestamp(record.created, tz=Config.tz).isoformat()
         extra = {
             k: v for k, v in record.__dict__.items()
             if k not in _STANDARD_ATTRS and v is not None
