@@ -12,7 +12,7 @@ class QTraderSettings(BaseSettings):
     """Centralized configuration for QTrader. Loads from .env with validation at startup."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file="/Users/hoangnam/qtrader/.env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
