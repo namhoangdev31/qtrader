@@ -1,114 +1,68 @@
-# Analyst Platform – Jupyter & Google Colab
+# Báo cáo Đánh giá Toàn năng Hệ thống QTrader
 
-QTrader's Analyst Platform provides role-specific notebooks for Quant Analysts, Researchers, and Traders.
+## 1. ĐÁNH GIÁ TỔNG QUAN (EXECUTIVE SUMMARY)
 
-## Quick Launch
+Hệ thống QTrader hiện tại là một **"Bộ khung hạ tầng xuất sắc" (Excellent Infrastructure)** nhưng **"Chưa có bộ não giao dịch thực chiến" (Lacks Trading Intelligence)**. 
 
-| Role | Command | Notebooks |
-|---|---|---|
-| **Quant Analyst** | `make analyst` | `notebooks/analyst/` |
-| **Quant Researcher** | `make analyst-researcher` | `notebooks/researcher/` |
-| **Quant Trader** | `make analyst-trader` | `notebooks/trader/` |
-
-## Google Colab
-
-Open **`notebooks/Colab_Quickstart.ipynb`** in Google Colab, set:
-
-```python
-REPO_URL = "https://github.com/YOUR_ORG/qtrader.git"
-BRANCH   = "main"
-ROLE     = "analyst"   # or "researcher" / "trader"
-USE_GDRIVE = False     # True to mount Google Drive as datalake
-```
-
-Then **Run All**. The setup cell clones the repo, installs dependencies, and initialises the role-specific session.
+*   **Tình trạng**: 🟢 Chỉnh chu về mặt kỹ thuật | 🔴 Sơ sài về mặt thuật toán.
+*   **Nhận định**: Project đã hoàn thiện phần "vỏ" (Layering, Polars integration, Async Event Bus, Research Pipeline) nhưng phần "nhân" (Alpha Alpha, Risk Management, Dynamic Allocation) mới chỉ dừng ở mức lý thuyết cơ bản.
 
 ---
 
-## Notebook Library
+## 2. ĐÁNH GIÁ CHI TIẾT TỪNG LỚP (LAYER-BY-LAYER)
 
-### 📊 Analyst
+### 2.1 Alpha Layer (Alpha Engine)
+*   **Hiện trạng**: Đã có `AlphaRegistry` hỗ trợ các Alpha nâng cao như `VPIN`, `OrderImbalance`. Tuy nhiên, các Alpha mặc định (`Momentum`, `Volatility`) vẫn quá generic.
+*   **Điểm yếu**: 
+    *   **Generic Features**: Các tính năng phổ thông không tạo ra lợi thế thông tin (edge).
+    *   **Alpha Decay**: Thiếu cơ chế tự động theo dõi và loại bỏ các Alpha đã mất hiệu lực.
+    *   **Validation Gap**: Công cụ tính IC (`ModelEvaluator`) chưa được tích hợp như một "cửa chặn" (Gatekeeper) trong pipeline thực tế.
 
-| Notebook | Description |
-|---|---|
-| `analyst/01_EDA_Report.ipynb` | Load OHLCV → rich statistics → distributions → rolling vol → HTML export |
-| `analyst/02_Backtest_Report.ipynb` | Signal → vector backtest → Sharpe/Sortino/Calmar/Win Rate → equity curve |
-| `analyst/03_Risk_Report.ipynb` | Multi-asset → VaR/CVaR → correlation heatmap → tail distribution |
+### 2.2 Strategy Layer (Decision Engine)
+*   **Hiện trạng**: Sử dụng logic `weighted sum + fixed threshold`.
+*   **Điểm yếu**: 
+    *   **Retail Logic**: Cách tiếp cận vượt ngưỡng tĩnh (Static Threshold) cực kỳ dễ bị overfit.
+    *   **Static Nature**: Thiếu tính thích ứng (Adaptability) với các điều kiện thị trường thay đổi (Market Regimes).
 
-### 🔬 Researcher
+### 2.3 Meta Strategy & ML
+*   **Hiện trạng**: Có `RegimeDetector` (GMM/HMM) và `ResearchPipeline` hỗ trợ Walk-Forward ML.
+*   **Điểm yếu**: 
+    *   **Manual Meta**: Việc gán trọng số theo Regime vẫn là thủ công (Hard-coded), chưa phải là Meta-learning tự động.
+    *   **Production Disconnect**: Các kỹ thuật tinh vi trong `ResearchPipeline` (CatBoost, Walk-forward) hiện chưa được "đóng gói" để chạy live một cách trơn tru.
 
-| Notebook | Description |
-|---|---|
-| `researcher/01_Feature_Lab.ipynb` | Feature engineering → IC heatmap → drift check → FeatureStore save |
-| `researcher/02_Regime_Lab.ipynb` | GMM regime detection → conditional stats → rotation backtest |
-| `researcher/03_ML_Experiment.ipynb` | Train model → MLflow log → feature importance → compare runs |
-
-### ⚡ Trader
-
-| Notebook | Description |
-|---|---|
-| `trader/01_Live_Monitor.ipynb` | `connect_live_api` → live engine status → equity/drawdown dashboard |
-| `trader/02_Execution_Audit.ipynb` | Fills → slippage analysis → SOR venue breakdown → cost attribution |
+### 2.4 Risk Layer (The Weakest Link)
+*   **Hiện trạng**: Chỉ có Volatility Targeting cơ bản.
+*   **Điểm yếu nghiêm trọng**:
+    *   **Thiếu Portfolio Risk**: Coi mỗi tài sản là một thực thể độc lập, bỏ qua tương quan danh mục (Correlation).
+    *   **Thiếu Drawdown Control**: Không có Circuit Breaker hay Trailing Stop ở mức Equity Curve.
+    *   **Capital Allocation**: Chưa có cơ chế phân bổ vốn động (như Kelly Criterion) dựa trên niềm tin vào tín hiệu.
 
 ---
 
-## AnalystSession API
+## 3. ĐÁNH GIÁ HẠ TẦNG & PIPELINE
 
-```python
-from qtrader.analyst import AnalystSession, RoleContext
+### 3.1 Backtest Engine (Dual-Mode)
+*   **Vectorized (`VectorizedEngine`)**: Cực nhanh, phù hợp cho nghiên cứu nhanh, nhưng P&L model quá đơn giản.
+*   **Event-driven (`SimulatedBroker`)**: Mô phỏng lệnh tốt hơn nhưng mô hình tác động thị trường (Market Impact) vẫn dùng placeholder, chưa sát thực tế.
 
-session = AnalystSession(role=RoleContext.ANALYST)
-session.info()   # Print role-specific workflow guide
+### 3.2 Core Infrastructure
+*   **Event Bus**: Kiến trúc Async tốt nhưng giới hạn trong Single-process và thiếu tính kiên định (Persistence).
+*   **Monitoring**: `LiveMonitor` có cơ chế Emergency Halt nhưng logic cảnh báo còn dựa trên các ngưỡng tĩnh (Static Percentages).
 
-# Data
-df = session.load_ohlcv("BTC-USD", "1d")
-df = session.sample_ohlcv("BTC", days=365)         # Synthetic fallback
-df = session.make_returns(df)
-df = session.add_rolling_features(df, windows=[5, 21])
+---
 
-# EDA
-stats = session.rich_describe(df)
-stats_df = session.rich_describe_table(df)
+## 4. LỘ TRÌNH CẢI TIẾN CHIẾN LƯỢC (ROADMAP)
 
-# Backtest
-bt = session.run_vector_backtest(df, signal_col="signal")
-metrics = session.compute_extended_metrics(bt["equity_curve"])
-# → keys: total_return, sharpe_ratio, sortino_ratio, calmar_ratio, win_rate, profit_factor, ...
+### Giai đoạn 1: Nâng cấp "Giáp" (Risk & Portfolio)
+*   Triển khai **Portfolio Manager** để quản lý tương quan giữa các lệnh.
+*   Thêm **Drawdown Circuit Breaker** tự động giảm Risk khi Equity Curve sụt giảm quá ngưỡng.
 
-# Research
-df = session.run_alpha_score(df, forward_periods=[1, 5, 10])
-feat_df = session.load_features("BTC-USD", "1d")
+### Giai đoạn 2: Nâng cấp "Não" (Validation & ML)
+*   Tích hợp **Feature Validation Layer**: Tự động lọc Alpha dựa trên IC (Information Coefficient) thời gian thực.
+*   Đưa **Walk-Forward ML** từ Research vào Live Engine.
 
-# Live (Trader)
-ok = session.ping_live_api(host="localhost", port=8000)
-status = session.connect_live_api(host="localhost", port=8000)
+### Giai đoạn 3: Nâng cấp "Vũ khí" (Advanced Alphas)
+*   Tối ưu hóa các Alpha Microstructure (`VPIN`, `Order Flow`) để khai thác thông tin từ sổ lệnh.
 
-# Report
-out = session.export_report(
-    title="My Report",
-    sections={"Metrics": metrics, "Equity": bt["equity_curve"]},
-    path="reports/my_report.html",
-)
-```
-
-## HTML Report Builder
-
-```python
-from qtrader.analyst.report import ReportBuilder
-
-rb = ReportBuilder("My Analysis")
-rb.add_text("Overview", "Strategy: momentum 1h.")
-rb.add_table("Metrics", metrics_dict)
-rb.add_figure("Equity Curve", fig)           # matplotlib Figure
-rb.add_polars_plot("Drawdown", dd_series)    # Polars Series → auto chart
-rb.save("reports/analysis.html")
-```
-
-## Workflow (Core)
-
-1. **Load** OHLCV from DuckDB datalake → `UniversalDataLake` fallback → `sample_ohlcv()` synthetic.
-2. **Compute** returns, rolling features, alpha scores.
-3. **Backtest** with `run_vector_backtest`, evaluate with `compute_extended_metrics`.
-4. **Export** HTML report with `export_report` or `ReportBuilder`.
-5. **Persist** features to `FeatureStore` for researcher workflows.
-6. **Monitor** live bot via `connect_live_api` from Trader notebooks.
+---
+**Kết luận**: QTrader là một nền tảng đầy hứa hẹn. Để tiến lên cấp độ Hedge Fund, cần tập trung đẩy mạnh sự thông minh của thuật toán và tính chặt chẽ của quản trị rủi ro danh mục.

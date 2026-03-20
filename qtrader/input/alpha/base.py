@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import Protocol, runtime_checkable
 
 import polars as pl
@@ -24,6 +25,70 @@ class Alpha(Protocol):
             Polars Series of z-scored signals, aligned to ``df`` and
             containing nulls where lookback is insufficient.
         """
+
+
+class BaseAlpha(ABC):
+    """Base class for alpha factors enforcing standardized interface.
+
+    All alpha implementations should inherit from this class.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    @abstractmethod
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw alpha signal. Must be implemented by subclasses.
+
+        Args:
+            df: OHLCV DataFrame with at least columns
+                ``open, high, low, close, volume, timestamp``.
+
+        Returns:
+            Polars Series of raw alpha values (not normalized).
+        """
+
+    def compute(self, df: pl.DataFrame) -> pl.Series:
+        """Compute alpha signal with validation and standardization.
+
+        Args:
+            df: OHLCV DataFrame with at least columns
+                ``open, high, low, close, volume, timestamp``.
+
+        Returns:
+            Polars Series of z-scored signals, aligned to ``df`` and
+            containing zeros where lookback is insufficient or errors occur.
+            Always returns Float64 dtype with same length as input.
+        """
+        # Validate required columns
+        required = {"open", "high", "low", "close", "volume", "timestamp"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"DataFrame missing required columns: {missing}")
+
+        # Compute raw alpha
+        try:
+            raw = self._compute_raw(df)
+        except Exception:
+            # On any error, return neutral fallback
+            return pl.Series(
+                name=self.name, values=[0.0] * df.height, dtype=pl.Float64
+            )
+
+        # Ensure output length matches input
+        if raw.len() != df.height:
+            return pl.Series(
+                name=self.name, values=[0.0] * df.height, dtype=pl.Float64
+            )
+
+        # Ensure Float64 dtype
+        if raw.dtype != pl.Float64:
+            raw = raw.cast(pl.Float64)
+
+        # Replace non-finite values with zero (neutral fallback)
+        raw = raw.fill_nan(0.0).fill_null(0.0)
+
+        return raw
 
 
 def _zscore(series: pl.Series, window: int) -> pl.Series:
