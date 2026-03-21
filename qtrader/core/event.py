@@ -1,34 +1,22 @@
-"""Event type system for EventBus: market, signals, orders, fills, risk, system, heartbeat."""
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any
+from typing import Any, Dict, Optional
 
-__all__ = [
-    "EventType",
-    "Event",
-    "MarketDataEvent",
-    "SignalEvent",
-    "OrderEvent",
-    "FillEvent",
-    "RiskEvent",
-    "RegimeChangeEvent",
-    "SystemEvent",
-    "HeartbeatEvent",
-]
+import polars as pl
 
 
 class EventType(Enum):
     MARKET_DATA = auto()
+    FEATURE = auto()
     SIGNAL = auto()
+    ENSEMBLE_SIGNAL = auto()
     ORDER = auto()
     FILL = auto()
     RISK = auto()
-    CLOCK = auto()
-    REGIME_CHANGE = auto()  # Emitted by AutonomousLoop on regime shift
-    SYSTEM = auto()  # Bot lifecycle events (start/stop/halt)
-    HEARTBEAT = auto()  # Periodic liveness signal
+    SYSTEM = auto()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,71 +28,70 @@ class Event:
 @dataclass(frozen=True, kw_only=True)
 class MarketDataEvent(Event):
     symbol: str
-    data: dict[str, Any]
+    data: pl.DataFrame  # Expected to have OHLCV columns
+    metadata: Optional[Dict[str, Any]] = None
     type: EventType = EventType.MARKET_DATA
+
+
+@dataclass(frozen=True, kw_only=True)
+class FeatureEvent(Event):
+    symbol: str
+    features: Dict[str, pl.Series]  # feature name -> series
+    metadata: Optional[Dict[str, Any]] = None
+    type: EventType = EventType.FEATURE
 
 
 @dataclass(frozen=True, kw_only=True)
 class SignalEvent(Event):
     symbol: str
-    signal_type: str  # e.g., "LONG", "SHORT", "EXIT"
-    strength: float
-    metadata: dict[str, Any] = field(default_factory=dict)
+    signal_type: str  # e.g., 'PROBABILISTIC'
+    strength: float  # Signal strength in [0, 1]
+    metadata: Dict[str, Any]  # e.g., probabilities, weights, etc.
     type: EventType = EventType.SIGNAL
+
+
+@dataclass(frozen=True, kw_only=True)
+class EnsembleSignalEvent(Event):
+    symbol: str
+    signal_type: str  # e.g., 'ENSEMBLE'
+    strength: float  # Signal strength in [0, 1]
+    metadata: Dict[str, Any]  # e.g., probabilities, weights, etc.
+    type: EventType = EventType.ENSEMBLE_SIGNAL
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrderEvent(Event):
     symbol: str
-    order_type: str
+    side: str  # 'BUY' or 'SELL'
+    order_type: str  # e.g., 'MARKET', 'LIMIT', 'TWAP', 'VWAP'
     quantity: float
-    price: float | None = None
-    side: str = "BUY"  # or "SELL"
-    order_id: str | None = None
+    price: Optional[float] = None  # For limit orders
+    metadata: Optional[Dict[str, Any]] = None
     type: EventType = EventType.ORDER
 
 
 @dataclass(frozen=True, kw_only=True)
 class FillEvent(Event):
     symbol: str
+    side: str  # 'BUY' or 'SELL'
     quantity: float
     price: float
-    commission: float
-    side: str
-    order_id: str
-    fill_id: str
+    commission: float = 0.0
+    metadata: Optional[Dict[str, Any]] = None
     type: EventType = EventType.FILL
 
 
 @dataclass(frozen=True, kw_only=True)
 class RiskEvent(Event):
-    reason: str
-    action: str  # e.g., "BLOCK", "LIQUIDATE"
-    metadata: dict[str, Any] = field(default_factory=dict)
+    symbol: str
+    metrics: Dict[str, float]  # e.g., {'var': 0.05, 'drawdown': 0.02}
+    metadata: Optional[Dict[str, Any]] = None
     type: EventType = EventType.RISK
 
 
 @dataclass(frozen=True, kw_only=True)
-class RegimeChangeEvent(Event):
-    """Emitted when regime detector identifies a regime shift."""
-    regime_id: int
-    confidence: float  # posterior probability of current regime
-    previous_regime_id: int | None = None
-    type: EventType = EventType.REGIME_CHANGE
-
-
-@dataclass(frozen=True, kw_only=True)
 class SystemEvent(Event):
-    """Bot lifecycle events: START, STOP, EMERGENCY_HALT, RETRAIN."""
-    action: str  # "START" | "STOP" | "EMERGENCY_HALT" | "RETRAIN"
+    action: str  # e.g., 'START', 'STOP', 'KILL_SWITCH'
     reason: str = ""
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Optional[Dict[str, Any]] = None
     type: EventType = EventType.SYSTEM
-
-
-@dataclass(frozen=True, kw_only=True)
-class HeartbeatEvent(Event):
-    """Periodic liveness signal from a component."""
-    source: str  # Component name ("bot_runner", "risk_engine", etc.)
-    uptime_seconds: float
-    type: EventType = EventType.HEARTBEAT

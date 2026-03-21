@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import List, Protocol, runtime_checkable
 
 import polars as pl
 
@@ -16,10 +16,29 @@ _LOG = logging.getLogger("qtrader.strategy.base")
 
 @runtime_checkable
 class Strategy(Protocol):
-    """Protocol for converting signals into orders."""
+    """Protocol for strategies that can compute signals and optionally convert them to orders."""
 
-    def on_signal(self, event: SignalEvent) -> list[OrderEvent]:  # pragma: no cover - interface
-        """Handle an incoming signal and return zero or more orders."""
+    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
+        """Compute trading signals from features.
+
+        Args:
+            features: Dictionary of validated feature names to their series.
+
+        Returns:
+            A SignalEvent containing the signal.
+        """
+        ...
+
+    def on_signal(self, event: SignalEvent) -> list[OrderEvent]:
+        """Handle an incoming signal and return zero or more orders.
+
+        Args:
+            event: The signal event.
+
+        Returns:
+            List of `OrderEvent` objects to be submitted to the OMS.
+        """
+        ...
 
 
 @dataclass(slots=True)
@@ -50,10 +69,24 @@ class BaseStrategy:
         init=False,
     )
 
+    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
+        """Compute trading signals from features.
+
+        Subclasses are expected to override this method.
+
+        Args:
+            features: Dictionary of validated feature names to their series.
+
+        Returns:
+            A SignalEvent containing the signal.
+        """
+        raise NotImplementedError("BaseStrategy.compute_signals must be implemented by subclasses.")
+
     def on_signal(self, event: SignalEvent) -> list[OrderEvent]:
         """Convert a signal into one or more orders.
 
-        Subclasses are expected to override this method.
+        By default, strategies do not generate orders directly.
+        Subclasses are expected to override this method if they do.
 
         Args:
             event: Incoming `SignalEvent`.
@@ -61,7 +94,7 @@ class BaseStrategy:
         Returns:
             List of `OrderEvent` objects to be submitted.
         """
-        raise NotImplementedError("BaseStrategy.on_signal must be implemented by subclasses.")
+        return []
 
     def on_fill(self, event: FillEvent) -> None:
         """Update internal position tracking and fill log on each fill.
@@ -138,7 +171,7 @@ class BaseStrategy:
             .with_columns(
                 pl.col("wins").fill_null(0),
                 pl.col("avg_win").fill_null(0.0),
-                pl.col("avg_loss").fill_null(0.0).abs(),
+                pl.col("avg_loss").fill_null(0.0),
             )
         )
 
@@ -186,8 +219,8 @@ class BaseStrategy:
 
         Args:
             quantity: Order quantity.
-            side: \"BUY\" or \"SELL\".
-            order_type: Order type string, default \"MARKET\".
+            side: "BUY" or "SELL".
+            order_type: Order type string, default "MARKET".
             price: Optional limit price.
 
         Returns:
@@ -200,31 +233,3 @@ class BaseStrategy:
             price=price,
             side=side,
         )
-
-
-"""
-Pytest-style examples (conceptual):
-
-def test_on_fill_updates_position() -> None:
-    from qtrader.core.event import FillEvent, EventType
-
-    strat = BaseStrategy(symbol="AAPL")
-    fill = FillEvent(
-        type=EventType.FILL,
-        symbol="AAPL",
-        quantity=10.0,
-        price=150.0,
-        commission=0.0,
-        side="BUY",
-        order_id="1",
-        fill_id="1",
-    )
-    strat.on_fill(fill)
-    assert strat.get_position("AAPL") == 10.0
-
-
-def test_win_rate_trailing_no_fills() -> None:
-    strat = BaseStrategy(symbol="AAPL")
-    assert strat.win_rate_trailing() == 0.0
-"""
-

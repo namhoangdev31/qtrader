@@ -6,8 +6,6 @@ from typing import ClassVar
 
 import polars as pl
 
-from qtrader.core.event import EventType
-
 _LOG = logging.getLogger("qtrader.strategy.alpha")
 
 
