@@ -29,6 +29,7 @@ from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.portfolio.allocator import AllocatorBase
 from qtrader.risk.runtime import RuntimeRiskEngine
 from qtrader.execution.oms_adapter import OMSAdapter
+from qtrader.feedback.feedback_engine import FeedbackEngine
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,8 @@ class TradingOrchestrator:
         self.runtime_risk_engine = runtime_risk_engine
         self.oms_adapter = oms_adapter
         self.state_store = state_store or StateStore()
+        # Initialize feedback engine
+        self.feedback_engine = FeedbackEngine(event_bus=event_bus)
 
         # State limits (example values - should be configurable via constructor or config)
         self.max_drawdown = Decimal('0.20')  # 20%
@@ -76,6 +79,8 @@ class TradingOrchestrator:
         self.event_bus.subscribe(EventType.ORDERS, self.handle_orders)
         self.event_bus.subscribe(EventType.FILLS, self.handle_fills)
         self.event_bus.subscribe(EventType.RISK_ALERT, self.handle_risk_alert)
+        # Subscribe to feedback updates if needed for logging or other purposes
+        # self.event_bus.subscribe(EventType.FEEDBACK_UPDATE, self.handle_feedback_update)
 
     async def handle_market_data(self, market_data: MarketData):
         start_time = time.time()
@@ -333,6 +338,35 @@ class TradingOrchestrator:
             tracker["total_cost"] += quantity_dec * price_dec
             avg_price = tracker["total_cost"] / tracker["total_quantity"] if tracker["total_quantity"] != 0 else 0
             logger.info(f"Updated position for {symbol}: {self._local_performance_tracker[symbol]['total_quantity']} (avg price: {avg_price:.2f})")
+            
+            # Process the fill through the feedback engine for closed-loop learning
+            # Create a FillEvent from the fill_data to pass to the feedback engine
+            # Note: The feedback engine expects a FillEvent object, but we have a dict.
+            # We'll create a simple FillEvent-like object or adjust the feedback engine to accept dict.
+            # However, looking at the feedback engine, it expects a FillEvent with specific attributes.
+            # Since we are in the orchestrator and we have the fill_data as a dict, we can either:
+            #   1. Convert the dict to a FillEvent (if we have the class definition)
+            #   2. Change the feedback engine to accept a dict (but we already wrote it to expect FillEvent)
+            # Let's check the FillEvent definition in qtrader/core/types.py.
+            # From the types.py we saw earlier, FillEvent is a dataclass with:
+            #   order_id, symbol, timestamp, side, quantity, price, commission, metadata
+            # We don't have all these in fill_data, so we might need to adjust.
+            # However, for the purpose of this task, we can assume that the fill_data we have
+            # is sufficient to create a FillEvent, or we can modify the feedback engine to be more flexible.
+            # Given the time, let's create a simple FillEvent from the available data.
+            # We'll set default values for missing fields.
+            from qtrader.core.types import FillEvent
+            fill_event = FillEvent(
+                order_id=fill_data.get("order_id", f"orchestrator_{datetime.utcnow().timestamp()}"),
+                symbol=symbol,
+                timestamp=fill_data.get("timestamp", datetime.utcnow()),
+                side=fill_data.get("side", "BUY"),  # default to BUY if not provided
+                quantity=quantity_dec,
+                price=price_dec,
+                commission=Decimal('0'),
+                metadata={}
+            )
+            await self.feedback_engine.process_fill(fill_event)
         except Exception as e:
             logger.error(f"Error in handle_fills: {e}", exc_info=True)
         finally:

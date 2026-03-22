@@ -36,6 +36,8 @@
 - qtrader/core/resource_monitor.py: CPU/memory usage tracking and throttling
 - qtrader/analytics/drift_detector.py: Statistical drift detection between research/live
 - qtrader/execution/orderbook_enhanced.py: L2 orderbook with depletion modeling
+- qtrader/feedback/feedback_engine.py: Closed-loop learning from execution
+- qtrader/ml/meta_online.py: Online meta-learning for dynamic strategy/feature weighting
 
 ## 4. INTEGRATION PLAN
 Market Data Feed → Feature Engine (qtrader/data/) → Alpha Generation (qtrader/alpha/) 
@@ -47,6 +49,7 @@ Feedback Loop: Fill Data → OMS → Risk Engine → Strategy Adjustment
 Shadow Path: Market Data → Shadow Engine (no order submission) → Performance Comparison
 Drift Path: Research Distributions (from MLflow) ↔ Live Distributions (from OMS) → Drift Detector
 Telemetry: All components → Core Logger → Analytics Pipeline
+Meta Learning Path: Feedback Engine → Online Meta Learner → Ensemble Strategy & Portfolio Allocator
 
 ## 5. RISK HARDENING PLAN
 - Hard Kill Switch: Network socket termination via qtrader/risk/network_kill_switch.py
