@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Protocol, runtime_checkable
+from typing import Any, Dict, List, Protocol, runtime_checkable
 
 import polars as pl
 
-from qtrader.core.event import FillEvent, OrderEvent, SignalEvent
+from qtrader.core.types import FillEvent, OrderEvent, SignalEvent
 
 __all__ = ["Strategy", "BaseStrategy"]
 
@@ -18,14 +18,10 @@ _LOG = logging.getLogger("qtrader.strategy.base")
 class Strategy(Protocol):
     """Protocol for strategies that can compute signals and optionally convert them to orders."""
 
-    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
+    def compute_signals(self, features: dict[str, pl.Series]) -> dict[str, Any]:
         """Compute trading signals from features.
 
-        Args:
-            features: Dictionary of validated feature names to their series.
-
-        Returns:
-            A SignalEvent containing the signal.
+        Returns a dict with keys: 'signal_type', 'strength', 'metadata'.
         """
         ...
 
@@ -69,16 +65,13 @@ class BaseStrategy:
         init=False,
     )
 
-    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
+    def compute_signals(self, features: dict[str, pl.Series]) -> dict[str, Any]:
         """Compute trading signals from features.
 
         Subclasses are expected to override this method.
 
-        Args:
-            features: Dictionary of validated feature names to their series.
-
         Returns:
-            A SignalEvent containing the signal.
+            A dict with keys: 'signal_type', 'strength', 'metadata'.
         """
         raise NotImplementedError("BaseStrategy.compute_signals must be implemented by subclasses.")
 
@@ -155,13 +148,22 @@ class BaseStrategy:
 
         total_counts = df.group_by("symbol").len().rename({"len": "total"})
         win_counts = wins.group_by("symbol").len().rename({"len": "wins"}) if wins.height > 0 else pl.DataFrame(
-            {"symbol": pl.Series([], dtype=pl.String), "wins": pl.Series([], dtype=pl.UInt32)},
+            {
+                "symbol": pl.Series([], dtype=pl.String),
+                "wins": pl.Series([], dtype=pl.UInt32),
+            },
         )
         avg_win = wins.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_win")) if wins.height > 0 else pl.DataFrame(
-            {"symbol": pl.Series([], dtype=pl.String), "avg_win": pl.Series([], dtype=pl.Float64)},
+            {
+                "symbol": pl.Series([], dtype=pl.String),
+                "avg_win": pl.Series([], dtype=pl.Float64),
+            },
         )
         avg_loss = losses.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_loss")) if losses.height > 0 else pl.DataFrame(
-            {"symbol": pl.Series([], dtype=pl.String), "avg_loss": pl.Series([], dtype=pl.Float64)},
+            {
+                "symbol": pl.Series([], dtype=pl.String),
+                "avg_loss": pl.Series([], dtype=pl.Float64),
+            },
         )
 
         joined = (
@@ -226,10 +228,16 @@ class BaseStrategy:
         Returns:
             Constructed `OrderEvent` instance.
         """
+        from decimal import Decimal
+        timestamp = datetime.now()
+        # Generate a simple order ID based on symbol and timestamp
+        order_id = f"{self.symbol}_{int(timestamp.timestamp())}"
         return OrderEvent(
+            order_id=order_id,
             symbol=self.symbol,
+            timestamp=timestamp,
             order_type=order_type,
-            quantity=quantity,
-            price=price,
             side=side,
+            quantity=Decimal(str(quantity)),
+            price=Decimal(str(price)) if price is not None else None,
         )

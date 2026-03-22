@@ -5,8 +5,6 @@ from __future__ import annotations
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["QTraderSettings", "settings", "Config"]
-
 
 class QTraderSettings(BaseSettings):
     """Centralized configuration for QTrader. Loads from .env with validation at startup."""
@@ -34,23 +32,23 @@ class QTraderSettings(BaseSettings):
     s3_endpoint: str = ""
     s3_access_key: str = ""
     s3_secret_key: str = ""
-    
+
     # ML
     mlflow_tracking_uri: str = "http://localhost:5050"
     mlflow_experiment_name: str = "qtrader_v4_autonomous"
     simulate_mode: bool = True
-    
+
     # PostgreSQL
     database_url: str = "postgresql://sanauto:secret@localhost:5432/qtrader"
     database_read_url: str | None = None  # Read replica; falls back to database_url if unset
     database_max_connections: int = 100
     database_ssl_enabled: bool = False
-    
+
     # Execution
     impact_daily_volume: float = 1_000_000.0
     impact_sigma_daily: float = 0.02
     impact_y: float = 1.0
-    
+
     # Bot / Operational
     log_level: str = "INFO"
     monthly_cloud_budget: float = 1000.0
@@ -62,16 +60,16 @@ class QTraderSettings(BaseSettings):
         """Ensure paths are absolute relative to project root."""
         import os
         from pathlib import Path
-        
+
         # Find project root (where .env or .git exists, or just parent of qtrader/)
         root = Path(__file__).parent.parent.parent
-        
+
         if not Path(self.datalake_uri).is_absolute():
             self.datalake_uri = str((root / self.datalake_uri).resolve())
-            
+
         if not Path(self.db_path).is_absolute():
             self.db_path = str((root / self.db_path).resolve())
-            
+
         return self
 
     @model_validator(mode="after")
@@ -178,27 +176,7 @@ class QTraderSettings(BaseSettings):
     def MONTHLY_BUDGET(self) -> float:
         return self.monthly_cloud_budget
 
-    @property
-    def RAY_ADDRESS(self) -> str:
-        return self.ray_address
-
-    @property
-    def RAY_MEMORY(self) -> str:
-        return self.ray_memory
-
-    @property
-    def RAY_CPUS(self) -> int:
-        return self.ray_cpus
-
-    @property
-    def TIMEZONE(self) -> str:
-        return self.timezone
-
-    @property
-    def tz(self):
-        """Returns the tzinfo object (ZoneInfo)."""
-        import zoneinfo
-        return zoneinfo.ZoneInfo(self.timezone)
+    # Removed problematic attributes: RAY_ADDRESS, RAY_MEMORY, RAY_CPUS
 
 
 # Module-level singleton; validated at import (fail-fast)
@@ -206,21 +184,3 @@ settings: QTraderSettings = QTraderSettings()
 
 # Backward compatibility alias for existing code using Config.BINANCE_API_KEY etc.
 Config: QTraderSettings = settings
-
-
-"""
-# Pytest-style examples:
-def test_settings_validates_live_mode_requires_api_key(monkeypatch) -> None:
-    monkeypatch.setenv("SIMULATE_MODE", "false")
-    monkeypatch.delenv("BINANCE_API_KEY", raising=False)
-    monkeypatch.delenv("COINBASE_API_KEY", raising=False)
-    from pydantic_settings import BaseSettings
-    # Re-import to get fresh validation; in practice use pytest fixture to clear cache
-    with pytest.raises(ValueError, match="Live mode requires"):
-        QTraderSettings()
-
-def test_settings_loads_from_env(monkeypatch) -> None:
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    s = QTraderSettings()
-    assert s.log_level == "DEBUG"
-"""

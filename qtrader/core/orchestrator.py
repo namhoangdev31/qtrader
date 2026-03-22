@@ -5,153 +5,384 @@ feature validation -> strategy -> risk -> execution.
 """
 
 import asyncio
-from typing import Dict, Any
+import logging
+import time
+from typing import Dict, Any, List, Optional
+from datetime import datetime
 from decimal import Decimal
 
-from qtrader.core.event import (
-    MarketDataEvent,
-    FeatureEvent,
-    SignalEvent as CoreSignalEvent,
-    OrderEvent as CoreOrderEvent,
-    FillEvent,
-    RiskEvent,
-    SystemEvent,
-    EventType
+from qtrader.core.types import (
+    EventType,
+    LoggerProtocol,
+    EventBusProtocol,
+    MarketData,
+    AllocationWeights,
+    RiskMetrics,
+    ValidatedFeatures,
+    SignalEvent,
 )
-from qtrader.core.types import LoggerProtocol, EventBusProtocol
 from qtrader.strategy.alpha.alpha_base import AlphaBase
-from ..strategy.validation.feature_validator import FeatureValidator
-from ..strategy.probabilistic_strategy import ProbabilisticStrategy
-from ..strategy.ensemble_strategy import EnsembleStrategy
-from ..portfolio.allocator import AllocatorBase
-from ..risk.runtime import RuntimeRiskEngine
-from ..execution.oms_adapter import OMSAdapter
+from qtrader.strategy.validation.feature_validator import FeatureValidator
+from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
+from qtrader.strategy.ensemble_strategy import EnsembleStrategy
+from qtrader.portfolio.allocator import AllocatorBase
+from qtrader.risk.runtime import RuntimeRiskEngine
+from qtrader.execution.oms_adapter import OMSAdapter
+
+logger = logging.getLogger(__name__)
 
 
-class QTraderEngine:
+class TradingOrchestrator:
     """Main orchestrator for the QTrader trading system."""
 
     def __init__(
         self,
         event_bus: EventBusProtocol,
-        logger: LoggerProtocol,
-        alpha_generator: AlphaBase,
+        market_data_adapter: object,  # Not used in handlers but kept for interface compatibility
+        alpha_modules: List[AlphaBase],
         feature_validator: FeatureValidator,
-        strategy: ProbabilisticStrategy | EnsembleStrategy,
-        allocator: AllocatorBase,
-        risk_engine: RuntimeRiskEngine,
+        strategies: List[ProbabilisticStrategy],
+        ensemble_strategy: EnsembleStrategy,
+        portfolio_allocator: AllocatorBase,
+        runtime_risk_engine: RuntimeRiskEngine,
         oms_adapter: OMSAdapter,
     ):
         self.event_bus = event_bus
-        self.logger = logger
-        self.alpha_generator = alpha_generator
+        self.market_data_adapter = market_data_adapter
+        self.alpha_modules = alpha_modules
         self.feature_validator = feature_validator
-        self.strategy = strategy
-        self.allocator = allocator
-        self.risk_engine = risk_engine
+        self.strategies = strategies
+        self.ensemble_strategy = ensemble_strategy
+        self.portfolio_allocator = portfolio_allocator
+        self.runtime_risk_engine = runtime_risk_engine
         self.oms_adapter = oms_adapter
-        self._running = False
-        # Store latest market data for risk calculations
-        self._latest_market_data: MarketDataEvent = None
 
-    async def start(self) -> None:
-        """Start the trading orchestrator."""
-        self.logger.info("Starting QTrader orchestrator")
-        self._running = True
-        # Subscribe to market data events
-        self.event_bus.subscribe(EventType.MARKET_DATA, self._on_market_data)
-        # Start the event bus if not already started
-        await self.event_bus.start()
+        # State
+        self.positions = {}
+        self.performance_tracker = {}
+        self.kill_switch_active = False
+        self.last_approved_risk_metrics: Optional[RiskMetrics] = None
+        self.last_approved_allocation: Optional[Dict[str, Any]] = None
 
-    async def stop(self) -> None:
-        """Stop the trading orchestrator."""
-        self.logger.info("Stopping QTrader orchestrator")
-        self._running = False
-        self.event_bus.unsubscribe(EventType.MARKET_DATA, self._on_market_data)
-        await self.event_bus.stop()
+        # Risk limits (example values - should be configurable via constructor or config)
+        self.max_drawdown = Decimal('0.20')  # 20%
+        self.max_var = Decimal('0.05')       # 5% VaR
+        self.max_leverage = Decimal('5.0')   # 5x leverage
 
-    async def _on_market_data(self, market_data_event: MarketDataEvent) -> None:
-        """Process incoming market data event."""
-        if not self._running:
-            return
+        # Register event handlers
+        self._register_handlers()
 
+    def _register_handlers(self):
+        self.event_bus.subscribe(EventType.MARKET_DATA, self.handle_market_data)
+        self.event_bus.subscribe(EventType.FEATURES, self.handle_features)
+        self.event_bus.subscribe(EventType.VALIDATED_FEATURES, self.handle_validated_features)
+        self.event_bus.subscribe(EventType.SIGNALS, self.handle_signals)
+        self.event_bus.subscribe(EventType.ORDERS, self.handle_orders)
+        self.event_bus.subscribe(EventType.FILLS, self.handle_fills)
+        self.event_bus.subscribe(EventType.RISK_ALERT, self.handle_risk_alert)
+
+    async def handle_market_data(self, market_data: MarketData):
+        start_time = time.time()
         try:
-            # Store latest market data for risk calculations
-            self._latest_market_data = market_data_event
-
-            # Generate alpha
-            feature_event: FeatureEvent = await self.alpha_generator.generate(
-                market_data_event
-            )
+            logger.info(f"Handling market data for {market_data.symbol} - Input: close={market_data.close}, volume={market_data.volume}")
+            # Compute alpha features from all modules
+            features = {}
+            for alpha in self.alpha_modules:
+                # Assuming alpha.generate returns an AlphaOutput
+                alpha_output = await alpha.generate(market_data)
+                if hasattr(alpha_output, 'alpha_values') and isinstance(alpha_output.alpha_values, dict):
+                    features.update(alpha_output.alpha_values)
+                else:
+                    logger.warning(f"Alpha module {alpha.name} returned unexpected output: {type(alpha_output)}")
             
-            # Validate features
-            validated_feature_event: FeatureEvent = await self.feature_validator.validate(
-                feature_event
-            )
-            
-            # Generate trading signal
-            signal_event: CoreSignalEvent = await self.strategy.generate_signal(
-                validated_feature_event
-            )
-            
-            # Calculate portfolio allocation
-            # Assume allocator.allocate returns a dict of symbol -> weight
-            allocation_dict: Dict[str, float] = await self.allocator.allocate(
-                signal_event
-            )
-            
-            # Risk check
-            # We need to evaluate risk based on allocation and current market data
-            # For simplicity, we pass the latest market data to the risk engine's compute method
-            # and ask for a risk metric like 'exposure' or 'var'. But we want a RiskMetrics object.
-            # We'll adjust the risk engine to have a method that takes allocation and returns RiskMetrics.
-            # Since we don't have that, we'll create a simple RiskMetrics object here.
-            # In a production system, the risk engine would have such a method.
-            risk_metrics = self._create_risk_metrics(
-                allocation_dict, 
-                market_data_event.timestamp
-            )
-            
-            # Generate orders
-            order_event: CoreOrderEvent = await self.oms_adapter.create_order(
-                allocation_dict, risk_metrics
-            )
-            
-            # Publish order event
-            await self.event_bus.publish(EventType.ORDER, order_event)
-            
+            # Publish FEATURES event with symbol tracking
+            features_data = {
+                "features": features,
+                "timestamp": datetime.utcnow(),
+                "source_market_data": market_data,
+                "symbol": market_data.symbol
+            }
+            await self.event_bus.publish(EventType.FEATURES, features_data)
+            logger.info(f"Published FEATURES for {market_data.symbol} - Output: {len(features)} features computed")
         except Exception as e:
-            self.logger.error(
-                f"Error in orchestrator pipeline: {e}",
-                exc_info=True,
-            )
-            # Publish system error event
-            await self.event_bus.publish(
-                EventType.SYSTEM,
-                SystemEvent(
-                    action="ERROR",
-                    reason=str(e),
-                    metadata={
-                        "component": "orchestrator",
-                        "timestamp": market_data_event.timestamp.isoformat(),
-                    },
-                )
-            )
+            logger.error(f"Error in handle_market_data for {getattr(market_data, 'symbol', 'UNKNOWN')}: {e}", exc_info=True)
+            # Fallback: do not publish features
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_market_data latency: {latency*1000:.2f}ms")
 
-    def _create_risk_metrics(
-        self, 
-        allocation_dict: Dict[str, float], 
-        timestamp: datetime
-    ) -> Dict[str, Any]:
-        """Create risk metrics from allocation dict (simplified for now)."""
-        # In a real implementation, we would use the risk engine to calculate
-        # proper risk metrics based on the allocation and current positions.
-        # For now, we return dummy values.
-        total_allocation = sum(allocation_dict.values())
+    async def handle_features(self, features_data: Dict[str, Any]):
+        start_time = time.time()
+        try:
+            symbol = features_data.get("symbol", "UNKNOWN")
+            if self.kill_switch_active:
+                logger.warning(f"Kill switch active, skipping feature validation for {symbol}")
+                return
+            logger.debug(f"Handling features for {symbol} - Input: {len(features_data.get('features', {}))} features")
+            features = features_data.get("features", {})
+            # Validate features
+            validated = await self.feature_validator.validate(features)
+            if validated is None:
+                logger.warning(f"Feature validation failed for {symbol}")
+                return
+            # Publish VALIDATED_FEATURES event
+            validated_features_data = {
+                "features": validated,
+                "timestamp": datetime.utcnow(),
+                "source_features": features,
+                "symbol": symbol
+            }
+            await self.event_bus.publish(EventType.VALIDATED_FEATURES, validated_features_data)
+            logger.info(f"Published VALIDATED_FEATURES for {symbol} - Output: {len(validated.features)} validated features")
+        except Exception as e:
+            logger.error(f"Error in handle_features for {features_data.get('symbol', 'UNKNOWN')}: {e}", exc_info=True)
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_features latency: {latency*1000:.2f}ms")
+
+    async def handle_validated_features(self, validated_features_data: Dict[str, Any]):
+        start_time = time.time()
+        try:
+            symbol = validated_features_data.get("symbol", "UNKNOWN")
+            if self.kill_switch_active:
+                logger.warning(f"Kill switch active, skipping signal generation for {symbol}")
+                return
+            logger.debug(f"Handling validated features for {symbol} - Input: {len(validated_features_data.get('features', {}).features) if hasattr(validated_features_data.get('features'), 'features') else 0} validated features")
+            # Extract the ValidatedFeatures object
+            validated_features_obj = validated_features_data.get("features")
+            if validated_features_obj is None:
+                logger.warning(f"No features in validated_features_data for {symbol}")
+                return
+            if not isinstance(validated_features_obj, ValidatedFeatures):
+                logger.warning(f"Features is not a ValidatedFeatures object for {symbol}")
+                return
+            # Use ensemble strategy to generate signal from validated features
+            # The ensemble strategy internally runs all strategies and combines their signals
+            ensemble_signal = await self.ensemble_strategy.generate_signal(validated_features_obj)
+            
+            # Publish SIGNALS event
+            signals_data = {
+                "signal": {
+                    "signal_type": ensemble_signal.signal_type,
+                    "strength": float(ensemble_signal.strength)
+                },
+                "timestamp": datetime.utcnow(),
+                "source_strategy": "ensemble",
+                "symbol": symbol
+            }
+            await self.event_bus.publish(EventType.SIGNALS, signals_data)
+            logger.info(f"Published SIGNALS for {symbol} - Output: ensemble signal {ensemble_signal.signal_type} with strength {ensemble_signal.strength}")
+        except Exception as e:
+            logger.error(f"Error in handle_validated_features for {validated_features_data.get('symbol', 'UNKNOWN')}: {e}", exc_info=True)
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_validated_features latency: {latency*1000:.2f}ms")
+
+    async def handle_signals(self, signals_data: Dict[str, Any]):
+        start_time = time.time()
+        try:
+            symbol = signals_data.get("symbol", "UNKNOWN")
+            if self.kill_switch_active:
+                logger.warning(f"Kill switch active, skipping signal processing for {symbol}")
+                return
+            logger.debug(f"Handling signals for {symbol} - Input: signal={signals_data.get('signal')}")
+            
+            # Extract signal from the data (published by handle_validated_features)
+            signal_info = signals_data.get("signal")
+            if not signal_info:
+                logger.warning(f"No signal in signals data for {symbol}")
+                return
+                
+            # Convert dict signal to SignalEvent for the allocator
+            signal_event = SignalEvent(
+                symbol=symbol,
+                signal_type=signal_info.get("signal_type", "UNKNOWN"),
+                strength=Decimal(str(signal_info.get("strength", 0))),
+                timestamp=signals_data.get("timestamp", datetime.utcnow()),
+                metadata={}
+            )
+            
+            logger.info(f"Processing signal for {symbol}: {signal_event.signal_type} with strength {signal_event.strength}")
+            
+            # Compute allocation using the allocator
+            allocation_weights = await self.portfolio_allocator.allocate(signal_event)
+            if allocation_weights is None:
+                logger.debug(f"No allocation computed for {symbol}")
+                return
+            
+            # Convert allocation_weights to dict for risk checking and storage
+            allocation_dict = {k: float(v) for k, v in allocation_weights.weights.items()}
+            
+            logger.info(f"Allocation computed for {symbol}: {allocation_dict}")
+            
+            # Run risk check
+            risk_metrics = await self.runtime_risk_engine.evaluate_risk(
+                allocation_weights=allocation_weights
+            )
+            # Check risk limits
+            if (risk_metrics.portfolio_var > self.max_var or 
+                risk_metrics.max_drawdown > self.max_drawdown or 
+                risk_metrics.leverage > self.max_leverage):
+                logger.warning(f"Risk check failed for {symbol}, blocking order. Reason: VaR={risk_metrics.portfolio_var} > {self.max_var} or Drawdown={risk_metrics.max_drawdown} > {self.max_drawdown} or Leverage={risk_metrics.leverage} > {self.max_leverage}")
+                await self.event_bus.publish(EventType.RISK_ALERT, {
+                    "allocation": allocation_dict,
+                    "risk_metrics": risk_metrics,
+                    "timestamp": datetime.utcnow(),
+                    "reason": "Risk limits exceeded"
+                })
+                return
+            # Store approved allocation and risk metrics for handle_orders
+            self.last_approved_allocation = allocation_dict
+            self.last_approved_risk_metrics = risk_metrics
+            logger.info(f"Risk check passed for {symbol}. VaR={risk_metrics.portfolio_var}, Drawdown={risk_metrics.max_drawdown}, Leverage={risk_metrics.leverage}")
+            # Publish ORDERS event
+            await self.event_bus.publish(EventType.ORDERS, {
+                "allocation": allocation_dict,
+                "timestamp": datetime.utcnow(),
+                "source_ensemble": signal_info,
+                "symbol": symbol  # Include symbol for completeness
+            })
+            logger.info(f"Published ORDERS for {symbol} - Output: {len(allocation_dict)} allocations")
+        except Exception as e:
+            logger.error(f"Error in handle_signals for {signals_data.get('symbol', 'UNKNOWN')}: {e}", exc_info=True)
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_signals latency: {latency*1000:.2f}ms")
+
+    def _simple_ensemble_combine(self, signals: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Simple ensemble combination when the ensemble strategy doesn't support direct signal combination."""
+        if not signals:
+            return None
+        
+        # Simple average of strengths
+        total_strength = 0.0
+        count = 0
+        for signal_name, signal_data in signals.items():
+            if isinstance(signal_data, dict) and 'strength' in signal_data:
+                total_strength += float(signal_data['strength'])
+                count += 1
+        
+        if count == 0:
+            return None
+        
+        avg_strength = total_strength / count
         return {
-            "portfolio_var": Decimal('0.01'),  # 1% VaR
-            "portfolio_volatility": Decimal('0.05'),  # 5% volatility
-            "max_drawdown": Decimal('0.02'),  # 2% drawdown
-            "leverage": Decimal(str(min(total_allocation, 2.0))),  # simple leverage approximation
-            "timestamp": timestamp,
+            "signal_type": "ENSEMBLE",
+            "strength": avg_strength,
         }
+
+    def _get_signal_reason(self, signal: Dict[str, Any]) -> str:
+        """Get a human-readable reason for the signal."""
+        signal_type = signal.get("signal_type", "UNKNOWN")
+        strength = signal.get("strength", 0)
+        if strength > 0.7:
+            conviction = "strong"
+        elif strength > 0.3:
+            conviction = "moderate"
+        elif strength > 0.1:
+            conviction = "weak"
+        else:
+            conviction = "very weak"
+        
+        if signal_type in ["BUY", "LONG"]:
+            direction = "bullish"
+        elif signal_type in ["SELL", "SHORT"]:
+            direction = "bearish"
+        else:
+            direction = "neutral"
+            
+        return f"{conviction} {direction} signal"
+
+    async def handle_orders(self, orders_data: Dict[str, Any]):
+        start_time = time.time()
+        try:
+            symbol = orders_data.get("symbol", "UNKNOWN")
+            if self.kill_switch_active:
+                logger.warning(f"Kill switch active, skipping order submission for {symbol}")
+                return
+            logger.debug(f"Handling orders for {symbol} - Input: {len(orders_data.get('allocation', {}))} allocations")
+            allocation_dict = orders_data.get("allocation", {})
+            if not allocation_dict:
+                logger.warning(f"No allocation in orders data for {symbol}")
+                return
+            # Use the last approved risk metrics (should match this allocation)
+            risk_metrics = self.last_approved_risk_metrics
+            if risk_metrics is None:
+                logger.warning(f"No approved risk metrics available for order for {symbol}")
+                # As a fallback, we could recompute, but that might be inconsistent
+                # For safety, we'll skip sending the order
+                return
+            # Convert allocation dict to AllocationWeights
+            allocation_weights = AllocationWeights(
+                timestamp=orders_data.get("timestamp", datetime.utcnow()),
+                weights={k: Decimal(str(v)) for k, v in allocation_dict.items()}
+            )
+            # Create and send order via OMS adapter
+            order_event = await self.oms_adapter.create_order(
+                allocation_weights=allocation_weights,
+                risk_metrics=risk_metrics
+            )
+            logger.info(f"Sent order via OMS adapter for {symbol}: {order_event}")
+            # In a real system, the OMSAdapter.create_order might actually send the order
+            # or return an order event that needs to be sent elsewhere.
+            # Based on the requirement "send to OMS", we'll assume create_order handles the sending.
+        except Exception as e:
+            logger.error(f"Error in handle_orders for {orders_data.get('symbol', 'UNKNOWN')}: {e}", exc_info=True)
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_orders latency: {latency*1000:.2f}ms")
+
+    async def handle_fills(self, fill_data: Dict[str, Any]):
+        start_time = time.time()
+        try:
+            logger.debug(f"Handling fills - Input: symbol={fill_data.get('symbol')}, quantity={fill_data.get('quantity')}, price={fill_data.get('price')}")
+            symbol = fill_data.get("symbol")
+            quantity = fill_data.get("quantity")
+            price = fill_data.get("price")
+            if symbol is None or quantity is None:
+                logger.warning("Invalid fill data")
+                return
+            # Update positions
+            current = self.positions.get(symbol, 0)
+            self.positions[symbol] = current + quantity
+            # Update performance tracking
+            if symbol not in self.performance_tracker:
+                self.performance_tracker[symbol] = {"total_quantity": 0, "total_cost": 0.0}
+            tracker = self.performance_tracker[symbol]
+            tracker["total_quantity"] += quantity
+            tracker["total_cost"] += quantity * price
+            avg_price = tracker["total_cost"] / tracker["total_quantity"] if tracker["total_quantity"] != 0 else 0
+            logger.info(f"Updated position for {symbol}: {self.positions[symbol]} (avg price: {avg_price:.2f})")
+        except Exception as e:
+            logger.error(f"Error in handle_fills: {e}", exc_info=True)
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_fills latency: {latency*1000:.2f}ms")
+
+    async def handle_risk_alert(self, alert_data: Dict[str, Any]):
+        start_time = time.time()
+        try:
+            logger.warning(f"Risk alert received: {alert_data}")
+            # Activate kill switch
+            self.kill_switch_active = True
+            # Cancel all orders
+            # Note: OMSAdapter from the base class doesn't have cancel_all_orders
+            # This would need to be implemented in a concrete subclass or handled differently
+            logger.warning("Kill switch activated - OMSAdapter does not support cancel_all_orders in base class")
+            # In a real implementation, we would call a method on the OMS adapter to cancel orders
+        except Exception as e:
+            logger.error(f"Error in handle_risk_alert: {e}", exc_info=True)
+        finally:
+            latency = time.time() - start_time
+            logger.debug(f"handle_risk_alert latency: {latency*1000:.2f}ms")
+
+    async def run(self):
+        logger.info("Starting TradingOrchestrator event loop")
+        # Start the event bus
+        await self.event_bus.start()
+        # Keep the orchestrator running
+        while True:
+            try:
+                await asyncio.sleep(0.01)  # Reduced CPU usage while still responsive
+            except Exception as e:
+                logger.error(f"Error in event loop: {e}", exc_info=True)

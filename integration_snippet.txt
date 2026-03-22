@@ -1,0 +1,23 @@
+# Integration snippet for qtrader/core/orchestrator.py
+
+# In the __init__ method of TradingOrchestrator, after creating the event bus:
+#   self.feedback_engine = LiveFeedbackEngine(
+#       event_bus=self.bus,
+#       max_signal_age=timedelta(hours=1),
+#       max_trade_age=timedelta(days=1),
+#   )
+#
+#   # Subscribe to events
+#   self.bus.subscribe(EventType.SIGNAL, self.feedback_engine.process_signal)
+#   self.bus.subscribe(EventType.FILL, self.feedback_engine.process_fill)
+#
+#   # Optionally, persist metrics periodically (e.g., every 5 minutes)
+#   async def _persist_feedback_metrics() -> None:
+#       while True:
+#           await asyncio.sleep(300)  # 5 minutes
+#           await self.feedback_engine.persist_metrics(
+#               feature_path="reports/feature_metrics.parquet",
+#               strategy_path="reports/strategy_metrics.parquet",
+#               execution_path="reports/execution_metrics.parquet",
+#           )
+#   self._tasks.append(asyncio.create_task(_persist_feedback_metrics()))

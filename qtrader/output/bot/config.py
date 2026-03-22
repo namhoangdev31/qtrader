@@ -50,6 +50,7 @@ class BotConfig:
     execution_algo: str = "market"
     regime_detection: bool = True
     auto_retrain: bool = False
+    signal_col: str = ""
 
     @classmethod
     def from_yaml(cls, path: str) -> BotConfig:

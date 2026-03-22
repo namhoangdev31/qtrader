@@ -54,3 +54,15 @@ class FactorEngine:
         if not final_features.is_empty():
             self.store.save_features(final_features, symbol, timeframe)
         return final_features
+
+    def compute_multi_symbol(self, raw_dfs: dict[str, pl.DataFrame], timeframe: str) -> pl.DataFrame:
+        """Compute features for multiple symbols and combine with a symbol column."""
+        features_list = []
+        for symbol, df in raw_dfs.items():
+            features = self.compute(df)
+            if not features.is_empty():
+                features = features.with_columns(pl.lit(symbol).alias("symbol"))
+                features_list.append(features)
+        if not features_list:
+            return pl.DataFrame()
+        return pl.concat(features_list, how="vertical")

@@ -17,6 +17,7 @@ class EventType(Enum):
     FILL = auto()
     RISK = auto()
     SYSTEM = auto()
+    FEEDBACK_UPDATE = auto()
 
 
 @dataclass(frozen=True, kw_only=True)

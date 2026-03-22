@@ -9,11 +9,13 @@ from typing import Any, Dict, List, Optional, Protocol
 class EventType(Enum):
     MARKET_DATA = auto()
     FEATURES = auto()
+    VALIDATED_FEATURES = auto()
     SIGNALS = auto()
     ORDERS = auto()
     FILLS = auto()
     RISK_ALERT = auto()
     SYSTEM = auto()
+    FEEDBACK_UPDATE = auto()
 
 
 @dataclass
@@ -125,4 +127,3 @@ class EventBusProtocol(Protocol):
     def unsubscribe(self, event_type: EventType, callback: Any) -> None: ...
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
-
