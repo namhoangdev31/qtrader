@@ -21,6 +21,7 @@ from qtrader.core.types import (
     ValidatedFeatures,
     SignalEvent,
 )
+from qtrader.core.state_store import StateStore, Position
 from qtrader.strategy.alpha.alpha_base import AlphaBase
 from qtrader.strategy.validation.feature_validator import FeatureValidator
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
@@ -46,6 +47,7 @@ class TradingOrchestrator:
         portfolio_allocator: AllocatorBase,
         runtime_risk_engine: RuntimeRiskEngine,
         oms_adapter: OMSAdapter,
+        state_store: Optional[StateStore] = None,
     ):
         self.event_bus = event_bus
         self.market_data_adapter = market_data_adapter
@@ -56,15 +58,9 @@ class TradingOrchestrator:
         self.portfolio_allocator = portfolio_allocator
         self.runtime_risk_engine = runtime_risk_engine
         self.oms_adapter = oms_adapter
+        self.state_store = state_store or StateStore()
 
-        # State
-        self.positions = {}
-        self.performance_tracker = {}
-        self.kill_switch_active = False
-        self.last_approved_risk_metrics: Optional[RiskMetrics] = None
-        self.last_approved_allocation: Optional[Dict[str, Any]] = None
-
-        # Risk limits (example values - should be configurable via constructor or config)
+        # State limits (example values - should be configurable via constructor or config)
         self.max_drawdown = Decimal('0.20')  # 20%
         self.max_var = Decimal('0.05')       # 5% VaR
         self.max_leverage = Decimal('5.0')   # 5x leverage
@@ -115,7 +111,7 @@ class TradingOrchestrator:
         start_time = time.time()
         try:
             symbol = features_data.get("symbol", "UNKNOWN")
-            if self.kill_switch_active:
+            if await self._is_kill_switch_active():
                 logger.warning(f"Kill switch active, skipping feature validation for {symbol}")
                 return
             logger.debug(f"Handling features for {symbol} - Input: {len(features_data.get('features', {}))} features")
@@ -144,7 +140,7 @@ class TradingOrchestrator:
         start_time = time.time()
         try:
             symbol = validated_features_data.get("symbol", "UNKNOWN")
-            if self.kill_switch_active:
+            if await self._is_kill_switch_active():
                 logger.warning(f"Kill switch active, skipping signal generation for {symbol}")
                 return
             logger.debug(f"Handling validated features for {symbol} - Input: {len(validated_features_data.get('features', {}).features) if hasattr(validated_features_data.get('features'), 'features') else 0} validated features")
@@ -182,7 +178,7 @@ class TradingOrchestrator:
         start_time = time.time()
         try:
             symbol = signals_data.get("symbol", "UNKNOWN")
-            if self.kill_switch_active:
+            if await self._is_kill_switch_active():
                 logger.warning(f"Kill switch active, skipping signal processing for {symbol}")
                 return
             logger.debug(f"Handling signals for {symbol} - Input: signal={signals_data.get('signal')}")
@@ -192,7 +188,7 @@ class TradingOrchestrator:
             if not signal_info:
                 logger.warning(f"No signal in signals data for {symbol}")
                 return
-                
+            
             # Convert dict signal to SignalEvent for the allocator
             signal_event = SignalEvent(
                 symbol=symbol,
@@ -249,55 +245,11 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             logger.debug(f"handle_signals latency: {latency*1000:.2f}ms")
 
-    def _simple_ensemble_combine(self, signals: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Simple ensemble combination when the ensemble strategy doesn't support direct signal combination."""
-        if not signals:
-            return None
-        
-        # Simple average of strengths
-        total_strength = 0.0
-        count = 0
-        for signal_name, signal_data in signals.items():
-            if isinstance(signal_data, dict) and 'strength' in signal_data:
-                total_strength += float(signal_data['strength'])
-                count += 1
-        
-        if count == 0:
-            return None
-        
-        avg_strength = total_strength / count
-        return {
-            "signal_type": "ENSEMBLE",
-            "strength": avg_strength,
-        }
-
-    def _get_signal_reason(self, signal: Dict[str, Any]) -> str:
-        """Get a human-readable reason for the signal."""
-        signal_type = signal.get("signal_type", "UNKNOWN")
-        strength = signal.get("strength", 0)
-        if strength > 0.7:
-            conviction = "strong"
-        elif strength > 0.3:
-            conviction = "moderate"
-        elif strength > 0.1:
-            conviction = "weak"
-        else:
-            conviction = "very weak"
-        
-        if signal_type in ["BUY", "LONG"]:
-            direction = "bullish"
-        elif signal_type in ["SELL", "SHORT"]:
-            direction = "bearish"
-        else:
-            direction = "neutral"
-            
-        return f"{conviction} {direction} signal"
-
     async def handle_orders(self, orders_data: Dict[str, Any]):
         start_time = time.time()
         try:
             symbol = orders_data.get("symbol", "UNKNOWN")
-            if self.kill_switch_active:
+            if await self._is_kill_switch_active():
                 logger.warning(f"Kill switch active, skipping order submission for {symbol}")
                 return
             logger.debug(f"Handling orders for {symbol} - Input: {len(orders_data.get('allocation', {}))} allocations")
@@ -339,20 +291,48 @@ class TradingOrchestrator:
             symbol = fill_data.get("symbol")
             quantity = fill_data.get("quantity")
             price = fill_data.get("price")
-            if symbol is None or quantity is None:
+            if symbol is None or quantity is None or price is None:
                 logger.warning("Invalid fill data")
                 return
-            # Update positions
-            current = self.positions.get(symbol, 0)
-            self.positions[symbol] = current + quantity
-            # Update performance tracking
-            if symbol not in self.performance_tracker:
-                self.performance_tracker[symbol] = {"total_quantity": 0, "total_cost": 0.0}
-            tracker = self.performance_tracker[symbol]
-            tracker["total_quantity"] += quantity
-            tracker["total_cost"] += quantity * price
+            # Convert to Decimal for consistency with Position
+            quantity_dec = Decimal(str(quantity))
+            price_dec = Decimal(str(price))
+            # Update positions via state store
+            current_position = await self.state_store.get_position(symbol)
+            if current_position:
+                # Update existing position
+                new_quantity = current_position.quantity + quantity_dec
+                new_cost = current_position.quantity * current_position.average_price + quantity_dec * price_dec
+                new_avg_price = new_cost / new_quantity if new_quantity != 0 else Decimal('0')
+                updated_position = Position(
+                    symbol=symbol,
+                    quantity=new_quantity,
+                    average_price=new_avg_price
+                )
+                await self.state_store.set_position(updated_position)
+            else:
+                # Create new position
+                new_position = Position(
+                    symbol=symbol,
+                    quantity=quantity_dec,
+                    average_price=price_dec
+                )
+                await self.state_store.set_position(new_position)
+            
+            # Update performance tracking (keeping this in orchestrator for now)
+            # In a more complete implementation, this could also move to state store
+            # but we'll keep it simple for now
+            # TODO: Consider moving performance tracking to state store
+            # For now, we'll keep it local as it's primarily used for logging
+            if not hasattr(self, '_local_performance_tracker'):
+                self._local_performance_tracker = {}
+            if symbol not in self._local_performance_tracker:
+                self._local_performance_tracker[symbol] = {"total_quantity": 0, "total_cost": 0.0}
+            tracker = self._local_performance_tracker[symbol]
+            tracker["total_quantity"] += quantity_dec
+            tracker["total_cost"] += quantity_dec * price_dec
             avg_price = tracker["total_cost"] / tracker["total_quantity"] if tracker["total_quantity"] != 0 else 0
-            logger.info(f"Updated position for {symbol}: {self.positions[symbol]} (avg price: {avg_price:.2f})")
+            logger.info(f"Updated position for {symbol}: {self._local_performance_tracker[symbol]['total_quantity']} (avg price: {avg_price:.2f})")
         except Exception as e:
             logger.error(f"Error in handle_fills: {e}", exc_info=True)
         finally:
@@ -363,7 +343,9 @@ class TradingOrchestrator:
         start_time = time.time()
         try:
             logger.warning(f"Risk alert received: {alert_data}")
-            # Activate kill switch
+            # Activate kill switch via state store or local flag
+            # For now, we'll keep the kill switch local as it's used for immediate checks
+            # TODO: Consider moving kill switch state to state store for system-wide consistency
             self.kill_switch_active = True
             # Cancel all orders
             # Note: OMSAdapter from the base class doesn't have cancel_all_orders
@@ -375,6 +357,56 @@ class TradingOrchestrator:
         finally:
             latency = time.time() - start_time
             logger.debug(f"handle_risk_alert latency: {latency*1000:.2f}ms")
+
+    async def _is_kill_switch_active(self) -> bool:
+        """Check if kill switch is active."""
+        # For now, we keep this locally for immediate response
+        # TODO: Consider moving to state store for system-wide consistency
+        return self.kill_switch_active
+
+    def _simple_ensemble_combine(self, signals: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Simple ensemble combination when the ensemble strategy doesn't support direct signal combination."""
+        if not signals:
+            return None
+        
+        # Simple average of strengths
+        total_strength = 0.0
+        count = 0
+        for signal_name, signal_data in signals.items():
+            if isinstance(signal_data, dict) and 'strength' in signal_data:
+                total_strength += float(signal_data['strength'])
+                count += 1
+        
+        if count == 0:
+            return None
+        
+        avg_strength = total_strength / count
+        return {
+            "signal_type": "ENSEMBLE",
+            "strength": avg_strength,
+        }
+
+    def _get_signal_reason(self, signal: Dict[str, Any]) -> str:
+        """Get a human-readable reason for the signal."""
+        signal_type = signal.get("signal_type", "UNKNOWN")
+        strength = signal.get("strength", 0)
+        if strength > 0.7:
+            conviction = "strong"
+        elif strength > 0.3:
+            conviction = "moderate"
+        elif strength > 0.1:
+            conviction = "weak"
+        else:
+            conviction = "very weak"
+        
+        if signal_type in ["BUY", "LONG"]:
+            direction = "bullish"
+        elif signal_type in ["SELL", "SHORT"]:
+            direction = "bearish"
+        else:
+            direction = "neutral"
+        
+        return f"{conviction} {direction} signal"
 
     async def run(self):
         logger.info("Starting TradingOrchestrator event loop")

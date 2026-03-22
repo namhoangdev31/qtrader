@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Any
+from decimal import Decimal
+from typing import Any, Optional
 
 from qtrader.core.config import Config
-
 from qtrader.core.bus import EventBus
 from qtrader.core.event import RiskEvent
+from qtrader.core.types import RiskMetrics
 
 __all__ = ["RuntimeRiskEngine"]
 
@@ -22,15 +23,6 @@ class RuntimeRiskEngine:
     This component is intentionally lightweight and focused on process-level
     kill-switch behaviour. It is complementary to the portfolio-level
     `RealTimeRiskEngine`.
-
-    Attributes:
-        max_drawdown: Maximum allowed drawdown as a fraction of high-water mark.
-        max_exposure: Maximum allowed absolute exposure in base currency.
-        max_daily_loss: Maximum allowed daily loss in base currency.
-        current_drawdown: Current drawdown fraction.
-        current_exposure: Current exposure level.
-        intraday_pnl: Accumulated PnL for the current UTC trading day.
-        is_active: Whether the engine considers trading to be allowed.
     """
 
     max_drawdown: float = 0.1
@@ -120,6 +112,31 @@ class RuntimeRiskEngine:
             await self.event_bus.publish(event)
         return event
 
+    async def evaluate_risk(self, allocation_weights: Any) -> RiskMetrics:
+        """Evaluate risk for a given allocation.
+
+        This is a simplified risk evaluation for demonstration purposes.
+        In a production system, this would involve more complex calculations
+        based on current market data, positions, and the proposed allocation.
+
+        Args:
+            allocation_weights: The proposed allocation weights.
+
+        Returns:
+            RiskMetrics: The calculated risk metrics.
+        """
+        # For now, we return zero risk metrics as a placeholder.
+        # A real implementation would calculate VaR, volatility, drawdown, and leverage
+        # based on the allocation and current market conditions.
+        return RiskMetrics(
+            timestamp=datetime.utcnow(),
+            portfolio_var=Decimal('0'),
+            portfolio_volatility=Decimal('0'),
+            max_drawdown=Decimal('0'),
+            leverage=Decimal('0'),
+            metadata={}
+        )
+
 
 # ---------------------------------------------------------------------------
 # Minimal inline tests (for documentation only)
@@ -140,4 +157,3 @@ def test_trigger_kill_switch_sets_inactive_and_action() -> None:
     assert engine.is_active is False
     assert event.action == "CANCEL_ALL_ORDERS"
 """
-
