@@ -17,7 +17,7 @@ from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.portfolio.allocator import SimpleAllocator
 from qtrader.risk.runtime import RuntimeRiskEngine
 from qtrader.execution.oms_adapter import SimpleOMSAdapter
-from qtrader.output.execution.oms import UnifiedOMS  # Import the real UnifiedOMS
+from qtrader.execution.oms import UnifiedOMS  # Import the real UnifiedOMS
 
 
 class ExampleAlpha(AlphaBase):

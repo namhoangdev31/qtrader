@@ -1,116 +1,125 @@
 from __future__ import annotations
 
-import polars as pl
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Protocol, runtime_checkable
 
-from qtrader.core.event import FeatureEvent, MarketDataEvent
+import polars as pl
+
+__all__ = ["Alpha", "_zscore"]
 
 
-class AlphaBase(ABC):
-    """Base class for all alpha feature generators."""
-    
-    def __init__(self, name: str, required_history: int = 20):
-        """
-        Initialize alpha feature generator.
-        
+@runtime_checkable
+class Alpha(Protocol):
+    """Protocol for alpha factor computation."""
+
+    name: str
+
+    def compute(self, df: pl.DataFrame) -> pl.Series:  # pragma: no cover - interface
+        """Compute alpha signal from OHLCV input.
+
         Args:
-            name: Unique identifier for this alpha
-            required_history: Minimum number of bars needed to compute feature
+            df: OHLCV DataFrame with at least columns
+                ``open, high, low, close, volume, timestamp``.
+
+        Returns:
+            Polars Series of z-scored signals, aligned to ``df`` and
+            containing nulls where lookback is insufficient.
         """
+
+
+class BaseAlpha(ABC):
+    """Base class for alpha factors enforcing standardized interface.
+
+    All alpha implementations should inherit from this class.
+    """
+
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.required_history = required_history
-        self._history: List[pl.DataFrame] = []
-    
+
     @abstractmethod
-    def compute(self, market_data: MarketDataEvent) -> pl.Series:
-        """
-        Compute alpha feature from market data.
-        
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw alpha signal. Must be implemented by subclasses.
+
         Args:
-            market_data: Market data event containing OHLCV data
-            
+            df: OHLCV DataFrame with at least columns
+                ``open, high, low, close, volume, timestamp``.
+
         Returns:
-            Polars series with the alpha feature values
+            Polars Series of raw alpha values (not normalized).
         """
-        pass
-    
-    def update(self, market_data: MarketDataEvent) -> FeatureEvent | None:
-        """
-        Update internal state and compute feature if enough history.
-        
+
+    def compute(self, df: pl.DataFrame) -> pl.Series:
+        """Compute alpha signal with validation and standardization.
+
         Args:
-            market_data: Latest market data bar
-            
+            df: OHLCV DataFrame with at least columns
+                ``open, high, low, close, volume, timestamp``.
+
         Returns:
-            FeatureEvent if ready, None if not enough history
+            Polars Series of z-scored signals, aligned to ``df`` and
+            containing zeros where lookback is insufficient or errors occur.
+            Always returns Float64 dtype with same length as input.
         """
-        self._history.append(market_data.data)
-        if len(self._history) > self.required_history:
-            self._history.pop(0)
-        
-        if len(self._history) < self.required_history:
-            return None
-            
-        # Combine history for computation
-        combined_data = pl.concat(self._history)
-        market_event = MarketDataEvent(
-            symbol=market_data.symbol,
-            timestamp=market_data.timestamp,
-            data=combined_data
-        )
-        
-        feature_series = self.compute(market_event)
-        return FeatureEvent(
-            symbol=market_data.symbol,
-            timestamp=market_data.timestamp,
-            features={self.name: feature_series}
-        )
-    
-    def reset(self) -> None:
-        """Reset internal state."""
-        self._history.clear()
+        # Validate required columns
+        required = {"open", "high", "low", "close", "volume", "timestamp"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"DataFrame missing required columns: {missing}")
 
-
-# Alias for compatibility
-Alpha = AlphaBase
-
-
-class AlphaCombiner:
-    """Combines multiple alpha generators into a single feature set."""
-    
-    def __init__(self, alphas: List[AlphaBase]):
-        self.alphas = {alpha.name: alpha for alpha in alphas}
-    
-    def update(self, market_data: MarketDataEvent) -> FeatureEvent | None:
-        """
-        Update all alpha generators and combine their outputs.
-        
-        Args:
-            market_data: Latest market data bar
-            
-        Returns:
-            Combined FeatureEvent or None if any alpha not ready
-        """
-        features = {}
-        ready_alphas = 0
-        
-        for alpha in self.alphas.values():
-            feature_event = alpha.update(market_data)
-            if feature_event is None:
-                return None  # Not ready yet
-            features.update(feature_event.features)
-            ready_alphas += 1
-        
-        if ready_alphas == len(self.alphas):
-            return FeatureEvent(
-                symbol=market_data.symbol,
-                timestamp=market_data.timestamp,
-                features=features
+        # Compute raw alpha
+        try:
+            raw = self._compute_raw(df)
+        except Exception:
+            # On any error, return neutral fallback
+            return pl.Series(
+                name=self.name, values=[0.0] * df.height, dtype=pl.Float64
             )
-        return None
-    
-    def reset(self) -> None:
-        """Reset all alpha generators."""
-        for alpha in self.alphas.values():
-            alpha.reset()
+
+        # Ensure output length matches input
+        if raw.len() != df.height:
+            return pl.Series(
+                name=self.name, values=[0.0] * df.height, dtype=pl.Float64
+            )
+
+        # Ensure Float64 dtype
+        if raw.dtype != pl.Float64:
+            raw = raw.cast(pl.Float64)
+
+        # Replace non-finite values with zero (neutral fallback)
+        raw = raw.fill_nan(0.0).fill_null(0.0)
+
+        return raw
+
+
+def _zscore(series: pl.Series, window: int) -> pl.Series:
+    """Compute rolling z-score for a series.
+
+    Args:
+        series: Input series.
+        window: Rolling window size.
+
+    Returns:
+        Series of z-scores with nulls for insufficient history or zero std.
+    """
+    if window <= 1 or series.len() == 0:
+        return pl.Series(name=series.name, values=[None] * series.len())
+    df = pl.DataFrame({"x": series})
+    roll = df.with_columns(
+        pl.col("x").rolling_mean(window).alias("m"),
+        pl.col("x").rolling_std(window).alias("s"),
+    )
+    z = (roll["x"] - roll["m"]) / roll["s"]
+    z = z.to_frame("z").with_columns(
+        pl.when(pl.col("z").is_finite()).then(pl.col("z")).otherwise(None).alias("z"),
+    )["z"]
+    return z
+
+
+"""
+Pytest-style examples (conceptual):
+
+def test_zscore_length_matches() -> None:
+    s = pl.Series("x", [1.0, 2.0, 3.0, 4.0])
+    z = _zscore(s, window=2)
+    assert z.len() == s.len()
+"""

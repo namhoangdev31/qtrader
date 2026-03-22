@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from qtrader.output.bot.config import BotConfig
+from bot.config import BotConfig
 from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.pipeline.research import ResearchResult
 
@@ -61,7 +61,7 @@ class DeploymentBridge:
             "execution_algo": "twap",
             "symbols": [],  # To be filled by the user or from config
             "feature_cols": [],  # Will be filled by the bot
-            # Derived from backtest
+            # Derived from qtrader.backtest
             "signal_col": "ml_signal",  # Assuming ML signal was used
             "kelly_fraction": self._calculate_kelly_fraction(result.tearsheet),
             "max_position_size": 0.1,  # Placeholder
@@ -86,13 +86,13 @@ class DeploymentBridge:
         return str(self.config_path)
 
     def _calculate_kelly_fraction(self, tearsheet: TearsheetMetrics) -> float:
-        """Calculate Kelly fraction from backtest performance.
+        """Calculate Kelly fraction from qtrader.backtest performance.
 
         Uses the simplified Kelly formula: f = (bp - q) / b
         where b = win/loss ratio, p = win probability, q = loss probability.
 
         Args:
-            tearsheet: TearsheetMetrics from backtest.
+            tearsheet: TearsheetMetrics from qtrader.backtest.
 
         Returns:
             Kelly fraction clipped to [0, 1].

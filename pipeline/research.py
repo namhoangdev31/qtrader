@@ -26,20 +26,20 @@ from typing import Any, Callable, List, Protocol, runtime_checkable
 
 import polars as pl
 
-from qtrader.output.bot.config import BotConfig
-from qtrader.input.data.datalake import DataLake
+from bot.config import BotConfig
+from qtrader.data.datalake import DataLake
 from qtrader.core.event_bus import EventBus
-from qtrader.input.features.engine import FactorEngine
+from qtrader.features.engine import FactorEngine
 from qtrader.ml.registry import ModelRegistry
 from qtrader.ml.walk_forward import WalkForwardPipeline
 from qtrader.models.xgboost_model import XGBoostPredictor
 from qtrader.models.catboost_model import CatBoostPredictor
-from qtrader.input.alpha.registry import AlphaEngine
+from qtrader.alpha.registry import AlphaEngine
 from qtrader.ml.regime import RegimeDetector
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
-from qtrader.output.analytics.drift import DriftMonitor
-from qtrader.output.analytics.performance import PerformanceAnalytics
+from qtrader.analytics.drift import DriftMonitor
+from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.integration import BacktestHarness, BacktestResult
 
 logger = logging.getLogger(__name__)
@@ -389,7 +389,7 @@ class ResearchPipeline:
         Returns path to written config file.
 
         Config includes: best_sharpe, win_rate, max_drawdown, signal_col,
-        strategy_name, execution_algo, kelly_fraction from backtest stats.
+        strategy_name, execution_algo, kelly_fraction from qtrader.backtest stats.
         """
         config_dict = {
             "strategy": strategy_name,

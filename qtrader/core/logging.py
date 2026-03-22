@@ -61,7 +61,7 @@ def configure_logging(
     {
         "timestamp": "2026-03-15T01:25:19+00:00",
         "level": "INFO",
-        "logger": "qtrader.output.bot.runner",
+        "logger": "bot.runner",
         "service": "qtrader",
         "correlation_id": "...",
         "message": "...",
@@ -75,7 +75,7 @@ def configure_logging(
 
     Usage:
         configure_logging(level=settings.log_level)
-        log = get_logger("qtrader.output.bot", correlation_id="cycle-001")
+        log = get_logger("bot", correlation_id="cycle-001")
         log.info("Signal generated", symbol="BTC/USDT", strength=0.85)
     """
     root = logging.getLogger()
@@ -114,7 +114,7 @@ def get_logger(name: str, **context: Any) -> logging.LoggerAdapter:
     """Return a LoggerAdapter that includes context fields in every log record.
 
     Args:
-        name: Logger name (e.g. "qtrader.output.risk").
+        name: Logger name (e.g. "qtrader.risk").
         **context: Keys (e.g. correlation_id, strategy) added to each record's "extra".
 
     Returns:
@@ -122,7 +122,7 @@ def get_logger(name: str, **context: Any) -> logging.LoggerAdapter:
         calls to add them to the JSON "extra" field, e.g. log.info("msg", key=val).
 
     Example:
-        log = get_logger("qtrader.output.risk", correlation_id="risk-001", strategy="momentum")
+        log = get_logger("qtrader.risk", correlation_id="risk-001", strategy="momentum")
         log.warning("VaR limit breached", var_95=0.032, limit=0.020)
     """
     return _StructuredAdapter(logging.getLogger(name), context)

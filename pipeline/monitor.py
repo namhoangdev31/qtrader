@@ -12,12 +12,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from qtrader.output.analytics.drift import DriftMonitor
-from qtrader.output.analytics.performance import PerformanceAnalytics
+from qtrader.analytics.drift import DriftMonitor
+from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.core.event_bus import EventBus, SystemEvent
-from qtrader.output.bot.performance import PerformanceTracker
-from qtrader.output.analytics.telemetry import Telemetry
+from bot.performance import PerformanceTracker
+from qtrader.analytics.telemetry import Telemetry
 
 logger = logging.getLogger(__name__)
 

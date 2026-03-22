@@ -1,28 +1,20 @@
-from __future__ import annotations
+from typing import Protocol, runtime_checkable
 
-from abc import ABC, abstractmethod
-
-import polars as pl
+from qtrader.core.event import OrderEvent, RiskEvent
 
 
-class RiskModule(ABC):
-    """
-    Abstract base class for risk management modules.
+@runtime_checkable
+class PositionSizer(Protocol):
+    """Protocol for calculating trade size."""
 
-    Risk modules take in market data and/or signals and output risk-adjusted
-    values such as position sizes, volatility scalars, or risk limits.
-    """
+    def calculate_quantity(self, symbol: str, price: float, signal_strength: float) -> float:
+        ...
 
-    @abstractmethod
-    def compute(self, data: pl.DataFrame, **kwargs) -> pl.Series:
-        """
-        Compute the risk metric.
 
-        Args:
-            data: Input DataFrame containing necessary market data.
-            **kwargs: Additional parameters (e.g., signals for position sizing).
+@runtime_checkable
+class RiskManager(Protocol):
+    """Protocol for pre-trade risk checks."""
 
-        Returns:
-            A pl.Series of dtype Float64 representing the computed risk metric.
-        """
-        pass
+    def check_order(self, order: OrderEvent) -> RiskEvent | None:
+        """Returns a RiskEvent if the order is rejected, else None."""
+        ...

@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 
 from qtrader.core.bus import EventBus
-from qtrader.input.data.pipeline.base import DataPipeline
+from qtrader.data.pipeline.base import DataPipeline
 
 __all__ = ["BacktestEngine"]
 
