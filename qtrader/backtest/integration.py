@@ -13,12 +13,12 @@ from typing import Any, Callable, Optional
 
 import polars as pl
 
-from qtrader.backend.vectorized_engine import VectorizedEngine
-from qtrader.execution.execution_engine import SimulatedBroker
-from qtrader.analytics.tearsheet import TearsheetGenerator, TearsheetMetrics
+from qtrader.backtest.engine_vectorized import VectorizedEngine
+from qtrader.backtest.broker_sim import SimulatedBroker
+from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
 from qtrader.analytics.performance import PerformanceAnalytics
-from qtrader.portfolio.allocator import PortfolioOptimizer
-from qtrader.risk.real_time_risk_engine import RealTimeRiskEngine
+from qtrader.portfolio.optimization import PortfolioOptimizer
+from qtrader.risk.realtime import RealTimeRiskEngine
 
 logger = logging.getLogger(__name__)
 
@@ -175,9 +175,9 @@ class BacktestHarness:
 
         # 4. Generate tearsheet metrics
         tearsheet: TearsheetMetrics = self.tearsheet_gen.generate(
-            df=backtest_output.get("equity_curve", pl.DataFrame()),
-            trades=backtest_output.get("trades", pl.DataFrame()),
-            initial_capital=initial_capital,
+            backtest_result=backtest_output,
+            strategy_name=strategy_name,
+            benchmark_returns=benchmark,
         )
 
         # 5. Generate HTML report if requested
@@ -192,8 +192,8 @@ class BacktestHarness:
 
         # 6. Cross-check with PerformanceAnalytics
         analytics_metrics: dict[str, float] = PerformanceAnalytics.calculate_metrics(
-            equity_curve=backtest_output.get("equity_curve", pl.DataFrame()),
-            trades=backtest_output.get("trades", pl.DataFrame()),
+            equity_curve=backtest_output,
+            trades=pl.DataFrame(),  # VectorizedEngine returns trades in the main DF
             initial_capital=initial_capital,
         )
 
@@ -201,7 +201,7 @@ class BacktestHarness:
         result = BacktestResult(
             strategy_name=strategy_name,
             tearsheet=tearsheet,
-            backtest_df=backtest_output.get("full_df", df),  # Assuming the engine returns the df with added columns
+            backtest_df=backtest_output,
             html_report_path=html_report_path,
             analytics_metrics=analytics_metrics,
         )
@@ -431,9 +431,8 @@ class BacktestHarness:
         # We'll use the TearsheetGenerator.generate method with empty trades.
 
         tearsheet = self.tearsheet_gen.generate(
-            df=portfolio_df,
-            trades=pl.DataFrame(),  # No trades
-            initial_capital=kwargs.get("initial_capital", 100_000.0),
+            backtest_result=portfolio_df,
+            strategy_name=strategy_name,
         )
 
         # We'll also generate an HTML report if requested
@@ -447,7 +446,7 @@ class BacktestHarness:
 
         # We'll also compute analytics using PerformanceAnalytics
         analytics_metrics = PerformanceAnalytics.calculate_metrics(
-            equity_curve=portfolio_df.select(["timestamp", "portfolio_return"]),  # Adjust as needed
+            equity_curve=portfolio_df,
             trades=pl.DataFrame(),
             initial_capital=kwargs.get("initial_capital", 100_000.0),
         )

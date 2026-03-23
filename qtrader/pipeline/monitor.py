@@ -15,7 +15,8 @@ from typing import Any
 from qtrader.analytics.drift import DriftMonitor
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.tearsheet import TearsheetMetrics
-from qtrader.core.event_bus import EventBus, SystemEvent
+from qtrader.core.event_bus import EventBus
+from qtrader.core.event import SystemEvent
 from bot.performance import PerformanceTracker
 from qtrader.analytics.telemetry import Telemetry
 

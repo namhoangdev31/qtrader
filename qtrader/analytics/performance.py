@@ -7,7 +7,18 @@ class PerformanceAnalytics:
     """Calculates performance metrics from equity curve or returns."""
 
     @staticmethod
-    def calculate_metrics(equity_curve: pl.Series) -> dict[str, float]:
+    def calculate_metrics(
+        equity_curve: pl.DataFrame,
+        trades: pl.DataFrame = pl.DataFrame(),
+        initial_capital: float = 100_000.0
+    ) -> dict[str, float]:
+        # Extract equity series if it's a DataFrame
+        if isinstance(equity_curve, pl.DataFrame):
+            if "equity" in equity_curve.columns:
+                equity_curve = equity_curve.get_column("equity")
+            else:
+                # Fallback or empty result
+                return {}
         # Drop leading/trailing nulls so head(1) and tail(1) return valid values
         equity_curve = equity_curve.drop_nulls()
         if len(equity_curve) < 2:

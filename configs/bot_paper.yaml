@@ -1,15 +1,11 @@
-symbols: ["BTC-USD", "ETH-USD"]
-venues: ["coinbase"]
-signal_interval_s: 60
+execution_algo: twap
+feature_cols: []
+initial_capital: 100000.0
 rebalance_interval_s: 300
-risk_check_interval_s: 10
-initial_capital: 10000.0
-max_leverage: 1.0
-vol_target: 0.10
-max_drawdown_pct: 0.15
-daily_loss_usd: 500.0
-max_position_pct: 0.25
-strategy: "momentum"
-execution_algo: "market"
-regime_detection: true
-auto_retrain: false
+signal_col: ml_signal
+signal_interval_s: 30
+strategy: momentum
+symbols:
+- BTC/USDT
+venues: []
+vol_target: 0.1

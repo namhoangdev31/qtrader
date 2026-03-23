@@ -71,7 +71,8 @@ class TrendAlpha:
         atr = true_range.rolling_mean(self.atr_window)
 
         sign = pl.when(sma_fast > sma_slow).then(1.0).when(sma_fast < sma_slow).then(-1.0).otherwise(0.0)
-        signal = sign * (atr / close)
+        signal_expr = sign * (atr / close)
+        signal = pl.select(signal_expr).to_series()
         return _zscore(signal, self.zscore_window).rename(self.name)
 
 
