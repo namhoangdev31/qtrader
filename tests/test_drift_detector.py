@@ -3,7 +3,7 @@
 
 import numpy as np
 import polars as pl
-from analytics.drift_detector import DriftDetector
+from qtrader.analytics.drift_detector import DriftDetector
 
 def test_drift_detector():
     """Test the drift detector functionality."""

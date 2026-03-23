@@ -15,8 +15,8 @@ import polars as pl
 from qtrader.pipeline.research import ResearchPipeline, ResearchResult
 from qtrader.pipeline.deployment import DeploymentBridge
 from qtrader.backtest.integration import BacktestHarness, BacktestResult
-from bot.config import BotConfig
-from qtrader.analytics.tearsheet import TearsheetMetrics
+from qtrader.bot.config import BotConfig
+from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.analytics.drift import DriftMonitor
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.ml.registry import ModelRegistry
