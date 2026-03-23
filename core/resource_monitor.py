@@ -1,15 +1,11 @@
 """System resource monitoring and adaptive throttling for latency/memory control."""
 import asyncio
+import psutil
 import logging
 import time
 from collections import deque
 from typing import Optional, Callable, List, Dict, Any
 from dataclasses import dataclass
-
-try:
-    import psutil
-except ImportError:
-    psutil = None
 
 logger = logging.getLogger(__name__)
 
@@ -72,15 +68,9 @@ class ResourceMonitor:
                 # Record start time for latency calculation
                 loop_start = time.time()
                 
-                # Collect metrics (handle missing psutil)
-                if psutil is None:
-                    # If psutil is not available, use dummy values
-                    cpu_percent = 0.0
-                    memory_mb = 0.0
-                    logger.debug("psutil not available, using dummy resource metrics")
-                else:
-                    cpu_percent = psutil.cpu_percent(interval=0.1)
-                    memory_mb = psutil.Process().memory_info().rss / 1024 / 1024
+                # Collect metrics
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                memory_mb = psutil.Process().memory_info().rss / 1024 / 1024
                 
                 # Calculate loop latency (time since last iteration)
                 if self._last_loop_time is not None:

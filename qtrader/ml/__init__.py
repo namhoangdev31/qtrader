@@ -4,11 +4,18 @@ from qtrader.ml.autonomous import AutonomousLoop
 from qtrader.ml.distributed import RayCompute, RayHyperparamTuner
 from qtrader.ml.evaluation import ModelEvaluator, NestedCrossValidation
 from qtrader.ml.hmm_smoother import HMMRegimeSmoother
-from qtrader.ml.pytorch_models import LSTMSignalModel
 from qtrader.ml.regime import RegimeDetector, VolatilityRegimeDetector
 from qtrader.ml.rotation import ModelRotator
 from qtrader.ml.stability import RegimeStabilityScore, RotationHysteresis
 from qtrader.ml.walk_forward import PurgedKFoldCV, WalkForwardPipeline
+
+# Try to import pytorch models, but don't fail if torch is not available
+try:
+    from qtrader.ml.pytorch_models import LSTMSignalModel
+    _has_torch = True
+except ImportError:
+    _has_torch = False
+    LSTMSignalModel = None  # type: ignore
 
 __all__ = [
     "AutonomousLoop",
@@ -17,7 +24,6 @@ __all__ = [
     "ModelEvaluator",
     "NestedCrossValidation",
     "HMMRegimeSmoother",
-    "LSTMSignalModel",
     "RegimeDetector",
     "VolatilityRegimeDetector",
     "ModelRotator",
@@ -26,4 +32,7 @@ __all__ = [
     "PurgedKFoldCV",
     "WalkForwardPipeline",
 ]
+
+if _has_torch:
+    __all__.append("LSTMSignalModel")
 

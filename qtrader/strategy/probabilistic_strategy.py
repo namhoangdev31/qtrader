@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+from decimal import Decimal
 from typing import Dict
 
 import polars as pl
 
 from qtrader.core.event import SignalEvent as CoreSignalEvent  # Keep for compatibility? Actually we'll use our own
 from qtrader.strategy.base import BaseStrategy
-from qtrader.core.types import SignalEvent, ValidatedFeatures
+from qtrader.core.types import SignalEvent, ValidatedFeatures, OrderEvent
 
 _LOG = logging.getLogger("qtrader.strategy.probabilistic")
 
@@ -198,14 +200,15 @@ class ProbabilisticStrategy(BaseStrategy):
         # Create and return SignalEvent with probability metadata
         return SignalEvent(
             symbol=self.symbol,
+            timestamp=datetime.utcnow(),
             signal_type="PROBABILISTIC",  # Intermediate type, will be converted in on_signal
-            strength=max(buy_prob, sell_prob, hold_prob),  # Max probability as strength
+            strength=Decimal(str(max(buy_prob, sell_prob, hold_prob))),  # Max probability as strength
             metadata={
                 "latest_value": float(latest_value),
-                "buy_prob": buy_prob,
-                "sell_prob": sell_prob,
-                "hold_prob": hold_prob,
-                "model_confidence": self.model_confidence,
+                "buy_prob": float(buy_prob),
+                "sell_prob": float(sell_prob),
+                "hold_prob": float(hold_prob),
+                "model_confidence": float(self.model_confidence),
                 "alpha_weights": weights,
             },
         )

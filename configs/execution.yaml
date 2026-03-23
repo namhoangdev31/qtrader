@@ -1,0 +1,36 @@
+# Execution configuration for multi-exchange trading
+exchanges:
+  binance:
+    enabled: true
+    adapter_type: "binance"  # binance | coinbase | simulated
+    api_key: "${BINANCE_API_KEY}"
+    api_secret: "${BINANCE_API_SECRET}"
+    testnet: true
+  coinbase:
+    enabled: true
+    adapter_type: "coinbase"
+    api_key: "${COINBASE_API_KEY}"
+    api_secret: "${COINBASE_API_SECRET}"
+    passphrase: "${COINBASE_PASSPHRASE}"
+    sandbox: true
+  simulated:
+    enabled: true
+    adapter_type: "simulated"
+    initial_prices:
+      AAPL: 150.0
+      MSFT: 300.0
+
+routing:
+  mode: "smart"  # smart | best_price | manual
+  max_order_size: 10000.0
+  split_size: 5000.0
+
+risk_limits:
+  max_order_size: 100000.0
+  max_exposure_per_exchange: 50000.0
+  max_total_exposure: 200000.0
+
+retry:
+  max_attempts: 3
+  delay_base: 0.1  # seconds
+  backoff_factor: 2.0

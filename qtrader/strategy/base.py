@@ -18,10 +18,10 @@ _LOG = logging.getLogger("qtrader.strategy.base")
 class Strategy(Protocol):
     """Protocol for strategies that can compute signals and optionally convert them to orders."""
 
-    def compute_signals(self, features: dict[str, pl.Series]) -> dict[str, Any]:
+    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
         """Compute trading signals from features.
 
-        Returns a dict with keys: 'signal_type', 'strength', 'metadata'.
+        Returns a SignalEvent containing the trading signal.
         """
         ...
 
@@ -95,7 +95,7 @@ class BaseStrategy:
         Args:
             event: Executed `FillEvent` for an order.
         """
-        qty_signed = event.quantity if event.side.upper() == "BUY" else -event.quantity
+        qty_signed = float(event.quantity) if event.side.upper() == "BUY" else -float(event.quantity)
         prev_qty = self._position.get(event.symbol, 0.0)
         self._position[event.symbol] = prev_qty + qty_signed
 

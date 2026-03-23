@@ -16,7 +16,8 @@ from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.portfolio.allocator import SimpleAllocator
 from qtrader.risk.runtime import RuntimeRiskEngine
-from qtrader.execution.oms_adapter import SimpleOMSAdapter
+from qtrader.execution.oms_adapter import ExecutionOMSAdapter
+from qtrader.execution.execution_engine import SimulatedExchangeAdapter
 from qtrader.execution.oms import UnifiedOMS  # Import the real UnifiedOMS
 
 
@@ -72,7 +73,22 @@ async def main():
     # Create mock OMS and risk engine
     oms = UnifiedOMS()  # Use the imported UnifiedOMS
     risk_engine = RuntimeRiskEngine(oms=oms)
-    oms_adapter = SimpleOMSAdapter()
+    
+    # Create a simulated exchange adapter for testing
+    simulated_adapter = SimulatedExchangeAdapter(name="SimulatedExchange")
+    # For demonstration, set a price for a symbol
+    simulated_adapter.set_price("AAPL", Decimal('150.0'))
+    
+    # Create execution OMS adapter with the simulated exchange
+    exchange_adapters = {"simulated": simulated_adapter}
+    oms_adapter = ExecutionOMSAdapter(
+        exchange_adapters=exchange_adapters,
+        routing_mode="smart",
+        max_order_size=Decimal('10000'),
+        split_size=Decimal('5000')
+    )
+    # Start the execution engine
+    await oms_adapter.start()
     
     # Create orchestrator (no config needed anymore)
     orchestrator = QTraderEngine(
@@ -90,6 +106,7 @@ async def main():
     def signal_handler():
         logger.info("Received shutdown signal")
         asyncio.create_task(orchestrator.stop())
+        asyncio.create_task(oms_adapter.stop())
     
     # Register signal handlers
     loop = asyncio.get_running_loop()
@@ -110,6 +127,7 @@ async def main():
     finally:
         # Ensure cleanup
         await orchestrator.stop()
+        await oms_adapter.stop()
         logger.info("QTrader system stopped")
 
 

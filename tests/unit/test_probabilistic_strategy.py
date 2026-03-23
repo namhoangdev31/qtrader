@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from qtrader.core.event import SignalEvent, OrderEvent
+from qtrader.core.types import SignalEvent, OrderEvent
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 
 

@@ -70,6 +70,18 @@ class ExchangeAdapter(ABC):
         """
         pass
 
+    async def get_positions(self) -> Dict[str, Decimal]:
+        """Get current positions from the exchange."""
+        return {}
+
+    async def get_orderbook(self, symbol: str) -> Dict[str, Any]:
+        """Get orderbook for a symbol."""
+        return {}
+
+    async def get_fees(self, symbol: str) -> Dict[str, Decimal]:
+        """Get trading fees for a symbol."""
+        return {}
+
 class SimulatedExchangeAdapter(ExchangeAdapter):
     """Simulated exchange adapter for testing and development."""
     
@@ -90,10 +102,20 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
             market_impact_k=0.1,
             max_slippage_pct=0.01
         )
+        self._fill_callback = None  # Optional callback for fill events
     
     def set_price(self, symbol: str, price: Decimal) -> None:
         """Set the simulated price for a symbol."""
         self.prices[symbol] = price
+    
+    def set_fill_callback(self, callback):
+        """Set callback for fill events. Callback signature: (order_id: str, fill_event: FillEvent) -> None"""
+        self._fill_callback = callback
+    
+    async def _async_notify_fill(self, order_id: str, fill_event: FillEvent):
+        """Async helper to call fill callback."""
+        if self._fill_callback:
+            self._fill_callback(order_id, fill_event)
     
     async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
         """Simulate sending an order to the exchange."""
@@ -114,7 +136,7 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
             self.logger.info(f"Simulated exchange: Order sent - ID: {order_id}, Symbol: {order.symbol}, Side: {order.side}, Quantity: {order.quantity}, Price: {order.price}")
             
             # For simulation, we can immediately fill market orders or simulate limit order filling
-            if order.order_type == OrderType.MARKET:
+            if order.order_type == OrderType.MARKET.value:
                 # Market order: fill immediately at current price
                 if order.symbol in self.prices:
                     fill_price = self.prices[order.symbol]
@@ -143,6 +165,10 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
                     self.orders[order_id]["status"] = OrderStatus.FILLED
                     self.orders[order_id]["filled_size"] = order.quantity
                     self.orders[order_id]["avg_price"] = fill_price
+                    
+                    # Notify fill callback asynchronously
+                    if self._fill_callback:
+                        asyncio.create_task(self._async_notify_fill(order_id, fill_event))
                     
                     # Return the fill event via callback? In a real system, we'd emit an event.
                     # For this adapter, we return the order ID and the caller can request fills.
@@ -229,6 +255,10 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
                 order_info["filled_size"] = order.quantity
                 order_info["avg_price"] = fill_price
                 
+                # Notify fill callback asynchronously
+                if self._fill_callback:
+                    asyncio.create_task(self._async_notify_fill(order_id, fill_event))
+                
                 self.logger.info(f"Simulated exchange: Limit order filled - ID: {order_id}, Symbol: {symbol}, Price: {fill_price}")
         
         return fills
@@ -250,6 +280,9 @@ class ExecutionEngine:
         logger: LoggerProtocol = logger
     ):
         self.exchange_adapter = exchange_adapter
+        # If the adapter supports fill callback, set it
+        if hasattr(exchange_adapter, 'set_fill_callback'):
+            exchange_adapter.set_fill_callback(self._on_order_filled)
         self.max_order_size = max_order_size
         self.max_slippage = max_slippage
         self.max_retry_attempts = max_retry_attempts
@@ -329,7 +362,7 @@ class ExecutionEngine:
                     # Wait for fill (with timeout based on order type)
                     try:
                         # For market orders, we expect immediate fill; for limit, we wait longer
-                        timeout = 5.0 if order.order_type == OrderType.MARKET else 30.0
+                        timeout = 5.0 if order.order_type == OrderType.MARKET.value else 30.0
                         fill_event = await asyncio.wait_for(future, timeout=timeout)
                         return True, fill_event
                     except asyncio.TimeoutError:
@@ -417,10 +450,10 @@ class ExecutionEngine:
                 return f"Order quote size {quote_size} exceeds maximum {self.max_order_size}"
         
         # Check order type specific validations
-        if order.order_type == OrderType.LIMIT and order.price is None:
+        if order.order_type == OrderType.LIMIT.value and order.price is None:
             return "Limit order must have a price"
         
-        if order.order_type == OrderType.MARKET and order.price is not None:
+        if order.order_type == OrderType.MARKET.value and order.price is not None:
             self.logger.warning("Market order received with price; price will be ignored")
         
         # Additional safety checks could be added here (e.g., symbol validation, etc.)

@@ -109,6 +109,16 @@ class EnsembleStrategy:
         Returns:
             SignalEvent containing combined signal and metadata
         """
+        # Handle empty strategies list
+        if not self.strategies:
+            return SignalEvent(
+                symbol="UNKNOWN",
+                timestamp=datetime.utcnow(),
+                signal_type="HOLD",
+                strength=Decimal('0.0'),
+                metadata={}
+            )
+        
         # Get signals from each strategy
         strategy_signals = {}
         for i, strategy in enumerate(self.strategies):
@@ -151,7 +161,7 @@ class EnsembleStrategy:
                 current_weights = self._strategy_weights.copy()
         else:
             current_weights = self._strategy_weights.copy()
-            
+        
         # Normalize weights to sum to 1.0
         weight_sum = sum(current_weights.values())
         if weight_sum > 0:
@@ -160,7 +170,7 @@ class EnsembleStrategy:
             # Equal weights fallback
             equal_weight = 1.0 / len(self.strategies)
             normalized_weights = {i: equal_weight for i in range(len(self.strategies))}
-
+        
         # Combine signals using current weights
         combined_signal = self._combine_signals(strategy_signals, normalized_weights)
         

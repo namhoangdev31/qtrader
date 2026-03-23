@@ -252,7 +252,7 @@ class LiveFeedbackEngine:
             if (
                 trade.symbol == fill.symbol
                 and trade_signal_strategy == fill_strategy
-                and self._is_opposite_side(trade.signal.side, fill_signal_side)
+                and self._is_opposite_side(trade.side, fill_signal_side)
             ):
                 return idx
         return None
@@ -326,7 +326,7 @@ class LiveFeedbackEngine:
         del self._open_trades[trade_idx]
 
         # Calculate PnL and holding time
-        if trade.signal.side == "long":
+        if trade.side == "long":
             pnl = (fill.price - trade.entry_price) * trade.size
         else:  # short
             pnl = (trade.entry_price - fill.price) * trade.size
