@@ -6,7 +6,7 @@ import polars as pl
 
 from qtrader.alpha.base import Alpha, _zscore
 
-__all__ = ["OrderImbalanceAlpha", "AmihudIlliquidityAlpha", "VPINAlpha"]
+__all__ = ["AmihudIlliquidityAlpha", "OrderImbalanceAlpha", "VPINAlpha"]
 
 
 @dataclass(slots=True)
@@ -90,4 +90,3 @@ def test_order_imbalance_requires_columns() -> None:
     except ValueError:
         assert True
 """
-

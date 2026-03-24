@@ -45,6 +45,7 @@ _LOG = logging.getLogger("bot.runner")
 def _load_baseline_metrics(path: str | None = None) -> object | None:
     """Load TearsheetMetrics from JSON if present (avoids backtest import in bot)."""
     from qtrader.backtest.tearsheet import TearsheetMetrics
+
     p = Path(path or "reports/latest_baseline.json").expanduser().absolute()
     if not p.exists():
         return None
@@ -74,6 +75,17 @@ class TradingBot:
         self.ev_optimizer = EVOptimizer()
         self.win_rate_opt = WinRateOptimizer()
 
+        # HFT Optimizer
+        from qtrader.hft.optimizer import hft_optimizer
+
+        self.hft_optimizer = hft_optimizer
+        if config.hft_enabled:
+            self.hft_optimizer.enable_hft()
+            # Set latency targets from config
+            self.hft_optimizer.latency_target_ms = config.hft_latency_target_ms
+            self.hft_optimizer.throttle_threshold_ms = config.hft_throttle_threshold_ms
+            self.hft_optimizer.safe_mode_latency_ms = config.hft_safe_mode_latency_ms
+
         self.datalake = DataLake()
         self.feature_store = FeatureStore()
         self.feature_engine = FactorEngine(store=self.feature_store)
@@ -89,12 +101,12 @@ class TradingBot:
         self.execution_algo = None
         if config.execution_algo == "twap":
             from qtrader.execution.algos.twap import TWAPAlgo
+
             self.execution_algo = TWAPAlgo(duration_seconds=300, slice_count=5)
 
         self.backtest_baseline = _load_baseline_metrics()
         self.monitor = None
         if self.backtest_baseline is not None:
-
             self.monitor = LiveMonitor(
                 tracker=self.performance,
                 analytics=PerformanceAnalytics(),
@@ -293,61 +305,99 @@ class TradingBot:
         """Every signal_interval_s: fetch data, features, alpha, regime, gates, publish orders."""
         while self._running and self.state.can_trade():
             try:
+                # Check and update HFT throttling/safety mode
+                self.hft_optimizer.check_and_update_safety_mode()
+
+                # Get adaptive signal interval if HFT mode is enabled
+                signal_interval = self.config.signal_interval_s
+                if self.config.hft_enabled:
+                    adaptive_interval = self.hft_optimizer.get_adaptive_signal_interval(
+                        base_interval=float(self.config.signal_interval_s)
+                    )
+                    if adaptive_interval != float(self.config.signal_interval_s):
+                        signal_interval = adaptive_interval
+                        _LOG.debug(
+                            f"Using adaptive signal interval: {signal_interval}s (base: {self.config.signal_interval_s}s)"
+                        )
+
                 for symbol in self.config.symbols:
-                    df = await self._fetch_latest_bars(symbol, n_bars=500)
+                    # Track market data to alpha latency
+                    with self.hft_optimizer.latency_context("market_data_to_alpha"):
+                        df = await self._fetch_latest_bars(symbol, n_bars=500)
+
                     if df.height < 50:
                         continue
-                    features = self.feature_engine.compute_latest(df)
-                    if features.is_empty():
-                        continue
-                    full = self.feature_engine.compute(df)
-                    if full.is_empty():
-                        continue
-                    alpha_df = self.alpha_engine.compute_all(full)
-                    if alpha_df.is_empty():
-                        continue
-                    signal = float(alpha_df["composite_alpha"][-1]) if "composite_alpha" in alpha_df.columns else 0.0
-                    feature_cols = [c for c in self.config.feature_cols if c in alpha_df.columns]
-                    if not feature_cols:
-                        continue
-                    try:
-                        if not self.regime_detector._is_fitted:
-                            self.regime_detector.fit(alpha_df, feature_cols)
-                        regime_id, confidence = self.regime_detector.current_regime_confidence(alpha_df, feature_cols)
-                        if self.regime_detector.is_transitioning(alpha_df, feature_cols):
+
+                    # Track alpha computation latency
+                    with self.hft_optimizer.latency_context("alpha_to_signal"):
+                        features = self.feature_engine.compute_latest(df)
+                        if features.is_empty():
                             continue
-                    except Exception as e:
-                        _LOG.debug("Regime check failed: %s", e)
-                        regime_id, confidence = 0, 0.5
-                    for name in self.alpha_engine.alpha_names:
-                        if name in alpha_df.columns:
-                            self.alpha_combiner.register_alpha(
-                                name,
-                                float(alpha_df[name][-1]),
-                                self.alpha_engine._ic.get(name, 0.0),
+                        full = self.feature_engine.compute(df)
+                        if full.is_empty():
+                            continue
+                        alpha_df = self.alpha_engine.compute_all(full)
+                        if alpha_df.is_empty():
+                            continue
+                        signal = (
+                            float(alpha_df["composite_alpha"][-1])
+                            if "composite_alpha" in alpha_df.columns
+                            else 0.0
+                        )
+                        feature_cols = [
+                            c for c in self.config.feature_cols if c in alpha_df.columns
+                        ]
+                        if not feature_cols:
+                            continue
+                        try:
+                            if not self.regime_detector._is_fitted:
+                                self.regime_detector.fit(alpha_df, feature_cols)
+                            regime_id, confidence = self.regime_detector.current_regime_confidence(
+                                alpha_df, feature_cols
                             )
-                    composite = self.alpha_combiner.combine()
-                    wr = self.performance.win_rate
-                    wins = self.performance._fills_df.filter(pl.col("pnl") > 0)["pnl"]
-                    losses = self.performance._fills_df.filter(pl.col("pnl") < 0)["pnl"]
-                    avg_win = float(wins.mean()) if wins.len() else 1.0
-                    avg_loss = abs(float(losses.mean())) if losses.len() else 1.0
-                    if avg_win <= 0:
-                        avg_win = 1.0
-                    ev = self.ev_optimizer.compute_trade_ev(wr, float(avg_win), avg_loss, 10.0, self.config.initial_capital * 0.02)
-                    ev_ok = self.ev_optimizer.should_enter(ev, 10.0 * self.config.initial_capital * 0.02 / 10_000.0)
-                    wr_ok = self.win_rate_opt.signal_passes_filter(composite, confidence, 0.0, 0.0)
-                    if ev_ok and wr_ok:
-                        price = float(df["close"][-1]) if "close" in df.columns else 0.0
-                        order = self._create_order(symbol, composite, regime_id, price)
-                        if order is not None:
-                            await self.bus.publish(order)
+                            if self.regime_detector.is_transitioning(alpha_df, feature_cols):
+                                continue
+                        except Exception as e:
+                            _LOG.debug("Regime check failed: %s", e)
+                            regime_id, confidence = 0, 0.5
+                        for name in self.alpha_engine.alpha_names:
+                            if name in alpha_df.columns:
+                                self.alpha_combiner.register_alpha(
+                                    name,
+                                    float(alpha_df[name][-1]),
+                                    self.alpha_engine._ic.get(name, 0.0),
+                                )
+                        composite = self.alpha_combiner.combine()
+                        wr = self.performance.win_rate
+                        wins = self.performance._fills_df.filter(pl.col("pnl") > 0)["pnl"]
+                        losses = self.performance._fills_df.filter(pl.col("pnl") < 0)["pnl"]
+                        avg_win = float(wins.mean()) if wins.len() else 1.0
+                        avg_loss = abs(float(losses.mean())) if losses.len() else 1.0
+                        if avg_win <= 0:
+                            avg_win = 1.0
+                        ev = self.ev_optimizer.compute_trade_ev(
+                            wr, float(avg_win), avg_loss, 10.0, self.config.initial_capital * 0.02
+                        )
+                        ev_ok = self.ev_optimizer.should_enter(
+                            ev, 10.0 * self.config.initial_capital * 0.02 / 10_000.0
+                        )
+                        wr_ok = self.win_rate_opt.signal_passes_filter(
+                            composite, confidence, 0.0, 0.0
+                        )
+                        if ev_ok and wr_ok:
+                            price = float(df["close"][-1]) if "close" in df.columns else 0.0
+                            # Track signal to order latency
+                            with self.hft_optimizer.latency_context("signal_to_order"):
+                                order = self._create_order(symbol, composite, regime_id, price)
+                                if order is not None:
+                                    await self.bus.publish(order)
+                                    # Track order to fill latency (will be updated when fill arrives)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 _LOG.error("Signal loop error", exc_info=e)
             self._last_heartbeat = time.time()
-            await asyncio.sleep(float(self.config.signal_interval_s))
+            await asyncio.sleep(signal_interval)
 
     async def _rebalance_loop(self) -> None:
         """Every rebalance_interval_s: get positions, optimizer weights, vol target, rebalance orders."""
@@ -489,6 +539,7 @@ def _run_bot(config_path: str) -> None:
 
 if __name__ == "__main__":
     import sys
+
     path = sys.argv[1] if len(sys.argv) > 1 else "configs/bot_paper.yaml"
     _run_bot(path)
 

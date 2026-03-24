@@ -643,7 +643,8 @@ class TradingOrchestrator:
                                     parameters=parameters,
                                     metrics=metrics,
                                     artifacts=artifacts,
-                                    run_name=f"feedback_{strategy_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+                                    run_name=f"feedback_{strategy_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+                                    run_type="feedback"
                                 )
                             )
                         except Exception as e:
@@ -701,7 +702,7 @@ class TradingOrchestrator:
         
         return f"{conviction} {direction} signal"
 
-    async def run(self):
+    async def run(self) -> None:
         logger.info("Starting TradingOrchestrator event loop")
         # Start the event bus
         await self.event_bus.start()

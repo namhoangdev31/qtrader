@@ -15,6 +15,8 @@ WORKDIR /app
 
 # Disable bytecode compilation for Rosetta stability
 ENV UV_COMPILE_BYTECODE=0
+# Ensure logs are delivered immediately
+ENV PYTHONUNBUFFERED=1
 
 # Install dependencies
 COPY pyproject.toml uv.lock ./
@@ -26,5 +28,9 @@ COPY . .
 # Install project
 RUN uv sync --frozen
 
-# Default command (Live Trading Engine)
-CMD ["uv", "run", "python", "scripts/live_engine.py"]
+# Default healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command (Overridden by docker-compose)
+CMD ["uv", "run", "python", "scripts/orchestrator_service.py"]
