@@ -1,14 +1,46 @@
 services:
-  app:
+  orchestrator:
     build: .
+    command: ["uv", "run", "python", "scripts/orchestrator_service.py"]
     ports:
       - "8000:8000"
     volumes:
       - .:/app
     environment:
       - PYTHONPATH=/app
+      - SERVICE_TYPE=ORCHESTRATOR
+    restart: always
     depends_on:
       - timescaledb
+      - mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  execution:
+    build: .
+    command: ["uv", "run", "python", "scripts/execution_service.py"]
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_TYPE=EXECUTION
+    restart: always
+    depends_on:
+      - timescaledb
+
+  ml_engine:
+    build: .
+    command: ["uv", "run", "python", "scripts/ml_service.py"]
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_TYPE=ML
+    restart: always
+    depends_on:
       - mlflow
 
   timescaledb:
@@ -22,6 +54,7 @@ services:
       - POSTGRES_DB=qtrader
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
+    restart: always
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
@@ -29,10 +62,11 @@ services:
     ports:
       - "5050:5000"
     command: mlflow server --host 0.0.0.0 --port 5000
+    restart: always
 
 volumes:
   timescaledb_data:
 
 networks:
-  sanauto-production-net:
-    external: true
+  default:
+    name: sanauto-production-net

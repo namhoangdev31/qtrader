@@ -21,12 +21,11 @@ An internal framework for trading systems and algorithms. This project operates 
 The project structure is locked. Do not create new top-level directories or global `utils.py` files.
 
 - **Trading Engine/Logic**: `backtest/`, `execution/`
-- **Signals & Interfaces**: `alpha/` (`*_alpha.py`, `registry.py`)
+- **Signals & Factor Models**: `alpha/` (e.g., `factor_model.py`)
 - **Indicators/Factors**: `features/`
-- **Risk Management**: `risk/`
-- **Models/ML**: `ml/`, `models/`
-- **Data/Storage**: `data/`
-- **Live Trading**: `bot/`, `feedback/`
+- **Risk Management**: `risk/`, `portfolio/`
+- **Rules & Protocols**: `.kilo/rules/` (01 to 08)
+- **Workflows**: `.kilo/workflows/` (e.g., `/factor-investing`)
 - **Configs**: Stored in `configs/` root folder, managed via `core/config.py`.
 
 ## Testing (TDD Pipeline)

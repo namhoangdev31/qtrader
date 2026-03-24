@@ -13,3 +13,8 @@ strategy: "momentum"
 execution_algo: "twap"
 regime_detection: true
 auto_retrain: false
+# HFT Mode Configuration
+hft_enabled: true
+hft_latency_target_ms: 100.0
+hft_throttle_threshold_ms: 120.0
+hft_safe_mode_latency_ms: 150.0

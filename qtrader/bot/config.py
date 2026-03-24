@@ -32,6 +32,11 @@ class BotConfig:
         regime_detection: Whether to use regime detection.
         auto_retrain: Whether to trigger retraining automatically.
         feature_cols: Feature column names (set at runtime from FactorEngine if empty).
+        # HFT Mode Configuration
+        hft_enabled: bool = False
+        hft_latency_target_ms: float = 100.0
+        hft_throttle_threshold_ms: float = 120.0
+        hft_safe_mode_latency_ms: float = 150.0
     """
 
     symbols: list[str]
@@ -51,6 +56,11 @@ class BotConfig:
     regime_detection: bool = True
     auto_retrain: bool = False
     signal_col: str = ""
+    # HFT Mode Configuration
+    hft_enabled: bool = False
+    hft_latency_target_ms: float = 100.0
+    hft_throttle_threshold_ms: float = 120.0
+    hft_safe_mode_latency_ms: float = 150.0
 
     @classmethod
     def from_yaml(cls, path: str) -> BotConfig:
@@ -84,6 +94,11 @@ class BotConfig:
             execution_algo=str(data.get("execution_algo", "market")),
             regime_detection=bool(data.get("regime_detection", True)),
             auto_retrain=bool(data.get("auto_retrain", False)),
+            # HFT Mode Configuration
+            hft_enabled=bool(data.get("hft_enabled", False)),
+            hft_latency_target_ms=float(data.get("hft_latency_target_ms", 100.0)),
+            hft_throttle_threshold_ms=float(data.get("hft_throttle_threshold_ms", 120.0)),
+            hft_safe_mode_latency_ms=float(data.get("hft_safe_mode_latency_ms", 150.0)),
         )
 
 

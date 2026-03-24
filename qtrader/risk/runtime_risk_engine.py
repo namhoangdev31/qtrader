@@ -1,16 +1,17 @@
-# File: qtrader/risk/runtime_risk_engine.py
-import polars as pl
+from typing import Any, cast
+
 import numpy as np
-from datetime import datetime, timedelta
-from typing import Dict, Any, Tuple, Optional
-from decimal import Decimal
+import polars as pl
+
+from qtrader.risk.factor_risk import FactorRiskEngine
+
 
 class AdvancedRiskEngine:
     """
     Production-grade runtime risk engine for portfolio risk management.
     """
     
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         max_lookback: int = 252,  # ~1 year of trading days
         max_drawdown_threshold: float = 0.20,
@@ -32,18 +33,19 @@ class AdvancedRiskEngine:
         self.kill_switch_drawdown = kill_switch_drawdown
         self.kill_switch_consecutive_losses = kill_switch_consecutive_losses
         
-        # State variables
+        # Risk Engines
+        self.factor_engine = FactorRiskEngine()
         self.kill_switch_active = False
         self.consecutive_losses = 0
-        self.last_portfolio_return: Optional[float] = None
+        self.last_portfolio_return: float | None = None
         
     def compute_risk(
         self,
-        positions: Dict[str, float],
-        prices: Dict[str, float],
-        proposed_trade: Dict[str, Any],
+        positions: dict[str, float],
+        prices: dict[str, float],
+        proposed_trade: dict[str, Any],
         asset_historical_returns: pl.DataFrame
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute risk for a proposed trade and return a risk decision.
         
@@ -70,7 +72,9 @@ class AdvancedRiskEngine:
                     "approved": False,
                     "adjusted_size": 0.0,
                     "reason": "Kill switch is active",
-                    "risk_metrics": self._get_current_risk_metrics(positions, prices, asset_historical_returns)
+                    "risk_metrics": self._get_current_risk_metrics(
+                        positions, prices, asset_historical_returns
+                    )
                 }
             
             # Calculate current portfolio value
@@ -83,11 +87,7 @@ class AdvancedRiskEngine:
                     "risk_metrics": {}
                 }
             
-            # Calculate weights for portfolio returns
-            weights = self._calculate_weights(positions, prices, portfolio_value)
-            
             # Calculate portfolio historical returns
-            portfolio_returns = self._calculate_portfolio_returns(asset_historical_returns, weights)
             
             # Create temporary positions including the proposed trade
             temp_positions = positions.copy()
@@ -103,11 +103,13 @@ class AdvancedRiskEngine:
             # Calculate temporary portfolio value and weights
             temp_portfolio_value = self._calculate_portfolio_value(temp_positions, prices)
             temp_weights = self._calculate_weights(temp_positions, prices, temp_portfolio_value)
-            temp_portfolio_returns = self._calculate_portfolio_returns(asset_historical_returns, temp_weights)
+            temp_p_returns = self._calculate_portfolio_returns(
+                asset_historical_returns, temp_weights
+            )
             
             # Calculate risk metrics for the temporary portfolio
             risk_metrics = self._calculate_risk_metrics(
-                temp_positions, prices, temp_portfolio_returns, asset_historical_returns
+                temp_positions, prices, temp_p_returns, asset_historical_returns
             )
             
             # Check risk limits and adjust trade size if needed
@@ -125,9 +127,11 @@ class AdvancedRiskEngine:
                 
                 adj_portfolio_value = self._calculate_portfolio_value(adj_positions, prices)
                 adj_weights = self._calculate_weights(adj_positions, prices, adj_portfolio_value)
-                adj_portfolio_returns = self._calculate_portfolio_returns(asset_historical_returns, adj_weights)
+                adj_p_returns = self._calculate_portfolio_returns(
+                    asset_historical_returns, adj_weights
+                )
                 risk_metrics = self._calculate_risk_metrics(
-                    adj_positions, prices, adj_portfolio_returns, asset_historical_returns
+                    adj_positions, prices, adj_p_returns, asset_historical_returns
                 )
             
             return {
@@ -142,11 +146,11 @@ class AdvancedRiskEngine:
             return {
                 "approved": False,
                 "adjusted_size": 0.0,
-                "reason": f"Risk computation failure: {str(e)}",
+                "reason": f"Risk computation failure: {e!s}",
                 "risk_metrics": {}
             }
     
-    def check_limits(self, risk_metrics: Dict[str, Any]) -> Tuple[bool, str]:
+    def check_limits(self, risk_metrics: dict[str, Any]) -> tuple[bool, str]:
         """
         Check if risk metrics exceed predefined limits.
         
@@ -158,19 +162,28 @@ class AdvancedRiskEngine:
         """
         # Check drawdown
         if risk_metrics.get("current_drawdown", 0) > self.max_drawdown_threshold:
-            return False, f"Current drawdown {risk_metrics['current_drawdown']:.2%} exceeds threshold {self.max_drawdown_threshold:.2%}"
+            return False, (
+                f"Current drawdown {risk_metrics['current_drawdown']:.2%} "
+                f"exceeds threshold {self.max_drawdown_threshold:.2%}"
+            )
         
-        # Check VaR
         if risk_metrics.get("var", 0) > self.var_threshold:
-            return False, f"VaR {risk_metrics['var']:.2%} exceeds threshold {self.var_threshold:.2%}"
+            return False, (
+                f"VaR {risk_metrics['var']:.2%} "
+                f"exceeds threshold {self.var_threshold:.2%}"
+            )
         
-        # Check leverage
         if risk_metrics.get("leverage", 0) > self.max_leverage:
-            return False, f"Leverage {risk_metrics['leverage']:.2f} exceeds threshold {self.max_leverage:.2f}"
+            return False, (
+                f"Leverage {risk_metrics['leverage']:.2f} "
+                f"exceeds threshold {self.max_leverage:.2f}"
+            )
         
-        # Check concentration (correlation risk)
         if risk_metrics.get("concentration_score", 0) > self.max_correlation:
-            return False, f"Concentration score {risk_metrics['concentration_score']:.2f} exceeds threshold {self.max_correlation:.2f}"
+            return False, (
+                f"Concentration score {risk_metrics['concentration_score']:.2f} "
+                f"exceeds threshold {self.max_correlation:.2f}"
+            )
         
         return True, "Within risk limits"
     
@@ -209,8 +222,8 @@ class AdvancedRiskEngine:
     def _update_consecutive_losses(
         self,
         asset_historical_returns: pl.DataFrame,
-        positions: Dict[str, float],
-        prices: Dict[str, float]
+        positions: dict[str, float],
+        prices: dict[str, float]
     ) -> None:
         """Update consecutive losses counter based on latest portfolio return."""
         if asset_historical_returns.is_empty() or not positions:
@@ -218,7 +231,8 @@ class AdvancedRiskEngine:
             return
         
         # Calculate latest portfolio return
-        weights = self._calculate_weights(positions, prices, self._calculate_portfolio_value(positions, prices))
+        p_val = self._calculate_portfolio_value(positions, prices)
+        weights = self._calculate_weights(positions, prices, p_val)
         latest_returns = asset_historical_returns.tail(1)
         if latest_returns.is_empty():
             self.last_portfolio_return = None
@@ -238,12 +252,19 @@ class AdvancedRiskEngine:
             self.consecutive_losses = 0
         
         # Check kill switch conditions
-        current_dd = self._calculate_current_drawdown(pl.Series([portfolio_return]) if self.last_portfolio_return is not None else pl.Series([0.0]))
+        current_dd = self._calculate_current_drawdown(
+            pl.Series([portfolio_return]) if self.last_portfolio_return is not None
+            else pl.Series([0.0])
+        )
         if (current_dd > self.kill_switch_drawdown or
             self.consecutive_losses >= self.kill_switch_consecutive_losses):
             self.kill_switch_active = True
     
-    def _calculate_portfolio_value(self, positions: Dict[str, float], prices: Dict[str, float]) -> float:
+    def _calculate_portfolio_value(
+        self,
+        positions: dict[str, float],
+        prices: dict[str, float]
+    ) -> float:
         """Calculate total portfolio value."""
         value = 0.0
         for symbol, qty in positions.items():
@@ -253,10 +274,10 @@ class AdvancedRiskEngine:
     
     def _calculate_weights(
         self,
-        positions: Dict[str, float],
-        prices: Dict[str, float],
+        positions: dict[str, float],
+        prices: dict[str, float],
         portfolio_value: float
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Calculate portfolio weights."""
         if portfolio_value == 0:
             return {symbol: 0.0 for symbol in positions}
@@ -272,7 +293,7 @@ class AdvancedRiskEngine:
     def _calculate_portfolio_returns(
         self,
         asset_historical_returns: pl.DataFrame,
-        weights: Dict[str, float]
+        weights: dict[str, float]
     ) -> pl.Series:
         """Calculate portfolio historical returns from asset returns and weights."""
         if asset_historical_returns.is_empty() or not weights:
@@ -290,16 +311,16 @@ class AdvancedRiskEngine:
     
     def _calculate_risk_metrics(
         self,
-        positions: Dict[str, float],
-        prices: Dict[str, float],
+        positions: dict[str, float],
+        prices: dict[str, float],
         portfolio_returns: pl.Series,
         asset_historical_returns: pl.DataFrame
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Calculate all risk metrics."""
-        metrics = {}
+        metrics: dict[str, Any] = {}
         
         # Portfolio value
-        portfolio_value = self._calculate_portfolio_value(positions, prices)
+        portfolio_value = float(self._calculate_portfolio_value(positions, prices))
         metrics["portfolio_value"] = portfolio_value
         
         # Exposure metrics
@@ -313,20 +334,39 @@ class AdvancedRiskEngine:
         
         # Drawdown
         drawdown_series = self._calculate_drawdown_series(portfolio_returns)
-        metrics["current_drawdown"] = drawdown_series[-1] if len(drawdown_series) > 0 else 0.0
-        metrics["max_drawdown"] = drawdown_series.max() if len(drawdown_series) > 0 else 0.0
+        if len(drawdown_series) > 0:
+            metrics["current_drawdown"] = float(cast(float, drawdown_series[-1]))
+            metrics["max_drawdown"] = float(cast(float, drawdown_series.max()))
+        else:
+            metrics["current_drawdown"] = 0.0
+            metrics["max_drawdown"] = 0.0
         
         # Correlation risk
-        metrics["correlation_matrix"] = self._calculate_correlation_matrix(asset_historical_returns)
-        metrics["concentration_score"] = self._calculate_concentration_score(asset_historical_returns)
+        metrics["correlation_matrix"] = self._calculate_correlation_matrix(
+            asset_historical_returns
+        )
+        metrics["concentration_score"] = self._calculate_concentration_score(
+            asset_historical_returns
+        )
         
+        # Factor Risk Breakdown (if metadata provides factor info)
+        metadata = getattr(asset_historical_returns, "metadata", {})
+        if metadata and "factor_exposures" in metadata and "factor_covariance" in metadata:
+            metrics["factor_risk"] = self.factor_engine.decompose_risk(
+                positions=positions,
+                prices=prices,
+                factor_exposures=metadata["factor_exposures"],
+                factor_covariance=metadata["factor_covariance"],
+                idiosyncratic_vols=metadata.get("idiosyncratic_vols")
+            )
+
         return metrics
     
     def _calculate_exposure(
         self,
-        positions: Dict[str, float],
-        prices: Dict[str, float]
-    ) -> Tuple[float, float, float]:
+        positions: dict[str, float],
+        prices: dict[str, float]
+    ) -> tuple[float, float, float]:
         """Calculate gross exposure, net exposure, and leverage."""
         gross = 0.0
         net = 0.0
@@ -337,8 +377,9 @@ class AdvancedRiskEngine:
                 net += pos_value
         
         # Avoid division by zero
-        if abs(net) < 1e-8:
-            leverage = 0.0 if gross < 1e-8 else float('inf')
+        eps = 1e-8
+        if abs(net) < eps:
+            leverage = 0.0 if gross < eps else float('inf')
         else:
             leverage = gross / abs(net)
         
@@ -346,16 +387,17 @@ class AdvancedRiskEngine:
     
     def _calculate_var(self, returns: pl.Series, confidence_level: float = 0.95) -> float:
         """Calculate historical VaR."""
-        if len(returns) < 2:
+        min_len = 2
+        if len(returns) < min_len:
             return 0.0
         
         sorted_returns = returns.sort()
         index = int((1 - confidence_level) * len(sorted_returns))
         if index < len(sorted_returns):
-            var = -min(sorted_returns[index], 0)  # Ensure non-negative
+            var_val = -min(float(sorted_returns[index]), 0.0)  # Ensure non-negative
         else:
-            var = 0.0
-        return var
+            var_val = 0.0
+        return float(var_val)
     
     def _calculate_drawdown_series(self, returns: pl.Series) -> pl.Series:
         """Calculate drawdown series from returns."""
@@ -368,11 +410,14 @@ class AdvancedRiskEngine:
         running_max = cum_returns.cum_max()
         # Calculate drawdown: (cum_returns - running_max) / (1 + running_max)
         # Handle division by zero when running_max == -1
-        drawdown = pl.where(
-            1 + running_max != 0,
-            (cum_returns - running_max) / (1 + running_max),
-            0.0
-        )
+        # Use a DataFrame to evaluate the expression cleanly
+        drawdown = pl.DataFrame({"cr": cum_returns, "rm": running_max}).select(
+            pl.when(pl.col("rm") != -1)
+            .then((pl.col("cr") - pl.col("rm")) / (1 + pl.col("rm")))
+            .otherwise(0.0)
+            .alias("drawdown")
+        ).get_column("drawdown")
+        
         return drawdown
     
     def _calculate_current_drawdown(self, returns: pl.Series) -> float:
@@ -384,7 +429,8 @@ class AdvancedRiskEngine:
     
     def _calculate_correlation_matrix(self, asset_historical_returns: pl.DataFrame) -> pl.DataFrame:
         """Calculate correlation matrix of asset returns."""
-        if asset_historical_returns.width < 2:
+        min_width = 2
+        if asset_historical_returns.width < min_width:
             return pl.DataFrame()
         return asset_historical_returns.corr()
     
@@ -393,7 +439,8 @@ class AdvancedRiskEngine:
         Uses the average absolute correlation as a proxy for concentration.
         """
         corr_matrix = self._calculate_correlation_matrix(asset_historical_returns)
-        if corr_matrix.is_empty() or corr_matrix.width < 2:
+        min_width = 2
+        if corr_matrix.is_empty() or corr_matrix.width < min_width:
             return 0.0
         
         # Extract the correlation values (excluding diagonal)
@@ -405,10 +452,10 @@ class AdvancedRiskEngine:
     
     def _get_current_risk_metrics(
         self,
-        positions: Dict[str, float],
-        prices: Dict[str, float],
+        positions: dict[str, float],
+        prices: dict[str, float],
         asset_historical_returns: pl.DataFrame
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get current risk metrics for the existing positions."""
         if not positions or asset_historical_returns.is_empty():
             return {}
@@ -418,21 +465,22 @@ class AdvancedRiskEngine:
             return {}
         
         weights = self._calculate_weights(positions, prices, portfolio_value)
-        portfolio_returns = self._calculate_portfolio_returns(asset_historical_returns, weights)
-        return self._calculate_risk_metrics(positions, prices, portfolio_returns, asset_historical_returns)
+        p_returns = self._calculate_portfolio_returns(asset_historical_returns, weights)
+        return self._calculate_risk_metrics(
+            positions, prices, p_returns, asset_historical_returns
+        )
     
     def _check_limits_and_adjust(
         self,
-        positions: Dict[str, float],
-        prices: Dict[str, float],
-        proposed_trade: Dict[str, Any],
-        risk_metrics: Dict[str, Any],
+        positions: dict[str, float],
+        prices: dict[str, float],
+        proposed_trade: dict[str, Any],
+        risk_metrics: dict[str, Any],
         portfolio_value: float
-    ) -> Tuple[bool, float, str]:
+    ) -> tuple[bool, float, str]:
         """Check risk limits and calculate adjusted trade size."""
         symbol = proposed_trade["symbol"]
         base_size = float(proposed_trade["quantity"])
-        side = proposed_trade["side"].lower()
         
         # Start with base size
         adjusted_size = base_size
@@ -481,7 +529,8 @@ class AdvancedRiskEngine:
         adjusted_size = max(0.0, adjusted_size)
         
         # Determine if trade is approved
-        approved = adjusted_size > 1e-8  # Essentially non-zero
+        min_size = 1e-8
+        approved = adjusted_size > min_size  # Essentially non-zero
         reason = "; ".join(adjustment_reasons) if adjustment_reasons else "Within risk limits"
         
         return approved, adjusted_size, reason

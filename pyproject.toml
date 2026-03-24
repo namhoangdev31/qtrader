@@ -6,7 +6,7 @@ authors = [
     { name = "Hoang Nam" }
 ]
 readme = "README.md"
-requires-python = ">=3.10,<3.11"
+requires-python = ">=3.10,<3.15"
 dependencies = [
     "polars>=1.0",
     "numpy>=2.0",
@@ -26,6 +26,8 @@ dependencies = [
     "asyncpg>=0.29",
     "aiohttp>=3.10",
     "uvloop>=0.20",
+    "msgpack>=1.0",
+    "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "pydantic>=2.7",
     "pydantic-settings>=2.0",

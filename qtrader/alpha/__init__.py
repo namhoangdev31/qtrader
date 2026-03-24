@@ -7,13 +7,12 @@ from qtrader.alpha.technical import MeanReversionAlpha, MomentumAlpha, TrendAlph
 
 __all__ = [
     "Alpha",
-    "MomentumAlpha",
-    "MeanReversionAlpha",
-    "TrendAlpha",
-    "OrderImbalanceAlpha",
-    "AmihudIlliquidityAlpha",
-    "VPINAlpha",
-    "AlphaRegistry",
     "AlphaEngine",
+    "AlphaRegistry",
+    "AmihudIlliquidityAlpha",
+    "MeanReversionAlpha",
+    "MomentumAlpha",
+    "OrderImbalanceAlpha",
+    "TrendAlpha",
+    "VPINAlpha",
 ]
-
