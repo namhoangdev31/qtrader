@@ -38,11 +38,13 @@ QTrader is powered by a set of specialized **Engines** that orchestrate the trad
 Based on the [FINAL_PROJECT_EVALUATION.md](file:///home/lkct-lee-park/var/www/qtrader/docs/FINAL_PROJECT_EVALUATION.md), here is the current assessment:
 
 ### ✅ Strengths
+
 - **Modular Pipeline**: High degree of separation between Data, Features, Risk, and Execution.
 - **Feature Integrity**: Robust validation layer for signal quality (IC Decay monitoring).
 - **M4 Optimization**: Leverages Apple Silicon's hardware acceleration for crypto-heavy operations.
 
 ### ⚠️ Gaps & Risks
+
 - **State Desync**: Potential mismatch between local OMS and Exchange state during network instability.
 - **Transaction Cost Sensitivity**: High regime-flicker can lead to "whipsawing" and fee-burn.
 - **Python Latency**: The Global Interpreter Lock (GIL) may introduce jitter in high-frequency event loops compared to the pure Rust kernel.
