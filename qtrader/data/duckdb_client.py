@@ -4,7 +4,7 @@ from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Optional, List, Tuple, Dict
 
-import duckdb
+# import duckdb
 import polars as pl
 
 from qtrader.core.config import Config
