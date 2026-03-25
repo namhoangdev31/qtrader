@@ -70,7 +70,12 @@ class FeatureValidator:
         validated_features = {}
         for name, series in features.items():
             # Compute IC time series
-            ic_series = self._compute_ic_series(series, forward_returns)
+            full_ic_series = self._compute_ic_series(series, forward_returns)
+            
+            # Use only valid elements for metrics (ignore the initial lookback padding)
+            ic_series = full_ic_series.tail(-self.ic_lookback)
+            if ic_series.is_empty():
+                ic_series = full_ic_series
             
             # Compute metrics
             ic_mean = ic_series.mean() if ic_series.len() > 0 else 0.0
@@ -133,25 +138,25 @@ class FeatureValidator:
         })
         
         # Calculate rolling mean and std for both series
-        feature_mean = pl.col("feature").rolling_mean(window_size=self.ic_lookback)
-        feature_std = pl.col("feature").rolling_std(window_size=self.ic_lookback)
-        returns_mean = pl.col("forward_returns").rolling_mean(window_size=self.ic_lookback)
-        returns_std = pl.col("forward_returns").rolling_std(window_size=self.ic_lookback)
+        feature_mean = pl.col("feature").rolling_mean(window_size=self.ic_lookback, min_samples=self.ic_lookback)
+        feature_std = pl.col("feature").rolling_std(window_size=self.ic_lookback, min_samples=self.ic_lookback)
+        returns_mean = pl.col("forward_returns").rolling_mean(window_size=self.ic_lookback, min_samples=self.ic_lookback)
+        returns_std = pl.col("forward_returns").rolling_std(window_size=self.ic_lookback, min_samples=self.ic_lookback)
         
         # Calculate rolling covariance
         covariance = (pl.col("feature") - feature_mean) * (pl.col("forward_returns") - returns_mean)
-        covariance_mean = covariance.rolling_mean(window_size=self.ic_lookback)
+        covariance_mean = covariance.rolling_mean(window_size=self.ic_lookback, min_samples=self.ic_lookback)
         
         # Calculate rolling correlation (Pearson)
-        # Avoid division by zero
+        # Avoid division by zero and handle nulls from small windows
+        feature_std_val = feature_std.fill_null(0.0)
+        returns_std_val = returns_std.fill_null(0.0)
+        
         ic_series_expr = pl.when(
-            (feature_std != 0.0) & (returns_std != 0.0) &
-            (feature_std.is_not_null()) & (returns_std.is_not_null()) &
-            (feature_std != float('inf')) & (returns_std != float('inf')) &
-            (feature_std != float('-inf')) & (returns_std != float('-inf'))
+            (feature_std_val > 0.0) & (returns_std_val > 0.0)
         ).then(
             covariance_mean / (feature_std * returns_std)
-        ).otherwise(0.0)
+        ).otherwise(0.0).fill_null(0.0)
         
         # Select the IC series as a new column and then extract it as a Series
         ic_series = df.select(ic_series_expr.alias("ic")).to_series()

@@ -15,7 +15,7 @@ from qtrader.alpha.registry import AlphaEngine
 from qtrader.core.bus import EventBus
 from qtrader.core.event import EventType, FillEvent, OrderEvent, RiskEvent, SystemEvent
 from qtrader.data.datalake import DataLake
-from qtrader.execution.oms import UnifiedOMS
+from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.execution.safety import SafetyLayer
 from qtrader.execution.sor import SmartOrderRouter
 from qtrader.execution.brokers.binance import BinanceBrokerAdapter

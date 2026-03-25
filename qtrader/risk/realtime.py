@@ -98,6 +98,9 @@ class RealTimeRiskEngine:
                         "market_value": [mv],
                     },
                 )
+                # Ensure schema matches by dropping 'weight' if it exists in df
+                if "weight" in df.columns:
+                    df = df.drop("weight")
                 df = pl.concat((df, new_row), how="vertical")
 
         total_abs_mv = float(df.get_column("market_value").abs().sum())
@@ -146,9 +149,8 @@ class RealTimeRiskEngine:
         if self.pnl_history.len() == 0 or self.equity <= 0.0:
             return 0.0
         losses = (-self.pnl_history).to_frame("loss")
-        alpha = 1.0 - confidence
-        # Quantile of loss distribution (left tail).
-        var_loss = float(losses.select(pl.col("loss").quantile(alpha, interpolation="nearest")).item())
+        # Quantile of loss distribution (right tail).
+        var_loss = float(losses.select(pl.col("loss").quantile(confidence, interpolation="nearest")).item())
         if var_loss <= 0.0:
             return 0.0
         scaled = var_loss * (horizon_days**0.5)

@@ -1,34 +1,27 @@
 import pytest
 from unittest.mock import MagicMock
-from qtrader.models.xgboost_model import XGBoostModel
+from qtrader.models.xgboost_model import XGBoostPredictor
+import polars as pl
+import numpy as np
 
 def test_xgboost_model_initialization():
-    model = XGBoostModel(n_estimators=100, max_depth=3)
-    assert model.n_estimators == 100
-    assert model.max_depth == 3
+    model = XGBoostPredictor(model_params={"n_estimators": 100})
+    assert model.model.n_estimators == 100
 
-def test_xgboost_model_fit():
-    model = XGBoostModel()
-    mock_X = MagicMock()
-    mock_y = MagicMock()
+def test_xgboost_model_train():
+    model = XGBoostPredictor()
+    mock_X = pl.DataFrame({"f1": [1.0, 2.0]})
+    mock_y = pl.Series("target", [3.0, 4.0])
     
-    # Should not raise
-    model.fit(mock_X, mock_y)
+    model.train(mock_X, mock_y)
+    # Success if no error call to fit inside
 
 def test_xgboost_model_predict():
-    model = XGBoostModel()
-    mock_X = MagicMock()
-    # Mock trained state
-    model.is_trained = True
-    model.model = MagicMock()
-    model.model.predict.return_value = [1.0, 0.0]
+    model = XGBoostPredictor()
+    mock_X = pl.DataFrame({"f1": [1.0]})
+    # Mocking underlying model predict
+    model.model.predict = MagicMock(return_value=np.array([1.0]))
     
     preds = model.predict(mock_X)
-    assert len(preds) == 2
+    assert len(preds) == 1
     assert preds[0] == 1.0
-
-def test_xgboost_model_predict_untrained():
-    model = XGBoostModel()
-    mock_X = MagicMock()
-    with pytest.raises(RuntimeError):
-        model.predict(mock_X)

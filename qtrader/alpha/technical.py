@@ -23,8 +23,10 @@ class MomentumAlpha:
         log_close = close.log()
         log_ret = log_close - log_close.shift(self.lookback)
         ret_std = log_ret.rolling_std(self.lookback)
-        vol_adj = log_ret / ret_std
-        return _zscore(vol_adj, self.zscore_window).rename(self.name)
+        vol_adj = log_ret / (ret_std + 1e-12)
+        
+        signal = log_ret / (ret_std + 1e-12)
+        return signal.rename(self.name)
 
 
 @dataclass(slots=True)
@@ -40,8 +42,8 @@ class MeanReversionAlpha:
         close = df.get_column("close")
         mean = close.rolling_mean(self.lookback)
         std = close.rolling_std(self.lookback)
-        raw = -(close - mean) / std
-        return _zscore(raw, self.zscore_window).rename(self.name)
+        signal = -(close - mean) / (std + 1e-12)
+        return signal.fill_nan(0.0).fill_null(0.0).rename(self.name)
 
 
 @dataclass(slots=True)
@@ -67,13 +69,11 @@ class TrendAlpha:
         tr1 = (high - low).abs()
         tr2 = (high - prev_close).abs()
         tr3 = (low - prev_close).abs()
-        true_range = pl.max_horizontal(tr1, tr2, tr3)
+        true_range = pl.select(pl.max_horizontal(tr1, tr2, tr3)).to_series()
         atr = true_range.rolling_mean(self.atr_window)
 
-        sign = pl.when(sma_fast > sma_slow).then(1.0).when(sma_fast < sma_slow).then(-1.0).otherwise(0.0)
-        signal_expr = sign * (atr / close)
-        signal = pl.select(signal_expr).to_series()
-        return _zscore(signal, self.zscore_window).rename(self.name)
+        signal = (sma_fast - sma_slow) / (atr + 1e-12)
+        return signal.rename(self.name)
 
 
 """

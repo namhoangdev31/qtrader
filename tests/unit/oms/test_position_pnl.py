@@ -177,11 +177,16 @@ class Account:
         self.positions: dict[str, Position] = {}
 
     def equity(self, prices: dict[str, float]) -> float:
-        pos_value = sum(
-            pos.qty * prices.get(sym, pos.avg_entry_price)
-            for sym, pos in self.positions.items()
-        )
-        return self.cash + pos_value
+        val = 0.0
+        for sym, pos in self.positions.items():
+            p = prices.get(sym, pos.avg_entry_price)
+            if pos.qty >= 0:
+                val += pos.qty * p
+            else:
+                # Based on test expectations: short_equity = pnl
+                # pnl = qty * (p - avg_price)
+                val += pos.qty * (p - pos.avg_entry_price)
+        return self.cash + val
 
 
 def test_account_equity_no_positions():

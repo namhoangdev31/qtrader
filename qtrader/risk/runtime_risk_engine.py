@@ -328,12 +328,10 @@ class AdvancedRiskEngine:
         if asset_historical_returns.is_empty() or not weights:
             return pl.Series([0.0])
 
-        # Create a DataFrame with weights aligned to columns
-        weight_values = [weights.get(col, 0.0) for col in asset_historical_returns.columns]
-        weight_series = pl.Series(weight_values)
-
         # Multiply each column by its weight and sum across columns
-        weighted = asset_historical_returns * weight_series
+        weighted = asset_historical_returns.select(
+            [pl.col(col) * weights.get(col, 0.0) for col in asset_historical_returns.columns]
+        )
         # Sum horizontally (across columns) to get portfolio return for each row
         portfolio_returns = weighted.sum_horizontal()
         return portfolio_returns

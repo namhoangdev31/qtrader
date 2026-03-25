@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from qtrader.core.event import FillEvent, OrderEvent
-from qtrader.execution.oms import PositionManager
+from qtrader.oms.order_management_system import PositionManager
 
 _LOG = logging.getLogger("qtrader.paper")
 

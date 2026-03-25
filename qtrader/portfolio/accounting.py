@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from qtrader.core.types import FillEvent, OrderEvent
-from qtrader.execution.oms import Position
+from qtrader.oms.order_management_system import Position
 
 
 @dataclass

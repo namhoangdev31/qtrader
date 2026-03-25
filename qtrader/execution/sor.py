@@ -1,8 +1,10 @@
+from typing import Literal, TypedDict
+import polars as pl
 
 from qtrader.backtest.impact import MarketImpactModel
 from qtrader.core.config import Config
 from qtrader.core.event import OrderEvent
-from qtrader.execution.oms import UnifiedOMS
+from qtrader.oms.order_management_system import UnifiedOMS
 
 
 class SmartOrderRouter:
@@ -99,3 +101,94 @@ class SmartOrderRouter:
             )
             portions.append((v, new_order))
         return portions
+
+# --- Inlined from legacy microprice.py to support single-tick SOR logic ---
+def calculate_micro_price(bid_price: float, ask_price: float, bid_size: float, ask_size: float) -> tuple[float, float, float]:
+    total_size = bid_size + ask_size
+    if total_size <= 0:
+        mid = (bid_price + ask_price) / 2.0
+        return mid, mid, 0.0
+    mid_price = (bid_price + ask_price) / 2.0
+    micro_price = (ask_price * bid_size + bid_price * ask_size) / total_size
+    imbalance = (bid_size - ask_size) / total_size
+    return mid_price, micro_price, imbalance
+
+
+class SORResult(TypedDict):
+    """Execution decision results."""
+    execution_decision: Literal["limit", "market"]
+    target_price: float
+    micro_price: float
+    imbalance: float
+
+
+class MicroPriceSOR:
+    """
+    Smart Order Router using Micro-price and Orderbook Imbalance.
+    Directs execution between LIMIT and MARKET based on liquidity pressure.
+    """
+
+    def __init__(self, pressure_threshold: float = 0.6):
+        self.pressure_threshold = pressure_threshold
+
+    def get_decision(
+        self,
+        side: Literal["BUY", "SELL"],
+        bid_price: float,
+        ask_price: float,
+        bid_size: float,
+        ask_size: float,
+    ) -> SORResult:
+        mid_price, micro_price, imbalance = calculate_micro_price(bid_price, ask_price, bid_size, ask_size)
+        decision: Literal["limit", "market"] = "limit"
+        target_price = mid_price
+
+        if side == "BUY":
+            if micro_price > mid_price and imbalance > self.pressure_threshold:
+                decision = "market"
+                target_price = ask_price
+            else:
+                decision = "limit"
+                target_price = bid_price
+        elif side == "SELL":
+            if micro_price < mid_price and imbalance < -self.pressure_threshold:
+                decision = "market"
+                target_price = bid_price
+            else:
+                decision = "limit"
+                target_price = ask_price
+
+        return {
+            "execution_decision": decision,
+            "target_price": target_price,
+            "micro_price": micro_price,
+            "imbalance": imbalance,
+        }
+
+    def get_decision_batch(self, side: Literal["BUY", "SELL"], df: pl.DataFrame) -> pl.DataFrame:
+        from qtrader.hft.microprice import MicropriceCalculator
+        
+        micro_series = MicropriceCalculator.compute(df, "bid_price", "ask_price", "bid_size", "ask_size")
+        mid_series = MicropriceCalculator.compute_mid_price(df, "bid_price", "ask_price")
+        
+        df = df.with_columns([
+            mid_series.alias("mid_price"),
+            micro_series.alias("micro_price"),
+            ((pl.col("bid_size") - pl.col("ask_size")) / (pl.col("bid_size") + pl.col("ask_size")).fill_nan(1.0)).alias("imbalance")
+        ])
+
+        if side == "BUY":
+            df = df.with_columns([
+                pl.when((pl.col("micro_price") > pl.col("mid_price")) & (pl.col("imbalance") > self.pressure_threshold))
+                  .then(pl.lit("market")).otherwise(pl.lit("limit")).alias("execution_decision"),
+                pl.when((pl.col("micro_price") > pl.col("mid_price")) & (pl.col("imbalance") > self.pressure_threshold))
+                  .then(pl.col("ask_price")).otherwise(pl.col("bid_price")).alias("target_price"),
+            ])
+        else:
+            df = df.with_columns([
+                pl.when((pl.col("micro_price") < pl.col("mid_price")) & (pl.col("imbalance") < -self.pressure_threshold))
+                  .then(pl.lit("market")).otherwise(pl.lit("limit")).alias("execution_decision"),
+                pl.when((pl.col("micro_price") < pl.col("mid_price")) & (pl.col("imbalance") < -self.pressure_threshold))
+                  .then(pl.col("bid_price")).otherwise(pl.col("ask_price")).alias("target_price"),
+            ])
+        return df

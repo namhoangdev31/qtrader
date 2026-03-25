@@ -23,7 +23,7 @@ class EventType(Enum):
 @dataclass(frozen=True, kw_only=True)
 class Event:
     type: EventType
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -45,9 +45,9 @@ class FeatureEvent(Event):
 @dataclass(frozen=True, kw_only=True)
 class SignalEvent(Event):
     symbol: str
-    signal_type: str  # e.g., 'PROBABILISTIC'
+    signal_type: str  # e.g., 'BUY', 'SELL', 'HOLD'
     strength: float  # Signal strength in [0, 1]
-    metadata: Dict[str, Any]  # e.g., probabilities, weights, etc.
+    metadata: Dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.SIGNAL
 
 
@@ -56,12 +56,13 @@ class EnsembleSignalEvent(Event):
     symbol: str
     signal_type: str  # e.g., 'ENSEMBLE'
     strength: float  # Signal strength in [0, 1]
-    metadata: Dict[str, Any]  # e.g., probabilities, weights, etc.
+    metadata: Dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.ENSEMBLE_SIGNAL
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrderEvent(Event):
+    order_id: str
     symbol: str
     side: str  # 'BUY' or 'SELL'
     order_type: str  # e.g., 'MARKET', 'LIMIT', 'TWAP', 'VWAP'
@@ -73,6 +74,7 @@ class OrderEvent(Event):
 
 @dataclass(frozen=True, kw_only=True)
 class FillEvent(Event):
+    order_id: str
     symbol: str
     side: str  # 'BUY' or 'SELL'
     quantity: float

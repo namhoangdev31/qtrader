@@ -10,7 +10,7 @@ from datetime import datetime
 from loguru import logger
 
 from qtrader.core.types import FillEvent
-from qtrader.execution.oms import UnifiedOMS
+from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.execution.reconciliation_engine import ReconciliationEngine
 
 

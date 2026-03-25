@@ -6,16 +6,31 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Protocol
 
 
-class EventType(Enum):
-    MARKET_DATA = auto()
-    FEATURES = auto()
-    VALIDATED_FEATURES = auto()
-    SIGNALS = auto()
-    ORDERS = auto()
-    FILLS = auto()
-    RISK_ALERT = auto()
-    SYSTEM = auto()
-    FEEDBACK_UPDATE = auto()
+from qtrader.core.event import (
+    EventType,
+    Event,
+    MarketDataEvent,
+    FeatureEvent,
+    SignalEvent,
+    EnsembleSignalEvent,
+    OrderEvent,
+    FillEvent,
+    RiskEvent,
+    SystemEvent,
+)
+
+# Aliases for compatibility
+Signal = SignalEvent
+Order = OrderEvent
+Fill = FillEvent
+
+class Side:
+    """Side of an order or signal."""
+    BUY = "BUY"
+    SELL = "SELL"
+    Buy = "BUY"  # Compatibility with lowercase/PascalCase tests
+    Sell = "SELL"
+    HOLD = "HOLD"
 
 
 @dataclass
@@ -28,7 +43,6 @@ class MarketData:
     low: Decimal
     close: Decimal
     volume: Decimal
-    # Additional fields can be added as needed
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -47,18 +61,7 @@ class ValidatedFeatures:
     symbol: str
     timestamp: datetime
     features: Dict[str, Decimal]
-    # Validation metadata (e.g., IC, p-value, stability)
     validation_metadata: Dict[str, Any]
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class SignalEvent:
-    """Trading signal."""
-    symbol: str
-    timestamp: datetime
-    signal_type: str  # e.g., 'LONG', 'SHORT', 'EXIT'
-    strength: Decimal  # normalized signal strength
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -78,33 +81,6 @@ class RiskMetrics:
     portfolio_volatility: Decimal
     max_drawdown: Decimal
     leverage: Decimal
-    # Additional risk metrics can be added
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class OrderEvent:
-    """Order to be executed."""
-    order_id: str
-    symbol: str
-    timestamp: datetime
-    order_type: str  # e.g., 'MARKET', 'LIMIT'
-    side: str  # 'BUY' or 'SELL'
-    quantity: Decimal
-    price: Optional[Decimal] = None  # for limit orders
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class FillEvent:
-    """Order fill confirmation."""
-    order_id: str
-    symbol: str
-    timestamp: datetime
-    side: str  # 'BUY' or 'SELL'
-    quantity: Decimal
-    price: Decimal
-    commission: Decimal = Decimal('0')
     metadata: Optional[Dict[str, Any]] = None
 
 

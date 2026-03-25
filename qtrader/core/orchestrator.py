@@ -36,7 +36,7 @@ from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.portfolio.allocator import AllocatorBase
 from qtrader.risk.runtime import RuntimeRiskEngine
-from qtrader.execution.oms_adapter import OMSAdapter
+from qtrader.oms.oms_adapter import OMSAdapter
 from qtrader.feedback.feedback_engine import FeedbackEngine
 from qtrader.ml.meta_online import OnlineMetaLearner
 from qtrader.analytics.drift_detector import DriftDetector
