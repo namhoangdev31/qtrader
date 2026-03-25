@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import polars as pl
-from scipy.cluster.hierarchy import linkage, optimal_leaf_ordering
+from scipy.cluster.hierarchy import leaves_list, linkage, optimal_leaf_ordering
 from scipy.optimize import linprog
 from scipy.spatial.distance import squareform
 from sklearn.covariance import LedoitWolf
@@ -34,6 +34,9 @@ class HRPOptimizer:
             return {}
 
         symbols = list(returns.columns)
+        if len(symbols) == 1:
+            return {symbols[0]: 1.0}
+
         x = returns.to_numpy()
         cov_est = LedoitWolf().fit(x)
         cov: np.ndarray = cov_est.covariance_
@@ -45,7 +48,7 @@ class HRPOptimizer:
         condensed = squareform(dist, checks=False)
         link = linkage(condensed, method="single")
         ordered_link = optimal_leaf_ordering(link, condensed)
-        order = list(map(int, ordered_link[:, 0]))  # leaf order indices
+        order = leaves_list(ordered_link)
 
         cov_ord = cov[np.ix_(order, order)]
         weights_ord = self._recursive_bisection(cov_ord)
@@ -148,15 +151,10 @@ class CVaROptimizer:
 
         for i in range(t):
             row = np.zeros(num_vars, dtype=float)
-            row[:n] = r[i]
-            row[idx_var] = 1.0
-            row[idx_z_start + i] = 1.0
+            row[:n] = -r[i]
+            row[idx_var] = -1.0
+            row[idx_z_start + i] = -1.0
             a_ub.append(row)
-            b_ub.append(0.0)
-
-            row2 = np.zeros(num_vars, dtype=float)
-            row2[idx_z_start + i] = -1.0
-            a_ub.append(row2)
             b_ub.append(0.0)
 
         A_ub = np.vstack(a_ub)

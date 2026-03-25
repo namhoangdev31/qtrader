@@ -105,14 +105,17 @@ def _zscore(series: pl.Series, window: int) -> pl.Series:
         return pl.Series(name=series.name, values=[None] * series.len())
     df = pl.DataFrame({"x": series})
     roll = df.with_columns(
-        pl.col("x").rolling_mean(window).alias("m"),
-        pl.col("x").rolling_std(window).alias("s"),
+        pl.col("x").rolling_mean(window, min_samples=1).alias("m"),
+        pl.col("x").rolling_std(window, min_samples=1).alias("s"),
     )
-    z = (roll["x"] - roll["m"]) / roll["s"]
-    z = z.to_frame("z").with_columns(
-        pl.when(pl.col("z").is_finite()).then(pl.col("z")).otherwise(None).alias("z"),
+    z = (roll["x"] - roll["m"]) / (roll["s"] + 1e-12)
+    # Ensure we preserve nulls/NaNs for periods with insufficient samples or constant values
+    return z.to_frame("z").with_columns(
+        pl.when(roll["s"].is_not_null() & roll["s"].is_not_nan() & (roll["s"] > 1e-15))
+        .then(pl.col("z"))
+        .otherwise(None)
+        .alias("z")
     )["z"]
-    return z
 
 
 """

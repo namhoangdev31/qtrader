@@ -176,10 +176,10 @@ class EnsembleStrategy:
         
         # Create ensemble signal event
         ensemble_signal = SignalEvent(
-            symbol="UNKNOWN",  # In practice, this should be set from the features or context
+            symbol="UNKNOWN",
             timestamp=datetime.utcnow(),
             signal_type="ENSEMBLE",
-            strength=Decimal(str(combined_signal.get('strength', 0.0))),
+            strength=float(combined_signal.get('strength', 0.0)),
             metadata={
                 'buy_prob': combined_signal.get('buy_prob', 0.0),
                 'sell_prob': combined_signal.get('sell_prob', 0.0),
@@ -188,7 +188,7 @@ class EnsembleStrategy:
                 'signal_components': {
                     i: {
                         'signal_type': sig.signal_type,
-                        'strength': sig.strength,
+                        'strength': float(sig.strength),
                         'metadata': sig.metadata
                     } for i, sig in strategy_signals.items()
                 }

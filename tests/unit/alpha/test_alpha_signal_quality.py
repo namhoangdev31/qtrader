@@ -14,11 +14,11 @@ from qtrader.alpha.technical import MomentumAlpha, MeanReversionAlpha, TrendAlph
 # Helpers
 # ---------------------------------------------------------------------------
 
-def rising_prices(n=30, start=100.0, step=1.0):
+def rising_prices(n=120, start=100.0, step=1.0):
     return pl.DataFrame({"close": [start + i * step for i in range(n)]})
 
 
-def falling_prices(n=30, start=130.0, step=1.0):
+def falling_prices(n=120, start=130.0, step=1.0):
     return pl.DataFrame({"close": [start - i * step for i in range(n)]})
 
 

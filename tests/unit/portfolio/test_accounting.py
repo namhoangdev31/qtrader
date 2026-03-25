@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from qtrader.portfolio.accounting import CapitalLedger, FeeEvent
-from qtrader.execution.oms import Position
+from qtrader.oms.order_management_system import Position
 
 
 def test_capital_ledger_initialization() -> None:

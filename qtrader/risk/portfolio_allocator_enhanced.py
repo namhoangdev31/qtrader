@@ -10,7 +10,7 @@ import numpy as np
 
 from qtrader.risk.base import RiskModule
 
-_LOG = logging.getLogger("qtrader.risk.portfolio_allocator")
+_LOG = logging.getLogger("qtrader.portfolio.allocator")
 
 
 class EnhancedPortfolioAllocator(RiskModule):

@@ -1,7 +1,7 @@
 from typing import Any
 
 from qtrader.core.event import MarketDataEvent
-from qtrader.execution.oms import UnifiedOMS
+from qtrader.oms.order_management_system import UnifiedOMS
 
 try:
     from qtrader.execution.orderbook_core import OrderbookEngine  # type: ignore

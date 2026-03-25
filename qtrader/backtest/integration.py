@@ -191,7 +191,8 @@ class BacktestHarness:
             logger.info("HTML tearsheet saved to %s", html_report_path)
 
         # 6. Cross-check with PerformanceAnalytics
-        analytics_metrics: dict[str, float] = PerformanceAnalytics.calculate_metrics(
+        analytics = PerformanceAnalytics()
+        analytics_metrics: dict[str, float] = analytics.calculate_metrics(
             equity_curve=backtest_output,
             trades=pl.DataFrame(),  # VectorizedEngine returns trades in the main DF
             initial_capital=initial_capital,
