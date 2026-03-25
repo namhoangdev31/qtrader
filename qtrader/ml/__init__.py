@@ -9,11 +9,12 @@ from qtrader.ml.rotation import ModelRotator
 from qtrader.ml.stability import RegimeStabilityScore, RotationHysteresis
 from qtrader.ml.walk_forward import PurgedKFoldCV, WalkForwardPipeline
 
-# Try to import pytorch models, but don't fail if torch is not available
+# Try to import pytorch models, but don't fail if torch is not available or broken
 try:
     from qtrader.ml.pytorch_models import LSTMSignalModel
+
     _has_torch = True
-except ImportError:
+except (ImportError, RuntimeError):
     _has_torch = False
     LSTMSignalModel = None  # type: ignore
 

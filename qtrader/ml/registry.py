@@ -6,6 +6,7 @@ from typing import Any
 
 try:
     import mlflow
+    import mlflow.pyfunc
     MLFLOW_AVAILABLE = True
 except ImportError:
     MLFLOW_AVAILABLE = False
@@ -123,7 +124,8 @@ class ModelRegistry:
 
     def load_model(self, run_id: str) -> Any:
         """Load a model from MLflow by run ID."""
-        import mlflow.pyfunc
+        if not MLFLOW_AVAILABLE:
+            raise RuntimeError("MLflow is not available.")
 
         model_uri = f"runs:/{run_id}/model"
         return mlflow.pyfunc.load_model(model_uri)
