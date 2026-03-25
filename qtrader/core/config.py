@@ -6,7 +6,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class QTraderSettings(BaseSettings):
+class QTraderSettings(BaseSettings):  # type: ignore[misc]
     """Centralized configuration for QTrader. Loads from .env with validation at startup."""
 
     model_config = SettingsConfigDict(

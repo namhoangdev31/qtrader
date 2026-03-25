@@ -74,7 +74,7 @@ class DBClient:
         pool = await cls.get_write_pool()
         try:
             async with pool.acquire() as conn:
-                return await conn.execute(query, *args)
+                return await conn.execute(query, *args)  # type: ignore[no-any-return]
         except asyncio.CancelledError:
             raise
 
@@ -84,7 +84,7 @@ class DBClient:
         pool = await cls.get_read_pool()
         try:
             async with pool.acquire() as conn:
-                return await conn.fetch(query, *args)
+                return await conn.fetch(query, *args)  # type: ignore[no-any-return]
         except asyncio.CancelledError:
             raise
 
@@ -137,11 +137,11 @@ class DuckDBClient:
 
     def query(self, sql: str) -> pl.DataFrame:
         """Execute SQL and return a Polars DataFrame."""
-        return self._con.execute(sql).pl()
+        return self._con.execute(sql).pl()  # type: ignore[no-any-return]
 
     def query_parquet(self, parquet_glob: str, sql: str = "SELECT * FROM read_parquet('{glob}')") -> pl.DataFrame:
         """Query parquet files directly. Use {glob} in sql to inject parquet_glob."""
-        return self._con.execute(sql.replace("{glob}", parquet_glob)).pl()
+        return self._con.execute(sql.replace("{glob}", parquet_glob)).pl()  # type: ignore[no-any-return]
 
     def close(self) -> None:
         """Close the DuckDB connection."""

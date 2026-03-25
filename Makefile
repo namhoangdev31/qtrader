@@ -21,6 +21,9 @@ help:
 install:
 	uv sync
 
+active:
+	source .venv/bin/activate
+
 test:
 	uv run pytest tests/ -v --cov=qtrader
 
