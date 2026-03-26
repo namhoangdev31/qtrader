@@ -72,3 +72,20 @@ def set_context_role(role_name: str) -> Any:
     except ValueError:
         role = Role.VIEWER
     return current_user_role.set(role)
+
+
+def has_permission(role_name: str, permission: Permission) -> bool:
+    """Check if a role has a specific permission (safe, non-raising).
+
+    Args:
+        role_name: The role string to check.
+        permission: The Permission enum value to validate.
+
+    Returns:
+        True if the role has the permission, False otherwise.
+    """
+    try:
+        role = Role(role_name)
+    except ValueError:
+        return False
+    return permission in ROLE_PERMISSIONS.get(role, set())

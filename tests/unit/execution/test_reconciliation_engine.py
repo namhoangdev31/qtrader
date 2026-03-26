@@ -1,86 +1,54 @@
-"""Unit tests for reconciliation engine."""
-
-from __future__ import annotations
-
+import asyncio
 import pytest
-
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
+from qtrader.core.event import EventType, FillEvent, TradingHaltEvent
+from qtrader.core.event_bus import EventBus
+from qtrader.core.state_store import StateStore, Position
+from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.execution.reconciliation_engine import ReconciliationEngine
 
 
-def test_reconciliation_ok_when_positions_match() -> None:
-    """Test reconciliation returns OK when local and exchange positions match."""
-    engine = ReconciliationEngine(tolerance=1e-8)
-    local_positions = {"BTC": 1.0, "ETH": 10.0}
-    exchange_positions = {"BTC": 1.0, "ETH": 10.0}
+class MockExchange:
+    def __init__(self, positions):
+        self.positions = positions
 
-    result = engine.reconcile(local_positions, exchange_positions)
-
-    assert result["status"] == "OK"
-    assert result["symbol_diff"] == {"BTC": 0.0, "ETH": 0.0}
-    assert result["total_abs_diff"] == 0.0
+    async def get_balance(self):
+        return self.positions
 
 
-def test_reconciliation_mismatch_when_positions_differ() -> None:
-    """Test reconciliation returns MISMATCH when positions differ."""
-    engine = ReconciliationEngine(tolerance=1e-8)
-    local_positions = {"BTC": 1.0}
-    exchange_positions = {"BTC": 0.9}
+@pytest.mark.asyncio
+async def test_reconciliation_engine_halts_on_mismatch():
+    event_bus = EventBus()
+    state_store = StateStore()
+    oms = UnifiedOMS(state_store, event_bus)
+    
+    # Configure mock exchange adapter
+    mock_adapter = MockExchange({"BTC": 1.5})
+    oms.add_venue("binance", mock_adapter)
 
-    result = engine.reconcile(local_positions, exchange_positions)
+    engine = ReconciliationEngine(event_bus, oms, state_store)
+    await engine.start()
+    
+    # Track halts
+    halts = []
+    async def on_halt(e):
+        halts.append(e)
+    event_bus.subscribe(EventType.TRADING_HALT, on_halt)
+    
+    # Populate internal state
+    await state_store.set_position(Position(symbol="BTC/USD", quantity=Decimal('1.0'), average_price=Decimal('10000')))
 
-    assert result["status"] == "MISMATCH"
-    assert abs(result["symbol_diff"]["BTC"] - 0.1) < 1e-10
-    assert abs(result["total_abs_diff"] - 0.1) < 1e-10
-
-
-def test_reconciliation_mismatch_when_symbols_differ() -> None:
-    """Test reconciliation returns MISMATCH when symbol sets differ."""
-    engine = ReconciliationEngine(tolerance=1e-8)
-    local_positions = {"BTC": 1.0, "ETH": 5.0}
-    exchange_positions = {"BTC": 1.0, "LTC": 2.0}
-
-    result = engine.reconcile(local_positions, exchange_positions)
-
-    assert result["status"] == "MISMATCH"
-    # ETH: 5.0 - 0.0 = 5.0, LTC: 0.0 - 2.0 = -2.0 -> abs sum = 7.0
-    assert result["symbol_diff"] == {"BTC": 0.0, "ETH": 5.0, "LTC": -2.0}
-    assert result["total_abs_diff"] == 7.0
-
-
-def test_reconciliation_ok_when_within_tolerance() -> None:
-    """Test reconciliation returns OK when difference is within tolerance."""
-    engine = ReconciliationEngine(tolerance=0.01)
-    local_positions = {"BTC": 1.0}
-    exchange_positions = {"BTC": 1.005}  # diff = 0.005 < 0.01
-
-    result = engine.reconcile(local_positions, exchange_positions)
-
-    assert result["status"] == "OK"
-    assert abs(result["symbol_diff"]["BTC"] - (-0.005)) < 1e-10
-    assert abs(result["total_abs_diff"] - 0.005) < 1e-10
-
-
-def test_reconciliation_empty_positions() -> None:
-    """Test reconciliation with empty position dictionaries."""
-    engine = ReconciliationEngine(tolerance=1e-8)
-    local_positions: dict[str, float] = {}
-    exchange_positions: dict[str, float] = {}
-
-    result = engine.reconcile(local_positions, exchange_positions)
-
-    assert result["status"] == "OK"
-    assert result["symbol_diff"] == {}
-    assert result["total_abs_diff"] == 0.0
-
-
-def test_reconciliation_zero_positions() -> None:
-    """Test reconciliation with zero positions."""
-    engine = ReconciliationEngine(tolerance=1e-8)
-    local_positions = {"BTC": 0.0}
-    exchange_positions = {"BTC": 0.0}
-
-    result = engine.reconcile(local_positions, exchange_positions)
-
-    assert result["status"] == "OK"
-    assert result["symbol_diff"] == {"BTC": 0.0}
-    assert result["total_abs_diff"] == 0.0
+    # Trigger via fill event
+    fill_event = FillEvent(
+        order_id="123", symbol="BTC/USD", side="BUY", quantity=0.0, price=0.0, timestamp=None
+    )
+    
+    # Reconcilation engine will see StateStore (BTC=1.0) vs Exchange (BTC=1.5). Differene = -0.5
+    # Should trigger halt
+    await event_bus.start()
+    await event_bus.publish(EventType.FILL, fill_event)
+    await asyncio.sleep(0.2) # Wait for engine logic
+    
+    assert len(halts) == 1
+    assert halts[0].reason == "POSITION_MISMATCH"

@@ -71,7 +71,7 @@ class ErrorBus:
         # 2. EventBus Propagation (if available)
         if self._main_bus:
             # Note: ErrorEvents are high-priority but we use the main bus for centralized handling
-            await self._main_bus.publish(event)
+            await self._main_bus.publish(EventType.ERROR, event)
         
     async def capture_exception(self, source: str, exception: Exception, message: str = "Unhandled exception") -> None:
         """Convenience method to capture and publish a full exception."""
