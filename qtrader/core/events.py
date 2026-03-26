@@ -73,6 +73,14 @@ class EventType(str, Enum):
     APPROVAL_ERROR = "APPROVAL_ERROR"
     STRATEGY_KILL = "STRATEGY_KILL"
     KILL_ERROR = "KILL_ERROR"
+    STRESS_TEST_RESULT = "STRESS_TEST_RESULT"
+    STRESS_TEST_ERROR = "STRESS_TEST_ERROR"
+    FIDELITY_REPORT = "FIDELITY_REPORT"
+    FIDELITY_ERROR = "FIDELITY_ERROR"
+    SIMULATION_ACCURACY_REPORT = "SIMULATION_ACCURACY_REPORT"
+    SIMULATION_ACCURACY_ERROR = "SIMULATION_ACCURACY_ERROR"
+    COVERAGE_REPORT = "COVERAGE_REPORT"
+    COVERAGE_ERROR = "COVERAGE_ERROR"
 
 
 class MarketPayload(BaseModel):
@@ -510,6 +518,80 @@ class KillErrorPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class StressTestResultPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    scenario_id: str
+    max_drawdown: float
+    kill_triggered: bool
+    state_transitions: list[str]
+    is_passing: bool
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StressTestErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    scenario_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class FidelityReportPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    pnl_diff: float
+    slippage_diff: float
+    price_diff: float
+    fidelity_score: float
+    trade_count: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class FidelityErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulationAccuracyPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    scenario_id: str
+    mean_diff: float
+    variance_diff: float
+    kurtosis_diff: float
+    correlation: float
+    kl_divergence: float
+    accuracy_score: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulationAccuracyErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    scenario_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CoverageReportPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    package_name: str
+    coverage_pct: float
+    uncovered_lines: list[int] = Field(default_factory=list)
+    event_coverage: dict[str, bool] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CoverageErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    module_name: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -889,3 +971,51 @@ class KillErrorEvent(BaseEvent):
     """Event representing a failure in the kill switch system."""
     event_type: EventType = EventType.KILL_ERROR
     payload: KillErrorPayload
+
+
+class StressTestResultEvent(BaseEvent):
+    """Event representing the result of a system stress test."""
+    event_type: EventType = EventType.STRESS_TEST_RESULT
+    payload: StressTestResultPayload
+
+
+class StressTestErrorEvent(BaseEvent):
+    """Event representing a failure or crash in the stress testing pipeline."""
+    event_type: EventType = EventType.STRESS_TEST_ERROR
+    payload: StressTestErrorPayload
+
+
+class FidelityReportEvent(BaseEvent):
+    """Event representing the result of a backtest vs live fidelity validation."""
+    event_type: EventType = EventType.FIDELITY_REPORT
+    payload: FidelityReportPayload
+
+
+class FidelityErrorEvent(BaseEvent):
+    """Event representing a failure in the fidelity calculation pipeline."""
+    event_type: EventType = EventType.FIDELITY_ERROR
+    payload: FidelityErrorPayload
+
+
+class SimulationAccuracyEvent(BaseEvent):
+    """Event representing the statistical accuracy of a market simulation."""
+    event_type: EventType = EventType.SIMULATION_ACCURACY_REPORT
+    payload: SimulationAccuracyPayload
+
+
+class SimulationAccuracyErrorEvent(BaseEvent):
+    """Event representing a failure in the simulation accuracy validation pipeline."""
+    event_type: EventType = EventType.SIMULATION_ACCURACY_ERROR
+    payload: SimulationAccuracyErrorPayload
+
+
+class CoverageReportEvent(BaseEvent):
+    """Event representing the test coverage status of a system component."""
+    event_type: EventType = EventType.COVERAGE_REPORT
+    payload: CoverageReportPayload
+
+
+class CoverageErrorEvent(BaseEvent):
+    """Event representing a failure in the coverage enforcement pipeline."""
+    event_type: EventType = EventType.COVERAGE_ERROR
+    payload: CoverageErrorPayload
