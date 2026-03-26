@@ -1,129 +1,182 @@
-import json
+from __future__ import annotations
+
 import logging
-from datetime import datetime
+import time
 from decimal import Decimal
-from pathlib import Path
-from typing import Any, List
+from typing import Dict, List, Optional
 
-from qtrader.core.state_store import StateStore, Position, Order
-from qtrader.core.event import EventType
+from qtrader.core.events import (
+    BaseEvent, MarketEvent, OrderEvent, FillEvent, RiskEvent, EventType
+)
+from qtrader.core.event_store import BaseEventStore
+from qtrader.core.state_store import SystemState, Position, Order, RiskState
 
-_LOG = logging.getLogger("qtrader.oms.replay_engine")
+logger = logging.getLogger(__name__)
 
 
 class ReplayEngine:
-    """Replays system events to reconstruct authoritative state.
+    """
+    Deterministic system state reconstruction engine.
+    Uses an Event-Sourcing approach to rebuild the authoritative system state 
+    from persistent event logs.
     
-    Deterministic Replay: State(t) = Σ Events[0 → t]
+    Mathematical Model: State(t) = fold(events[0...t])
     """
 
-    def __init__(self, state_store: StateStore | None = None) -> None:
-        self.state_store = state_store or StateStore()
-        self.events: List[dict[str, Any]] = []
-
-    def load_log(self, log_path: str = "data/events/order_event_log.jsonl") -> int:
-        """Load history from file into memory for faster re-processing."""
-        log_file = Path(log_path)
-        if not log_file.exists():
-            _LOG.warning(f"REPLAY_ENGINE | Log file {log_path} not found")
-            return 0
-
-        self.events = []
-        with open(log_file, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    self.events.append(json.loads(line))
+    def __init__(self, event_store: BaseEventStore) -> None:
+        """
+        Initialize the ReplayEngine.
         
-        _LOG.info(f"REPLAY_ENGINE | Loaded {len(self.events)} events from {log_path}")
-        return len(self.events)
+        Args:
+            event_store: The persistent source of truth for events.
+        """
+        self._event_store = event_store
 
-    async def replay_upto(self, target_time: datetime) -> None:
-        """Reconstruct state from start up to T."""
-        _LOG.info(f"REPLAY_ENGINE | Replaying up to {target_time.isoformat()}")
+    async def replay(
+        self, 
+        partition: str | None = None, 
+        start_offset: int | None = None, 
+        end_offset: int | None = None
+    ) -> SystemState:
+        """
+        Reconstruct the system state by replaying events in strict deterministic order.
         
-        # Iteratively process events
-        for event in self.events:
-            ts_str = event.get("timestamp")
-            if not ts_str:
-                continue
+        Returns:
+            SystemState: The final reconstructed state.
+        """
+        start_perf = time.perf_counter()
+        
+        # 1. Fetch events from the store
+        # This uses the partitioned retrieval logic
+        events = await self._event_store.get_events(
+            partition=partition, 
+            start_offset=start_offset, 
+            end_offset=end_offset
+        )
+        
+        # 2. Strict Deterministic Sorting
+        # Events MUST be sorted by:
+        # 1. Timestamp (Global sequence)
+        # 2. Partition Key (Deterministic tie-breaking)
+        # 3. Offset (Local per-partition sequence)
+        events.sort(key=lambda x: (x.timestamp, x.partition_key or "", x.offset or 0))
+        
+        # 3. State Folding
+        state = SystemState()
+        for event in events:
+            try:
+                self._apply_event(state, event)
+            except Exception as e:
+                logger.error(f"Replay failed at event {event.event_id} (offset {event.offset}): {e}")
+                raise ReplayError(f"Replay stalled: {e}") from e
                 
-            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-            if ts > target_time:
-                break
-            
-            await self._process_single_event(event)
-            
-        _LOG.info("REPLAY_ENGINE | Replay complete.")
-
-    async def _process_single_event(self, event: dict[str, Any]) -> None:
-        """Feeds a single event into the state store logic using the authoritative FSM."""
-        etype_val = event.get("type")
+        duration_ms = (time.perf_counter() - start_perf) * 1000
+        logger.info(f"Replay complete: {len(events)} events processed in {duration_ms:.2f}ms")
         
-        # Standardizing EventType lookup
-        try:
-            # Handle if etype_val is a string (e.g. from JSON value) or int
-            if isinstance(etype_val, str):
-                # Check for standardized event types
-                if etype_val == "ORDER": etype = EventType.ORDER
-                elif etype_val == "FILL": etype = EventType.FILL
-                elif etype_val == "RISK": etype = EventType.RISK
-                elif etype_val == "ORDER_CREATED": etype = EventType.ORDER_CREATED
-                elif etype_val == "ORDER_FILLED": etype = EventType.ORDER_FILLED
-                elif etype_val == "ORDER_REJECTED": etype = EventType.ORDER_REJECTED
-                else: etype = None
+        return state
+
+    def _apply_event(self, state: SystemState, event: BaseEvent) -> None:
+        """
+        Dispatching logic to handle state transitions per event type.
+        """
+        if isinstance(event, MarketEvent):
+            self._handle_market(state, event)
+        elif isinstance(event, OrderEvent):
+            self._handle_order(state, event)
+        elif isinstance(event, FillEvent):
+            self._handle_fill(state, event)
+        elif isinstance(event, RiskEvent):
+            self._handle_risk(state, event)
+
+    def _handle_market(self, state: SystemState, event: MarketEvent) -> None:
+        """Update mark-to-market prices and PnL."""
+        symbol = event.symbol
+        if symbol not in state.positions:
+            state.positions[symbol] = Position(symbol=symbol)
+            
+        pos = state.positions[symbol]
+        mid_price = Decimal(str((event.bid + event.ask) / 2))
+        
+        # Re-calculate unrealized PnL based on replayed market ticks
+        pos.market_value = pos.quantity * mid_price
+        if pos.quantity != 0:
+            pos.unrealized_pnl = pos.market_value - (pos.quantity * pos.average_price)
+        else:
+            pos.unrealized_pnl = Decimal('0')
+
+    def _handle_order(self, state: SystemState, event: OrderEvent) -> None:
+        """Track active orders in the state."""
+        payload = event.payload
+        state.active_orders[payload.order_id] = Order(
+            order_id=payload.order_id,
+            symbol=payload.symbol,
+            side=payload.action,
+            order_type=payload.order_type,
+            quantity=Decimal(str(payload.quantity)),
+            price=Decimal(str(payload.price)) if payload.price else None,
+            status="ACK"
+        )
+
+    def _handle_fill(self, state: SystemState, event: FillEvent) -> None:
+        """Update positions and close orders upon fill."""
+        payload = event.payload
+        symbol = payload.symbol
+        
+        if symbol not in state.positions:
+            state.positions[symbol] = Position(symbol=symbol)
+            
+        pos = state.positions[symbol]
+        qty_filled = Decimal(str(payload.quantity))
+        qty_delta = qty_filled if payload.side == "BUY" else -qty_filled
+        fill_price = Decimal(str(payload.price))
+        
+        # Calculate new average cost
+        new_qty = pos.quantity + qty_delta
+        if new_qty != 0:
+            if (qty_delta * pos.quantity) >= 0:
+                # Adding to or starting position
+                total_cost = (pos.quantity * pos.average_price) + (qty_filled * fill_price)
+                pos.average_price = total_cost / abs(new_qty)
             else:
-                etype = None
-        except Exception:
-            etype = None
-
-        if etype == EventType.FILL or etype == EventType.ORDER_FILLED:
-            # Reconstruction logic for fills (updates positions)
-            symbol = event["symbol"]
-            qty = Decimal(str(event["quantity"]))
-            price = Decimal(str(event["price"]))
-            side = event["side"]
+                # Reducing position - Average price doesn't change in simple accounting 
+                # unless we cross zero (flip)
+                if (pos.quantity * new_qty) < 0:
+                    pos.average_price = fill_price
+        else:
+            pos.average_price = Decimal('0')
             
-            p = await self.state_store.get_position(symbol)
-            qty_delta = qty if side == "BUY" else -qty
-            
-            if p:
-                new_qty = p.quantity + qty_delta
-                # Simple average cost update during reconstruction
-                new_cost = p.average_price
-                if new_qty != 0 and qty_delta * p.quantity >= 0: # increasing position
-                    new_cost = (p.quantity * p.average_price + qty * price) / new_qty
-                
-                await self.state_store.set_position(Position(
-                    symbol=symbol,
-                    quantity=new_qty,
-                    average_price=new_cost
-                ))
-            else:
-                await self.state_store.set_position(Position(
-                    symbol=symbol,
-                    quantity=qty_delta,
-                    average_price=price
-                ))
+        pos.quantity = new_qty
+        
+        # Remove from active orders if fully filled
+        if payload.order_id in state.active_orders:
+            # Note: In a real system we'd check partial fills, but here we assume full fill for simplicity
+            del state.active_orders[payload.order_id]
 
-        elif etype == EventType.ORDER or etype == EventType.ORDER_CREATED:
-            # Sync active orders in StateStore
-            # Extract common order details
-            o_data = event.get("order", event)
-            await self.state_store.set_order(Order(
-                order_id=o_data["order_id"],
-                symbol=o_data["symbol"],
-                side=o_data["side"],
-                order_type=o_data["order_type"],
-                quantity=Decimal(str(o_data["quantity"])),
-                price=Decimal(str(o_data["price"])) if o_data.get("price") else None,
-                status="ACK" if etype == EventType.ORDER_CREATED else "NEW"
-            ))
+    def _handle_risk(self, state: SystemState, event: RiskEvent) -> None:
+        """Update risk multipliers and state limits."""
+        payload = event.payload
+        state.current_risk_multiplier = Decimal(str(payload.value))
+        state.risk_state.max_drawdown = Decimal(str(payload.metrics.get("max_drawdown", 0)))
 
-        elif etype == EventType.ORDER_REJECTED:
-            order_id = event["order_id"]
-            # Clear or update order status in state store
-            await self.state_store.remove_order(order_id)
+    @staticmethod
+    def calculate_state_hash(state: SystemState) -> str:
+        """
+        Generate a verifiable SHA-256 fingerprint of the system state.
+        Used to ensure deterministic reproducibility.
+        """
+        import hashlib
+        
+        # Sort keys to ensure stable string representation
+        pos_parts = []
+        for sym, pos in sorted(state.positions.items()):
+            pos_parts.append(f"{sym}:{pos.quantity}:{pos.average_price:.4f}")
             
-        elif etype == EventType.RISK:
-            # Reconstruct high-fidelity risk metrics
-            pass
+        ord_parts = sorted(state.active_orders.keys())
+        
+        fingerprint = f"POS:{'|'.join(pos_parts)};ORD:{'|'.join(ord_parts)};RISK:{state.current_risk_multiplier}"
+        return hashlib.sha256(fingerprint.encode()).hexdigest()
+
+
+class ReplayError(Exception):
+    """Raised when the replay engine encounters a sequence violation or corrupted data."""
+    pass
