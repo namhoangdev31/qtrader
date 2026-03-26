@@ -7,7 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from qtrader.monitoring.warroom_service import WarRoomService
 
 # Global service instance (in a real app, inject this via Depends)
-warroom_service = WarRoomService(update_interval_s=0.1)
+warroom_service = WarRoomService()
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 
 class ConnectionManager:

@@ -53,6 +53,21 @@ class QTraderSettings(BaseSettings):
     timezone: str = "Asia/Ho_Chi_Minh"
     trading_symbols: List[str] = ["BTC/USDT", "ETH/USDT"]
 
+    # Alert Routing
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_alerts_enabled: bool = False
+    alert_email_smtp_host: str = ""
+    alert_email_smtp_port: int = 587
+    alert_email_sender: str = ""
+    alert_email_password: str = ""
+    alert_email_recipients: str = ""  # comma-separated
+    alert_email_enabled: bool = False
+    alert_webhook_url: str = ""
+    alert_webhook_enabled: bool = False
+    alert_min_severity: str = "WARNING"
+    alert_cooldown_seconds: float = 60.0
+
     @property
     def TRADING_SYMBOLS(self) -> List[str]:
         return self.trading_symbols
@@ -194,3 +209,31 @@ class ConfigLoader:
 
 # Backward compatibility alias for existing code using Config.BINANCE_API_KEY etc.
 Config: QTraderSettings = settings
+
+
+def build_alert_router_config() -> dict[str, Any]:
+    """Build AlertRouterConfig kwargs from centralized settings.
+
+    Returns a plain dict so the caller can construct the config without
+    importing alert_router at module level (avoids circular imports).
+    """
+    cfg: dict[str, Any] = {
+        "min_severity": settings.alert_min_severity,
+        "cooldown_seconds": settings.alert_cooldown_seconds,
+    }
+    if settings.telegram_alerts_enabled and settings.telegram_bot_token:
+        cfg["telegram"] = {
+            "bot_token": settings.telegram_bot_token,
+            "chat_id": settings.telegram_chat_id,
+        }
+    if settings.alert_email_enabled and settings.alert_email_smtp_host:
+        cfg["email"] = {
+            "smtp_host": settings.alert_email_smtp_host,
+            "smtp_port": settings.alert_email_smtp_port,
+            "sender": settings.alert_email_sender,
+            "password": settings.alert_email_password,
+            "recipients": [r.strip() for r in settings.alert_email_recipients.split(",") if r.strip()],
+        }
+    if settings.alert_webhook_enabled and settings.alert_webhook_url:
+        cfg["webhook"] = {"url": settings.alert_webhook_url}
+    return cfg

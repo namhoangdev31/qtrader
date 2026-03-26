@@ -74,22 +74,20 @@ class LiveMonitor:
         bus: EventBus,
         backtest_baseline: TearsheetMetrics,
     ) -> None:
-        """Initialize the LiveMonitor.
-
-        Args:
-            tracker: PerformanceTracker from the bot (live metrics).
-            analytics: PerformanceAnalytics for cross-checking.
-            drift_monitor: DriftMonitor for feature drift detection.
-            telemetry: Telemetry for recording metrics (Prometheus/Grafana).
-            bus: EventBus for publishing SystemEvents.
-            backtest_baseline: The approved backtest result (TearsheetMetrics).
-        """
+        """Initialize the LiveMonitor and subscribe to production events."""
         self.tracker = tracker
         self.analytics = analytics
         self.drift_monitor = drift_monitor
         self.telemetry = telemetry
         self.bus = bus
         self.backtest_baseline = backtest_baseline
+        self._last_run_ts: datetime | None = None
+        
+        # Zero-latency: Reactive monitoring on every significant state change
+        from qtrader.core.event import EventType
+        self.bus.subscribe(EventType.FILL, self.on_event)
+        self.bus.subscribe(EventType.SIGNAL, self.on_event)
+        logger.info("LiveMonitor initialized and subscribed to FILL/SIGNAL events")
 
     async def run_cycle(self, feature_snapshot: Any) -> MonitorReport:
         """One monitoring cycle.
@@ -174,37 +172,35 @@ class LiveMonitor:
     async def on_event(self, event: Any) -> None:
         """Trigger a monitoring cycle on fill or signal events (zero latency)."""
         try:
-            # Throttle if needed based on real-time frequency, but for safety monitor every fill
-            # or use a simple timestamp check
+            # Throttle to avoid excessive computation if events are too frequent
+            # (e.g., monitor at most once every 30 seconds)
             current_ts = datetime.utcnow()
-            if hasattr(self, "_last_run_ts") and (current_ts - self._last_run_ts).total_seconds() < 60:
+            if self._last_run_ts and (current_ts - self._last_run_ts).total_seconds() < 30:
                 return
                 
+            self._last_run_ts = current_ts
+            
+            # Fetch live features for drift detection
             feature_snapshot = await self._fetch_live_features()
             report = await self.run_cycle(feature_snapshot)
             
             if report.has_critical_alerts:
                 alert_msg = report.critical_alerts[0]
-                logger.warning("Publishing EMERGENCY_HALT: %s", alert_msg)
+                logger.warning(f"[MONITOR] Critical degradation detected: {alert_msg}")
+                # Emit EMERGENCY_HALT to stop the bot via SystemEvent
                 await self.bus.publish(
                     SystemEvent(action="EMERGENCY_HALT", reason=alert_msg)
                 )
-            self._last_run_ts = current_ts
+                
         except Exception as e:
-            logger.error("Monitor cycle error", exc_info=e)
-
-    # loop/sleep start method removed in favor of event-driven on_event
+            logger.error("LiveMonitor event handler failed", exc_info=e)
 
     async def _fetch_live_features(self) -> Any:
         """Fetch the latest live features for drift detection.
 
         This method should be overridden by the user to provide the actual
         live feature data (Polars DataFrame) from the feature store or datalake.
-
-        Returns:
-            A Polars DataFrame of live features, or an empty DataFrame if not implemented.
         """
-        logger.warning("_fetch_live_features not implemented; returning empty DataFrame")
         # Return an empty DataFrame with the expected columns? We don't know the columns.
         # For now, return None and let the drift monitor handle it.
         return None

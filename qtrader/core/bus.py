@@ -1,10 +1,10 @@
 import asyncio
-import logging
 import time
 from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
 
 from qtrader.core.event import Event, EventType
+from qtrader.core.logger import log
 
 T = TypeVar("T", bound=Event)
 Handler = Callable[[T], Coroutine[Any, Any, None]]
@@ -15,7 +15,7 @@ class EventBus:
         self._handlers: dict[EventType, list[Handler[Any]]] = {}
         self._queue: asyncio.Queue[object] = asyncio.Queue(maxsize=queue_maxsize)
         self._running = False
-        self._log = logging.getLogger("qtrader.eventbus")
+        self._log = log.bind(module="eventbus")
         self._STOP = object()
         self._handler_timeout_s = handler_timeout_s
 
@@ -78,10 +78,10 @@ class EventBus:
                     self.handler_timeouts_total += 1
                 else:
                     self.handler_errors_total += 1
-                self._log.error(
-                    "Event handler failed",
-                    exc_info=(type(res), res, res.__traceback__),
-                )
+                self._log.bind(
+                    event_type=event.type.name,
+                    trace_id=event.trace_id
+                ).error("Event handler failed", exc_info=res)
 
     async def start(self) -> None:
         self._running = True
@@ -92,8 +92,17 @@ class EventBus:
                     break
                 start = time.perf_counter()
                 await self._process_event(item)  # type: ignore[arg-type]
+                
+                # Global Latency Enforcement: Audit every event processing cycle
+                from qtrader.core.latency import LatencyEnforcer, LATENCY_MAX_MS
+                report = LatencyEnforcer.check_breach(
+                    tag=f"event_{getattr(item, 'type', 'unknown')}", 
+                    start_time=start, 
+                    threshold=LATENCY_MAX_MS
+                )
+                
                 self.processed_total += 1
-                self.last_event_process_ms = (time.perf_counter() - start) * 1000.0
+                self.last_event_process_ms = report.duration_ms
             finally:
                 self._queue.task_done()
 

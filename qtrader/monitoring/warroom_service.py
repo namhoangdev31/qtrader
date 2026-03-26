@@ -5,94 +5,133 @@ from typing import Any
 
 from loguru import logger
 
+from qtrader.core.event import EventType, FillEvent, OrderEvent, RiskEvent, DriftEvent
+from qtrader.core.bus import EventBus
 from .metrics import MetricsAggregator
 
 
 class WarRoomService:
     """
-    Central service for real-time monitoring of trading activity.
-    Coordinates metrics aggregation and dashboard data serving.
+    Reactive monitoring service for real-time trading oversight.
+    Subscribes to EventBus to aggregate metrics without polling.
     """
 
-    def __init__(self, update_interval_s: float = 1.0) -> None:
+    def __init__(self, event_bus: EventBus | None = None) -> None:
         """
         Args:
-            update_interval_s: Interval for broadcasting dashboard updates.
+            event_bus: Optional global production event bus.
         """
         self.aggregator = MetricsAggregator()
-        self.update_interval_s = update_interval_s
+        self.bus = event_bus
         self._running = False
         self._event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._latest_snapshot: dict[str, Any] = {}
         self._tasks: set[asyncio.Task[Any]] = set()
         self._subscribers: list[Callable[[dict[str, Any]], None]] = []
+        
+        if self.bus:
+            self._subscribe_to_bus()
+        else:
+            logger.warning("WarRoomService initialized without EventBus. Call set_bus() later to enable reactive monitoring.")
+
+    def set_bus(self, event_bus: EventBus) -> None:
+        """Link the service to a production EventBus and enable subscriptions."""
+        self.bus = event_bus
+        self._subscribe_to_bus()
+        logger.info("WarRoomService linked to EventBus")
+
+    def _subscribe_to_bus(self) -> None:
+        """Internal helper to register event handlers."""
+        if not self.bus:
+            return
+        self.bus.subscribe(EventType.FILL, self._handle_fill)
+        self.bus.subscribe(EventType.ORDER, self._handle_order)
+        self.bus.subscribe(EventType.RISK, self._handle_risk)
+        self.bus.subscribe(EventType.DRIFT, self._handle_drift)
+        self.bus.subscribe(EventType.ERROR, self._handle_error)
 
     def add_subscriber(self, callback: Callable[[dict[str, Any]], None]) -> None:
-        """Register a callback for periodic snapshot broadcasts."""
+        """Register a callback for real-time snapshot broadcasts."""
         self._subscribers.append(callback)
 
     async def start(self) -> None:
-        """Start the background event processing task."""
+        """Start the background metrics processing task."""
+        if self._running:
+            return
         self._running = True
         process_task = asyncio.create_task(self._process_events())
         self._tasks.add(process_task)
         process_task.add_done_callback(self._tasks.discard)
+        logger.info("WarRoomService metrics engine started")
 
     async def stop(self) -> None:
-        """Stop all background tasks."""
         self._running = False
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
 
-    def push_event(self, event_type: str, data: dict[str, Any]) -> None:
-        """
-        Push a new event into the processing queue.
-        Thread-safe entry point for external emitters.
-        """
-        self._event_queue.put_nowait({"type": event_type, "data": data})
+    # EventBus Handlers - Just push to internal FIFO queue for high-performance decoupling
+    async def _handle_fill(self, event: FillEvent) -> None:
+        self._event_queue.put_nowait({"type": "fill", "data": event})
+
+    async def _handle_order(self, event: OrderEvent) -> None:
+        self._event_queue.put_nowait({"type": "order", "data": event})
+
+    async def _handle_risk(self, event: RiskEvent) -> None:
+        self._event_queue.put_nowait({"type": "risk", "data": event})
+        
+    async def _handle_drift(self, event: DriftEvent) -> None:
+        self._event_queue.put_nowait({"type": "drift", "data": event})
+
+    async def _handle_error(self, event: Any) -> None:
+        self._event_queue.put_nowait({"type": "error", "data": event})
 
     async def _process_events(self) -> None:
-        """Background task to process events from the queue."""
+        """Background task to translate low-level events into aggregated metrics."""
         while self._running:
             try:
                 event = await self._event_queue.get()
-                event_type = event["type"]
+                etype = event["type"]
                 data = event["data"]
 
-                if event_type == "pnl_update":
-                    self.aggregator.update_pnl(nav=data["nav"], realized=data.get("realized", 0.0))
-                elif event_type == "latency_record":
-                    self.aggregator.record_latency(
-                        stage=data["stage"], latency_ms=data["latency_ms"]
+                if etype == "fill":
+                    self.aggregator.on_fill(
+                        symbol=data.symbol, 
+                        quantity=float(data.quantity), 
+                        price=float(data.price), 
+                        side=data.side
                     )
+                elif etype == "order":
+                    self.aggregator.on_order(
+                        symbol=data.symbol, 
+                        quantity=float(data.quantity), 
+                        side=data.side
+                    )
+                elif etype == "risk":
+                    self.aggregator.on_risk_alert()
+                elif etype == "pnl_update":
+                    self.aggregator.update_pnl(nav=data["nav"], realized=data.get("realized", 0.0))
                 
-                # Zero Latency: Update snapshot and broadcast immediately after processing
+                # Push real-time snapshot to subscribers
                 self._latest_snapshot = self.aggregator.get_summary()
                 for subscriber in self._subscribers:
                     try:
                         subscriber(self._latest_snapshot)
                     except Exception as e:
-                        logger.info(f"Subscriber error: {e}")
+                        logger.error(f"WarRoom broadcast failure: {e}")
 
-            except (KeyError, TypeError, ValueError) as e:
-                logger.info(f"Error processing event {event_type}: {e}")
+            except Exception as e:
+                logger.error(f"WarRoom event processing error: {e}")
             finally:
                 self._event_queue.task_done()
 
-    # Redundant broadcast loop removed for event-driven architecture
-
     def get_dashboard_snapshot(self) -> dict[str, Any]:
-        """
-        Get the current state of metrics for REST API consumption.
-        """
-        if not self._latest_snapshot:
-            return self.aggregator.get_summary()
-        return self._latest_snapshot
+        return self._latest_snapshot or self.aggregator.get_summary()
 
     def get_health(self) -> dict[str, Any]:
-        """
-        Return service health status.
-        """
         return {
             "status": "healthy" if self._running else "stopped",
-            "queue_size": self._event_queue.qsize(),
+            "metrics_buffered": self._event_queue.qsize(),
             "timestamp": datetime.now().isoformat(),
         }

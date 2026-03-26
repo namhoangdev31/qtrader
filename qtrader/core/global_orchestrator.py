@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 
+from qtrader.core.error_bus import ErrorBus
 from qtrader.core.logger import logger
 from qtrader.risk.factor_risk import FactorRiskEngine
 from qtrader.risk.portfolio.capital_allocator import CapitalAllocator
@@ -32,7 +33,8 @@ class GlobalOrchestrator:
     def __init__(
         self,
         capital_allocator: CapitalAllocator | None = None,
-        factor_risk_engine: FactorRiskEngine | None = None
+        factor_risk_engine: FactorRiskEngine | None = None,
+        error_bus: ErrorBus | None = None
     ) -> None:
         self._orchestrators: dict[str, TradingOrchestrator] = {}
         self._mode: FundMode = FundMode.SHADOW
@@ -40,6 +42,7 @@ class GlobalOrchestrator:
         
         self.capital_allocator = capital_allocator or CapitalAllocator()
         self.factor_risk_engine = factor_risk_engine or FactorRiskEngine()
+        self.error_bus = error_bus or ErrorBus()
         
     def register_orchestrator(self, name: str, orchestrator: TradingOrchestrator) -> None:
         """Register a child orchestrator."""
@@ -126,9 +129,19 @@ class GlobalOrchestrator:
         }
 
     async def start(self) -> None:
-        """Start all registered orchestrators."""
+        """Start all registered orchestrators with centralized error management."""
         if self._kill_switch_active:
             logger.error("Cannot start: Global kill switch is active")
             return
             
-        await asyncio.gather(*[orch.run() for orch in self._orchestrators.values()])
+        try:
+            # Run all orchestrators concurrently
+            await asyncio.gather(*[orch.run() for orch in self._orchestrators.values()])
+        except Exception as e:
+            await self.error_bus.capture_exception(
+                source="GlobalOrchestrator", 
+                exception=e, 
+                message="Fatal runtime error in fund-level execution loop"
+            )
+            # Mandatory shutdown of all sub-orchestrators to prevent uncontrolled exposure
+            await self.engage_global_kill_switch(reason=f"Runtime Exception: {str(e)}")

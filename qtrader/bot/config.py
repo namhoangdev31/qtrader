@@ -37,6 +37,7 @@ class BotConfig:
         hft_latency_target_ms: float = 100.0
         hft_throttle_threshold_ms: float = 120.0
         hft_safe_mode_latency_ms: float = 150.0
+        min_signal_delta: float = 0.05
     """
 
     symbols: list[str]
@@ -61,6 +62,7 @@ class BotConfig:
     hft_latency_target_ms: float = 100.0
     hft_throttle_threshold_ms: float = 120.0
     hft_safe_mode_latency_ms: float = 150.0
+    min_signal_delta: float = 0.05
 
     @classmethod
     def from_yaml(cls, path: str) -> BotConfig:
@@ -99,6 +101,7 @@ class BotConfig:
             hft_latency_target_ms=float(data.get("hft_latency_target_ms", 100.0)),
             hft_throttle_threshold_ms=float(data.get("hft_throttle_threshold_ms", 120.0)),
             hft_safe_mode_latency_ms=float(data.get("hft_safe_mode_latency_ms", 150.0)),
+            min_signal_delta=float(data.get("min_signal_delta", 0.05)),
         )
 
 

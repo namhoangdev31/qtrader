@@ -27,7 +27,6 @@ class ReconciliationService:
         self,
         local_oms: UnifiedOMS,
         exchange_client: Any,  # Exchange client with get_positions method
-        reconciliation_interval: int = 60,  # seconds
         tolerance: float = 1e-8,
         event_bus: EventBus | None = None,
     ) -> None:
@@ -36,13 +35,11 @@ class ReconciliationService:
         Args:
             local_oms: Local OMS instance for position tracking.
             exchange_client: Exchange client for fetching positions.
-            reconciliation_interval: Interval for periodic reconciliation in seconds.
             tolerance: Maximum allowed absolute difference before considering it a mismatch.
             event_bus: Optional event bus for event-driven reconciliation.
         """
         self.local_oms = local_oms
         self.exchange_client = exchange_client
-        self.reconciliation_interval = reconciliation_interval
         self.engine = ReconciliationEngine(tolerance=tolerance)
         self.event_bus = event_bus
 
@@ -54,7 +51,7 @@ class ReconciliationService:
         self._last_known_good_exchange_positions: dict[str, float] = {}
 
         logger.info(
-            f"ReconciliationService initialized (interval: {reconciliation_interval}s, tolerance: {tolerance})"
+            f"ReconciliationService initialized (tolerance: {tolerance})"
         )
 
     async def start(self) -> None:
@@ -64,29 +61,18 @@ class ReconciliationService:
         self._is_running = True
         
         if self.event_bus:
-            self.event_bus.subscribe(EventType.MARKET_DATA, self._on_market_data)
+            # Zero Latency: Trigger purely on FillEvent to eliminate periodic polling
             self.event_bus.subscribe(EventType.FILL, self.reconcile_after_fill)
             
-        logger.info("Reconciliation service started (event-driven mode)")
+        logger.info("Reconciliation service started (push-on-fill mode)")
 
     async def stop(self) -> None:
         """Stop the reconciliation service."""
         self._is_running = False
         if self.event_bus:
-            self.event_bus.unsubscribe(EventType.MARKET_DATA, self._on_market_data)
             self.event_bus.unsubscribe(EventType.FILL, self.reconcile_after_fill)
         logger.info("Reconciliation service stopped")
 
-    async def _on_market_data(self, event: MarketDataEvent) -> None:
-        """Triggered on each market data event. Checks if periodic reconciliation is due."""
-        if not self._is_running:
-            return
-            
-        current_ts = event.timestamp.timestamp()
-        if current_ts - self._last_reconciliation_ts >= self.reconciliation_interval:
-            # Reconcile on candle/tick timestamp boundaries
-            await self._perform_reconciliation()
-            self._last_reconciliation_ts = current_ts
 
     async def _perform_reconciliation(self) -> None:
         """Perform bidirectional state reconciliation."""
@@ -110,7 +96,8 @@ class ReconciliationService:
                     f"symbol_diff={result['symbol_diff']}"
                 )
                 # Trigger kill switch as per requirement
-                await self._trigger_kill_switch()
+                reason = f"Position mismatch: total_diff={result['total_abs_diff']:.6f}"
+                await self._trigger_kill_switch(reason=reason)
                 # Escalate if mismatch persists > 2 cycles
                 if self._consecutive_mismatches >= 2:
                     logger.critical(
@@ -180,19 +167,20 @@ class ReconciliationService:
             # If no last known good, return last exchanged (even if stale) or empty
             return self._last_exchange_positions.copy()
 
-    async def _trigger_kill_switch(self) -> None:
-        """Trigger kill switch to halt trading on position mismatch."""
-        try:
-            # In a real system, this would publish to event bus or call risk engine
-            # For now, we log critically - actual implementation would integrate with risk/kill_switch.py
-            logger.critical(
-                "[KILL SWITCH] Position mismatch detected - halting all trading activities"
+    async def _trigger_kill_switch(self, reason: str) -> None:
+        """Trigger kill switch to halt trading on position mismatch (zero latency)."""
+        logger.critical(f"[KILL SWITCH] {reason} - Emitting EMERGENCY_HALT...")
+        
+        if self.event_bus:
+            from qtrader.core.event import SystemEvent
+            event = SystemEvent(
+                action="EMERGENCY_HALT",
+                reason=reason,
+                metadata={"service": "ReconciliationService", "timestamp": datetime.utcnow().isoformat()}
             )
-            # - Publishing KILL_SWITCH event to event bus
-            # - Calling risk.engine.trigger_kill_switch(reason="position_mismatch")
-            # For now, we rely on logging and external monitoring to detect this
-        except Exception as e:
-            logger.error(f"Failed to trigger kill switch: {e}")
+            await self.event_bus.publish(event)
+        else:
+            logger.error("EventBus not available to publish kill switch event!")
 
     async def reconcile_after_fill(self, fill_event: FillEvent) -> dict[str, Any]:
         """Reconcile positions after a FillEvent for real-time consistency.
@@ -217,11 +205,8 @@ class ReconciliationService:
 
             if result["status"] == "MISMATCH":
                 self._consecutive_mismatches += 1
-                logger.warning(
-                    f"Real-time mismatch after fill {fill_event.order_id}: "
-                    f"total_abs_diff={result['total_abs_diff']}"
-                )
-                await self._trigger_kill_switch()
+                reason = f"Post-fill mismatch for {fill_event.order_id}: diff={result['total_abs_diff']:.6f}"
+                await self._trigger_kill_switch(reason=reason)
             else:
                 # Reset mismatch count on successful reconciliation
                 if self._consecutive_mismatches > 0:
