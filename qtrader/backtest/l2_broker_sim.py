@@ -63,9 +63,7 @@ class L2BrokerSim:
         # 3) Fill any crossing limit orders using current best prices.
         await self._fill_crossing_limits()
 
-    async def on_order(self, order: OrderEvent) -> None:
-        """Simulate sending order with latency."""
-        await asyncio.sleep(self.latency_ms)
+        # Zero Latency: Simulated network delay removed
 
         oid = order.order_id or str(uuid.uuid4())
         side = order.side.upper()

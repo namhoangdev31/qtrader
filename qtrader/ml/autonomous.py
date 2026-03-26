@@ -99,26 +99,24 @@ class AutonomousLoop:
             except Exception as exc:
                 log.error("Failed to log rotation to MLflow", exc_info=exc)
 
-    async def start(self, get_data_func: DataProvider, feature_cols: list[str]) -> None:
-        """Run the autonomous loop continuously.
+    async def on_market_data(self, event: MarketDataEvent, get_data_func: DataProvider, feature_cols: list[str]) -> None:
+        """Trigger one autonomous step based on market data event (zero latency)."""
+        current_ts = event.timestamp.timestamp()
+        
+        # Check throttling if interval_s is set
+        if hasattr(self, "_last_run_ts") and current_ts - self._last_run_ts < self.interval_s:
+            return
+            
+        try:
+            recent_data = await get_data_func()
+            if not isinstance(recent_data, pl.DataFrame):
+                raise TypeError("get_data_func must return a Polars DataFrame.")
+            await self.run_step(recent_data, feature_cols)
+            self._last_run_ts = current_ts
+        except Exception as exc:
+            log.error("Autonomous step failed", exc_info=exc)
 
-        All exceptions are caught and logged; the loop will not crash.
-
-        Args:
-            get_data_func: Async callable returning the latest data slice.
-            feature_cols: Feature columns passed to the regime detector.
-        """
-        while True:
-            try:
-                recent_data = await get_data_func()
-                if not isinstance(recent_data, pl.DataFrame):
-                    raise TypeError("get_data_func must return a Polars DataFrame.")
-                await self.run_step(recent_data, feature_cols)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                log.error("AutonomousLoop iteration failed", exc_info=exc)
-            await asyncio.sleep(self.interval_s)
+    # loop/sleep start method removed in favor of event-driven on_market_data
 
 
 if __name__ == "__main__":

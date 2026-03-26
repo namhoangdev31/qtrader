@@ -57,11 +57,12 @@ class CoinbaseConnector:
                             await self.callback(event)
             except websockets.ConnectionClosed:
                 self._log.warning("Connection closed. Reconnecting...")
-                await asyncio.sleep(1.0)
+                # Zero Latency: Immediate reconnection without sleep
                 continue
             except Exception as e:
                 self._log.error("Coinbase WS error: %s", e)
-                await asyncio.sleep(1.0)
+                # Zero Latency: Immediate retry without sleep
+                continue
 
     def _normalize(self, data: dict[str, Any]) -> MarketDataEvent | None:
         # Coinbase Advanced Trade WS envelopes contain channel + events list.

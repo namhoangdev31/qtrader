@@ -92,13 +92,12 @@ class EventBus:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self._logger.error(f"Error in event bus loop: {e}", exc_info=True)
-                await asyncio.sleep(0.1)  # Prevent tight loop on persistent errors
+                pass 
 
     async def _safe_handler(
         self, callback: Callable, event_type: EventType, data: Any
     ) -> None:
-        """Execute a handler with retries, timeout, and exponential backoff."""
+        """Execute a handler with retries and timeout. No sleep for zero latency."""
         last_exception: BaseException | None = None
         for attempt in range(self._max_retries + 1):
             try:
@@ -125,13 +124,8 @@ class EventBus:
                     f"Handler failed for event {event_type}: {e} (attempt {attempt + 1}/{self._max_retries + 1})"
                 )
             
-            # If we have retries left, wait with exponential backoff
+            # If we have retries left, retry IMMEDIATELY in zero-latency mode
             if attempt < self._max_retries:
-                delay = self._base_retry_delay * (2 ** attempt)
-                self._logger.debug(
-                    f"Retrying handler for {event_type} in {delay:.2f}s"
-                )
-                await asyncio.sleep(delay)
                 self._events_retried += 1
         
         # All retries exhausted - send to dead letter queue

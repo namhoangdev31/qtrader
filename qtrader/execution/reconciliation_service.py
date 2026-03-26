@@ -15,16 +15,12 @@ if TYPE_CHECKING:
     from qtrader.oms.order_management_system import UnifiedOMS
 
 
+from qtrader.core.event import EventType, MarketDataEvent
+from qtrader.core.event_bus import EventBus
+
 class ReconciliationService:
     """Service for bidirectional synchronization between local OMS and exchange.
-
-    Features:
-    - Periodic reconciliation (every 1 minute)
-    - Real-time reconciliation after each FillEvent
-    - Deterministic position comparison with tolerance
-    - Kill switch triggering on mismatch
-    - Fallback to last known exchange positions on API failure
-    - Escalation on persistent mismatch (>2 cycles)
+    Event-driven: reconciliation is triggered by market data events or fill events.
     """
 
     def __init__(
@@ -33,6 +29,7 @@ class ReconciliationService:
         exchange_client: Any,  # Exchange client with get_positions method
         reconciliation_interval: int = 60,  # seconds
         tolerance: float = 1e-8,
+        event_bus: EventBus | None = None,
     ) -> None:
         """Initialize reconciliation service.
 
@@ -41,16 +38,17 @@ class ReconciliationService:
             exchange_client: Exchange client for fetching positions.
             reconciliation_interval: Interval for periodic reconciliation in seconds.
             tolerance: Maximum allowed absolute difference before considering it a mismatch.
+            event_bus: Optional event bus for event-driven reconciliation.
         """
         self.local_oms = local_oms
         self.exchange_client = exchange_client
         self.reconciliation_interval = reconciliation_interval
         self.engine = ReconciliationEngine(tolerance=tolerance)
+        self.event_bus = event_bus
 
         # State
-        self._reconciliation_task: asyncio.Task | None = None
         self._is_running = False
-        self._last_reconciliation: datetime | None = None
+        self._last_reconciliation_ts: float = 0.0
         self._last_exchange_positions: dict[str, float] = {}
         self._consecutive_mismatches = 0
         self._last_known_good_exchange_positions: dict[str, float] = {}
@@ -64,31 +62,31 @@ class ReconciliationService:
         if self._is_running:
             return
         self._is_running = True
-        self._reconciliation_task = asyncio.create_task(self._reconciliation_loop())
-        logger.info("Reconciliation service started")
+        
+        if self.event_bus:
+            self.event_bus.subscribe(EventType.MARKET_DATA, self._on_market_data)
+            self.event_bus.subscribe(EventType.FILL, self.reconcile_after_fill)
+            
+        logger.info("Reconciliation service started (event-driven mode)")
 
     async def stop(self) -> None:
         """Stop the reconciliation service."""
         self._is_running = False
-        if self._reconciliation_task:
-            self._reconciliation_task.cancel()
-            try:
-                await self._reconciliation_task
-            except asyncio.CancelledError:
-                pass
+        if self.event_bus:
+            self.event_bus.unsubscribe(EventType.MARKET_DATA, self._on_market_data)
+            self.event_bus.unsubscribe(EventType.FILL, self.reconcile_after_fill)
         logger.info("Reconciliation service stopped")
 
-    async def _reconciliation_loop(self) -> None:
-        """Main reconciliation loop for periodic checks."""
-        while self._is_running:
-            try:
-                await self._perform_reconciliation()
-                await asyncio.sleep(self.reconciliation_interval)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in reconciliation loop: {e}")
-                await asyncio.sleep(self.reconciliation_interval * 2)  # Back off on error
+    async def _on_market_data(self, event: MarketDataEvent) -> None:
+        """Triggered on each market data event. Checks if periodic reconciliation is due."""
+        if not self._is_running:
+            return
+            
+        current_ts = event.timestamp.timestamp()
+        if current_ts - self._last_reconciliation_ts >= self.reconciliation_interval:
+            # Reconcile on candle/tick timestamp boundaries
+            await self._perform_reconciliation()
+            self._last_reconciliation_ts = current_ts
 
     async def _perform_reconciliation(self) -> None:
         """Perform bidirectional state reconciliation."""

@@ -26,7 +26,8 @@ class CSVDataSource(DataSource):
         # Stream row by row (simulating tick/bar events)
         for row in self._df.to_dicts():
             yield row
-            await asyncio.sleep(0)  # Yield control
+            # Zero Latency: Removed explicit yield
+            pass 
 
     async def close(self) -> None:
         self._df = None

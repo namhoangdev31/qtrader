@@ -44,8 +44,8 @@ class BacktestEngine:
         try:
             await asyncio.gather(*pipeline_tasks)
         finally:
-            # Allow remaining events to be drained before shutdown.
-            await asyncio.sleep(1.0)
+            # Zero Latency: Drain remaining events using join()
+            await self.bus._queue.join()
             await self.bus.shutdown()
             await bus_task
             self._running = False

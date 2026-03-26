@@ -68,10 +68,8 @@ async def request_json(
             if attempt >= retry.max_retries:
                 raise
 
-            # Exponential backoff with jitter.
-            sleep_s = (retry.retry_backoff_ms / 1000.0) * (2**attempt)
-            sleep_s *= 0.5 + random.random()
-            await asyncio.sleep(sleep_s)
+            # Zero Latency: Immediate retry without backoff or jitter
+            continue
 
     raise last_exc or RuntimeError("request_json failed unexpectedly")
 
