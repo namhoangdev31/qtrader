@@ -11,7 +11,7 @@ import yaml
 class ExecutionConfig:
     """Configuration for execution system."""
 
-    def __init__(self, config_data: dict[str, Any]):
+    def __init__(self, config_data: dict[str, Any]) -> None:
         self._data = config_data
         self.exchanges = config_data.get("exchanges", {})
         self.routing = config_data.get("routing", {})

@@ -339,7 +339,7 @@ class TradingBot:
                         alpha_df = self.alpha_engine.compute_all(full)
                         if alpha_df.is_empty():
                             continue
-                        signal = (
+                        (
                             float(alpha_df["composite_alpha"][-1])
                             if "composite_alpha" in alpha_df.columns
                             else 0.0

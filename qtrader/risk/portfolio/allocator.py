@@ -10,7 +10,7 @@ from qtrader.core.types import AllocationWeights, SignalEvent
 class AllocatorBase(ABC):
     """Abstract base class for portfolio allocators."""
 
-    def __init__(self, name: str = "AllocatorBase"):
+    def __init__(self, name: str = "AllocatorBase") -> None:
         self.name = name
         self.logger = logger
         self._risk_multiplier = Decimal('1.0')  # Default risk multiplier
@@ -49,7 +49,7 @@ class AllocatorBase(ABC):
 class SimpleAllocator(AllocatorBase):
     """Simple allocator that allocates based on signal strength."""
 
-    def __init__(self, name: str = "SimpleAllocator"):
+    def __init__(self, name: str = "SimpleAllocator") -> None:
         super().__init__(name)
 
     async def allocate(self, signal_event: SignalEvent) -> AllocationWeights:

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import polars as pl
 from scipy.optimize import minimize
 
 from qtrader.risk.portfolio.optimizer import AllocatorBase
+
+if TYPE_CHECKING:
+    import polars as pl
 
 
 class RiskParityAllocator(AllocatorBase):

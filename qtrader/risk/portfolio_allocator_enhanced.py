@@ -102,7 +102,7 @@ class EnhancedPortfolioAllocator(RiskModule):
         
         # For simplicity, return the weight of the first strategy as representative
         # In production, this would be handled at the portfolio level
-        first_weight = list(weights_dict.values())[0] if weights_dict else 0.0
+        first_weight = next(iter(weights_dict.values())) if weights_dict else 0.0
         return pl.Series([float(first_weight)] * len(data), dtype=pl.Float64)
 
     def allocate(

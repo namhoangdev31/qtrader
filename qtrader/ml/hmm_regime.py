@@ -57,7 +57,7 @@ class HMMRegimeModel:
 
         # Avoid division by zero
         stds_safe = np.where(self._stds == 0.0, 1.0, self._stds)
-        return cast(np.ndarray[Any, Any], (data - self._means) / stds_safe)
+        return cast("np.ndarray[Any, Any]", (data - self._means) / stds_safe)
 
     def fit(self, df: pl.DataFrame, feature_cols: list[str]) -> None:
         """
@@ -158,11 +158,11 @@ class HMMRegimeModel:
 
         matrix = self.model.transmat_
         # Reorder matrix rows and columns based on state_map
-        return cast(np.ndarray[Any, Any], matrix[self._state_map][:, self._state_map])
+        return cast("np.ndarray[Any, Any]", matrix[self._state_map][:, self._state_map])
 
     @property
     def state_means(self) -> np.ndarray[Any, Any]:
         """Get the means of the hidden states (reordered)."""
         if not self._is_fitted or self._state_map is None:
             raise RuntimeError("Model is not fitted.")
-        return cast(np.ndarray[Any, Any], self.model.means_[self._state_map])
+        return cast("np.ndarray[Any, Any]", self.model.means_[self._state_map])

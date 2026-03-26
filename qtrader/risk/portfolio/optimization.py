@@ -60,4 +60,4 @@ class MeanVarianceOptimizer(PortfolioOptimizer):
             constraints=constraints
         )
         
-        return dict(zip(symbols, result.x))
+        return dict(zip(symbols, result.x, strict=False))

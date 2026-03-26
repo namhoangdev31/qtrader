@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
 
 from qtrader.ml.walk_forward import WalkForwardPipeline
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = ["ModelEvaluator", "NestedCrossValidation"]
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
-
-import polars as pl
+from typing import TYPE_CHECKING, Any, Protocol
 
 from qtrader.core.event import RiskEvent
+
+if TYPE_CHECKING:
+    import polars as pl
 
 __all__ = [
     "DailyLossLimit",

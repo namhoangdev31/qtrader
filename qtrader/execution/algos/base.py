@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from qtrader.core.event import OrderEvent
+if TYPE_CHECKING:
+    from qtrader.core.event import OrderEvent
 
 __all__ = ["ChildOrder", "ExecutionAlgo"]
 

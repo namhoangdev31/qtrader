@@ -28,7 +28,7 @@ class OrderStatus(Enum):
 class ExchangeAdapter(ABC):
     """Abstract base class for exchange adapters."""
     
-    def __init__(self, name: str, logger: LoggerProtocol = logger):
+    def __init__(self, name: str, logger: LoggerProtocol = logger) -> None:
         self.name = name
         self.logger = logger
     
@@ -86,7 +86,7 @@ class ExchangeAdapter(ABC):
 class SimulatedExchangeAdapter(ExchangeAdapter):
     """Simulated exchange adapter for testing and development."""
     
-    def __init__(self, name: str = "SimulatedExchange", logger: LoggerProtocol = logger):
+    def __init__(self, name: str = "SimulatedExchange", logger: LoggerProtocol = logger) -> None:
         super().__init__(name, logger)
         # Simulated market data: symbol -> price
         self.prices: dict[str, Decimal] = {}
@@ -109,11 +109,11 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
         """Set the simulated price for a symbol."""
         self.prices[symbol] = price
     
-    def set_fill_callback(self, callback):
+    def set_fill_callback(self, callback) -> None:
         """Set callback for fill events. Callback signature: (order_id: str, fill_event: FillEvent) -> None"""
         self._fill_callback = callback
     
-    async def _async_notify_fill(self, order_id: str, fill_event: FillEvent):
+    async def _async_notify_fill(self, order_id: str, fill_event: FillEvent) -> None:
         """Async helper to call fill callback."""
         if self._fill_callback:
             self._fill_callback(order_id, fill_event)
@@ -279,7 +279,7 @@ class ExecutionEngine:
         retry_delay_base: float = 0.1,      # Base delay in seconds for exponential backoff
         enable_failover_queue: bool = True,
         logger: LoggerProtocol = logger
-    ):
+    ) -> None:
         self.exchange_adapter = exchange_adapter
         # If the adapter supports fill callback, set it
         if hasattr(exchange_adapter, 'set_fill_callback'):
@@ -509,7 +509,7 @@ class ExecutionEngine:
             try:
                 # Get order from queue with timeout to allow checking _is_running
                 try:
-                    order, timestamp = await asyncio.wait_for(self.failover_queue.get(), timeout=1.0)
+                    order, _timestamp = await asyncio.wait_for(self.failover_queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
                     continue
                 
@@ -591,9 +591,9 @@ class ExecutionEngine:
             new_cost = total_cost + (fill_event.price * fill_event.quantity)
             new_qty = total_qty + fill_event.quantity
             if new_qty != 0:
-                avg_price = new_cost / new_qty
+                new_cost / new_qty
             else:
-                avg_price = Decimal('0')
+                Decimal('0')
             self.avg_price_tracker[symbol] = (new_cost, new_qty)
         else:
             self.avg_price_tracker[symbol] = (fill_event.price * fill_event.quantity, fill_event.quantity)

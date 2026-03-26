@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
@@ -11,6 +10,11 @@ from ray import tune
 from qtrader.core.config import Config
 from qtrader.ml.evaluation import ModelEvaluator
 from qtrader.ml.walk_forward import WalkForwardPipeline
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import pandas as pd
 
 __all__ = ["RayCompute", "RayHyperparamTuner"]
 
@@ -99,7 +103,6 @@ class RayHyperparamTuner:
         dataset_serialized = df.to_pandas()  # external boundary; small-ish by design
 
         def trainable(config: dict[str, Any]) -> None:
-            import pandas as pd  # local import for Ray workers
 
             pdf: pd.DataFrame = dataset_serialized.copy()
             local_df = pl.from_pandas(pdf)

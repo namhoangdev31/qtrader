@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from qtrader.core.types import FillEvent
+if TYPE_CHECKING:
+    from qtrader.core.types import FillEvent
 
 
 class OrderState(Enum):

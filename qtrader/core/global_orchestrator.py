@@ -33,7 +33,7 @@ class GlobalOrchestrator:
         self,
         capital_allocator: CapitalAllocator | None = None,
         factor_risk_engine: FactorRiskEngine | None = None
-    ):
+    ) -> None:
         self._orchestrators: dict[str, TradingOrchestrator] = {}
         self._mode: FundMode = FundMode.SHADOW
         self._kill_switch_active: bool = False

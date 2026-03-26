@@ -61,7 +61,7 @@ class SystemState:
 class StateStore:
     """Thread-safe and async-safe centralized state store."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._state = SystemState()
         self._lock = asyncio.Lock()
         self._logger = logger

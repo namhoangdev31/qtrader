@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import polars as pl
+
+if TYPE_CHECKING:
+    import duckdb
 
 __all__ = ["FeatureStore"]
 
@@ -94,9 +98,8 @@ class FeatureStore:
         self, df: pl.DataFrame, symbol: str, timeframe: str, mode: str
     ) -> None:
         tbl = self._table_name(symbol, timeframe)
-        import duckdb  # type: ignore[import]
         conn: duckdb.DuckDBPyConnection = self._conn  # type: ignore[assignment]
-        arrow = df.to_arrow()
+        df.to_arrow()
         if mode == "overwrite":
             conn.execute(f'DROP TABLE IF EXISTS "{tbl}"')
         # CREATE or INSERT
@@ -159,7 +162,6 @@ class FeatureStore:
         end_ts: str | None,
         feature_names: list[str] | None,
     ) -> pl.DataFrame:
-        import duckdb  # type: ignore[import]
         conn: duckdb.DuckDBPyConnection = self._conn  # type: ignore[assignment]
         tbl = self._table_name(symbol, timeframe)
         tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
@@ -168,7 +170,7 @@ class FeatureStore:
 
         cols = "*"
         if feature_names is not None:
-            safe_cols = ", ".join(f'"{c}"' for c in (["timestamp"] + feature_names))
+            safe_cols = ", ".join(f'"{c}"' for c in (["timestamp", *feature_names]))
             cols = safe_cols
 
         filters: list[str] = []
@@ -199,7 +201,7 @@ class FeatureStore:
             if end_ts:
                 df = df.filter(pl.col("timestamp") <= pl.lit(end_ts).str.to_datetime())
         if feature_names is not None:
-            select_cols = [c for c in (["timestamp"] + feature_names) if c in df.columns]
+            select_cols = [c for c in (["timestamp", *feature_names]) if c in df.columns]
             df = df.select(select_cols)
         return df
 
@@ -230,7 +232,6 @@ class FeatureStore:
         """
         if self._conn is not None:
             try:
-                import duckdb  # type: ignore[import]
                 conn: duckdb.DuckDBPyConnection = self._conn  # type: ignore[assignment]
                 tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
                 syms = set()

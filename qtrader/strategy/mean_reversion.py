@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import combinations
+from typing import TYPE_CHECKING
 
 import numpy as np
-import polars as pl
 from statsmodels.regression.linear_model import OLS
 from statsmodels.tools import add_constant
 from statsmodels.tsa.stattools import coint
 
 from qtrader.strategy.base import BaseStrategy
+
+if TYPE_CHECKING:
+    import polars as pl
 
 __all__ = ["OUMeanReversion", "StatisticalArbitrage"]
 

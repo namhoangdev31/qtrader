@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from qtrader.core.event import OrderEvent
 from qtrader.execution.algos.base import ChildOrder
+
+if TYPE_CHECKING:
+    from qtrader.core.event import OrderEvent
 
 __all__ = ["TWAPAlgo"]
 

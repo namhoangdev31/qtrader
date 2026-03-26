@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from qtrader.core.event import FillEvent, OrderEvent
+if TYPE_CHECKING:
+    from qtrader.core.event import FillEvent, OrderEvent
 
 
 class OMSInterface(ABC):

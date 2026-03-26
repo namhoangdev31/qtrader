@@ -19,7 +19,7 @@ class EventBus:
         base_retry_delay: float = 0.1,
         handler_timeout: float = 5.0,
         dead_letter_queue_maxsize: int = 1000,
-    ):
+    ) -> None:
         """
         Initialize the async event bus.
 

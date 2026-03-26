@@ -4,11 +4,13 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from qtrader.core.bus import EventBus
 from qtrader.core.event import RiskEvent
 from qtrader.core.types import RiskMetrics
+
+if TYPE_CHECKING:
+    from qtrader.core.bus import EventBus
 
 __all__ = ["RuntimeRiskEngine"]
 

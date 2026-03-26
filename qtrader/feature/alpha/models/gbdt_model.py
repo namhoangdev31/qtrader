@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import lightgbm as lgb
-import numpy as np
 import polars as pl
 from scipy.stats import pearsonr
 from sklearn.metrics import mean_squared_error
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class GBDTAlphaModel:

@@ -17,7 +17,7 @@ class BrokerAdapterBridge(ExchangeAdapter):
     This allows ExecutionEngine to use real broker adapters (e.g., BinanceBrokerAdapter).
     """
 
-    def __init__(self, broker: BrokerAdapter, name: str):
+    def __init__(self, broker: BrokerAdapter, name: str) -> None:
         """
         Initialize bridge adapter.
 

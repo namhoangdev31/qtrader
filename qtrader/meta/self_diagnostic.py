@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import polars as pl
+if TYPE_CHECKING:
+    import polars as pl
 
 
 class SelfDiagnostic:
@@ -47,7 +48,7 @@ class SelfDiagnostic:
         raw_sharpe = performance_history.tail(recent_window)["sharpe"].mean()
 
         # Guard against nulls from short history
-        current_sharpe = cast(float, raw_sharpe) if raw_sharpe is not None else 0.0
+        current_sharpe = cast("float", raw_sharpe) if raw_sharpe is not None else 0.0
 
         # Degradation condition
         limit = baseline_sharpe * (1.0 - degradation_threshold)
@@ -82,6 +83,6 @@ class SelfDiagnostic:
 
         # Check against limit
         raw_dd = drawdown.min()
-        current_dd = cast(float, raw_dd) if raw_dd is not None else 0.0
+        current_dd = cast("float", raw_dd) if raw_dd is not None else 0.0
 
         return current_dd <= max_drawdown_limit

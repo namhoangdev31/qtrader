@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class BinanceAdapter(ExchangeAdapter):
     """Binance exchange adapter implementing the ExchangeAdapter interface."""
 
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = False):
+    def __init__(self, api_key: str, api_secret: str, testnet: bool = False) -> None:
         """
         Initialize Binance adapter.
 

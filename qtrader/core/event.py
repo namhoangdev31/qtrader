@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import polars as pl
+if TYPE_CHECKING:
+    import polars as pl
 
 
 class EventType(Enum):

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from qtrader.core.types import FillEvent
 from qtrader.execution.reconciliation_engine import ReconciliationEngine
-from qtrader.oms.order_management_system import UnifiedOMS
+
+if TYPE_CHECKING:
+    from qtrader.core.types import FillEvent
+    from qtrader.oms.order_management_system import UnifiedOMS
 
 
 class ReconciliationService:

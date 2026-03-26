@@ -7,18 +7,20 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from qtrader.core.logger import logger
 from qtrader.core.types import OrderEvent
 
+if TYPE_CHECKING:
+    from decimal import Decimal
+
 
 class NumpyPolicyNetwork:
     """Ultra-lightweight Numpy implementation of an MLP policy."""
-    def __init__(self, input_dim: int, output_dim: int):
+    def __init__(self, input_dim: int, output_dim: int) -> None:
         self.input_dim = input_dim
         self.output_dim = output_dim
         
@@ -70,7 +72,7 @@ class ExecutionRLAgent:
 
     LATENCY_THRESHOLD_MS = 5.0
 
-    def __init__(self, weights_path: str | None = None):
+    def __init__(self, weights_path: str | None = None) -> None:
         self.input_dim = 5
         self.num_types = 4
         self.num_sizes = 5

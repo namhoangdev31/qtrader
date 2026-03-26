@@ -18,15 +18,17 @@ from __future__ import annotations
 import dataclasses
 import logging
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import polars as pl
 import yaml
 
-from qtrader.backtest.integration import BacktestResult
-from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.ml.walk_forward import WalkForwardPipeline
 from qtrader.models.xgboost_model import XGBoostPredictor
+
+if TYPE_CHECKING:
+    from qtrader.backtest.integration import BacktestResult
+    from qtrader.backtest.tearsheet import TearsheetMetrics
 
 logger = logging.getLogger(__name__)
 

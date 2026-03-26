@@ -6,13 +6,14 @@ to trigger pipeline runs and inspect results.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 from loguru import logger
 
-from qtrader.backtest.integration import BacktestHarness
-from qtrader.pipeline.research import ResearchPipeline, ResearchResult
+if TYPE_CHECKING:
+    from qtrader.backtest.integration import BacktestHarness
+    from qtrader.pipeline.research import ResearchPipeline, ResearchResult
 
 
 class SessionBridge:
@@ -81,7 +82,7 @@ class SessionBridge:
     def compare_strategies(
         self,
         symbols: list[str],
-        strategies: list[str] = ["momentum", "mean_reversion", "hrp"],
+        strategies: list[str] | None = None,
         lookback_days: int = 365,
     ) -> pl.DataFrame:
         """Run all strategies on same data, return comparison DataFrame.
@@ -90,6 +91,8 @@ class SessionBridge:
         """
         from datetime import datetime, timedelta
 
+        if strategies is None:
+            strategies = ["momentum", "mean_reversion", "hrp"]
         end_date = datetime.utcnow().strftime("%Y-%m-%d")
         start_date = (datetime.utcnow() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
 
@@ -132,7 +135,7 @@ class SessionBridge:
         among those that are approved.
         """
         # Filter approved strategies
-        approved = comparison.filter(pl.col("approved") == True)
+        approved = comparison.filter(pl.col("approved"))
         if approved.is_empty():
             raise ValueError("No approved strategies to deploy.")
 

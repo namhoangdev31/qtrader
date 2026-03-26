@@ -85,7 +85,7 @@ class SmartOrderRouter:
                 max_liquidity = balance
                 best_venue = name
 
-        return best_venue or list(self.oms.adapters.keys())[0]
+        return best_venue or next(iter(self.oms.adapters.keys()))
 
     async def split_order(self, order: OrderEvent, venues: list[str]) -> list[tuple[str, OrderEvent]]:
         """Splits a large order into multiple venues (Arbitrage/Liquidity capture)."""
@@ -129,7 +129,7 @@ class MicroPriceSOR:
     Directs execution between LIMIT and MARKET based on liquidity pressure.
     """
 
-    def __init__(self, pressure_threshold: float = 0.6):
+    def __init__(self, pressure_threshold: float = 0.6) -> None:
         self.pressure_threshold = pressure_threshold
 
     def get_decision(

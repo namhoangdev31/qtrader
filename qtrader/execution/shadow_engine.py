@@ -14,7 +14,7 @@ class ShadowFillEvent:
     """Represents a simulated fill in shadow mode."""
     def __init__(self, signal_id: str, symbol: str, timestamp: datetime,
                  side: str, quantity: Decimal, fill_price: Decimal,
-                 slippage: float, latency: float):
+                 slippage: float, latency: float) -> None:
         self.signal_id = signal_id
         self.symbol = symbol
         self.timestamp = timestamp
@@ -42,7 +42,7 @@ class ShadowEngine:
     Simulates order execution without sending real orders.
     """
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any]) -> None:
         """
         Initialize shadow engine.
 
@@ -80,7 +80,7 @@ class ShadowEngine:
 
         logger.info(f"ShadowEngine initialized with shadow_mode={self.shadow_mode}")
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the shadow engine by subscribing to events."""
         if not self.shadow_mode:
             logger.warning("Shadow engine started but shadow_mode is disabled")
@@ -98,7 +98,7 @@ class ShadowEngine:
 
         logger.info("Shadow engine started and subscribed to events")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the shadow engine and clean up."""
         if not self._running:
             return
@@ -131,7 +131,7 @@ class ShadowEngine:
         timestamp_str = signal.timestamp.strftime("%Y%m%d_%H%M%S_%f")
         return f"{signal.symbol}_{signal.signal_type}_{timestamp_str}"
 
-    async def _on_signal(self, event: SignalEvent):
+    async def _on_signal(self, event: SignalEvent) -> None:
         """Handle incoming signal event."""
         if not self._running:
             return
@@ -147,7 +147,7 @@ class ShadowEngine:
         # Simulation will yield a ShadowFillEvent which is stored and logged.
         pass # Still waiting for market data to compute price, this is handled in _on_market_data.
 
-    async def _on_market_data(self, event: MarketData):
+    async def _on_market_data(self, event: MarketData) -> None:
         """Handle incoming market data event."""
         if not self._running:
             return
@@ -170,7 +170,7 @@ class ShadowEngine:
         for signal_id, signal in signals_to_process:
             await self._simulate_and_record(signal_id, signal, orderbook)
 
-    async def _on_fill(self, event: FillEvent):
+    async def _on_fill(self, event: FillEvent) -> None:
         """Handle live fill event for comparison."""
         if not self._running:
             return
@@ -179,13 +179,11 @@ class ShadowEngine:
         # We need to find a signal that corresponds to this fill
         # Since FillEvent doesn't directly reference a signal, we'll match by symbol and time
         matched_signal_id = None
-        matched_signal = None
         
         for signal_id, signal in self.recent_signals.items():
             if (signal.symbol == event.symbol and 
                 abs((signal.timestamp - event.timestamp).total_seconds()) < 5):  # Within 5 seconds
                 matched_signal_id = signal_id
-                matched_signal = signal
                 break
 
         if matched_signal_id and matched_signal_id in self.recent_shadow_fills:
@@ -193,7 +191,7 @@ class ShadowEngine:
             await self._update_metrics(event, shadow_fill)
             logger.info(f"Updated metrics for signal {matched_signal_id}")
 
-    async def _simulate_and_record(self, signal_id: str, signal: SignalEvent, orderbook: dict):
+    async def _simulate_and_record(self, signal_id: str, signal: SignalEvent, orderbook: dict) -> None:
         """Simulate order execution and record shadow fill."""
         try:
             # Simulate latency
@@ -260,7 +258,7 @@ class ShadowEngine:
         except Exception as e:
             logger.error(f"Error simulating shadow fill for signal {signal_id}: {e}")
 
-    async def _write_shadow_fill(self, shadow_fill: ShadowFillEvent):
+    async def _write_shadow_fill(self, shadow_fill: ShadowFillEvent) -> None:
         """Write shadow fill to data lake."""
         try:
             filename = f"shadow_fills_{datetime.now().strftime('%Y%m%d')}.jsonl"
@@ -270,7 +268,7 @@ class ShadowEngine:
         except Exception as e:
             logger.error(f"Failed to write shadow fill to data lake: {e}")
 
-    async def _update_metrics(self, live_fill: FillEvent, shadow_fill: ShadowFillEvent):
+    async def _update_metrics(self, live_fill: FillEvent, shadow_fill: ShadowFillEvent) -> None:
         """Update metrics by comparing live and shadow fills."""
         try:
             # Slippage difference: live slippage - shadow slippage

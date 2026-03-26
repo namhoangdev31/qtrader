@@ -5,10 +5,14 @@ Allocates capital across multiple trading strategies like a hedge fund.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import polars as pl
 
 from qtrader.core.logger import logger
+
+if TYPE_CHECKING:
+    import polars as pl
 
 
 class CapitalAllocator:
@@ -24,7 +28,7 @@ class CapitalAllocator:
         max_capital_per_strategy: float = 0.40,
         min_strategies: int = 2,
         correlation_threshold: float = 0.70
-    ):
+    ) -> None:
         self.max_capital_per_strategy = max_capital_per_strategy
         self.min_strategies = min_strategies
         self.correlation_threshold = correlation_threshold

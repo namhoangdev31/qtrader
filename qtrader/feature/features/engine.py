@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
 
-from qtrader.feature.features.base import Feature
-from qtrader.feature.features.store import FeatureStore
+if TYPE_CHECKING:
+    from qtrader.feature.features.base import Feature
+    from qtrader.feature.features.store import FeatureStore
 
 __all__ = ["FactorEngine"]
 

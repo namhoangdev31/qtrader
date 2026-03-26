@@ -23,7 +23,7 @@ class POVAlgo:
 
     participation_rate: float = 0.05
 
-    async def on_trade_logger.info(
+    async def on_trade(
         self,
         trade_qty: float,
         trade_price: float,

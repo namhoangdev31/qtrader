@@ -7,10 +7,12 @@ can be configured via registry lookups rather than hard-coded imports.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import polars as pl
 
-from qtrader.feature.features.base import Feature
+if TYPE_CHECKING:
+    from qtrader.feature.features.base import Feature
 
 __all__ = ["FeatureRegistry"]
 

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class BinanceAdapter(ExchangeAdapter):
     """Binance exchange adapter implementing the ExchangeAdapter interface."""
 
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = False):
+    def __init__(self, api_key: str, api_secret: str, testnet: bool = False) -> None:
         """
         Initialize Binance adapter.
 
@@ -53,7 +53,7 @@ class BinanceAdapter(ExchangeAdapter):
             self._session = aiohttp.ClientSession()
         return self._session
 
-    async def _rate_limit(self):
+    async def _rate_limit(self) -> None:
         """Implement simple rate limiting."""
         now = time.time()
         elapsed = now - self._last_request_time
@@ -234,7 +234,7 @@ class BinanceAdapter(ExchangeAdapter):
             "taker": Decimal('0.001')   # 0.1%
         }
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the HTTP session."""
         if self._session and not self._session.closed:
             await self._session.close()

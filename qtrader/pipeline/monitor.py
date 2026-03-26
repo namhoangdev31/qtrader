@@ -10,16 +10,18 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from bot.performance import PerformanceTracker
-
-from qtrader.analytics.drift import DriftMonitor
-from qtrader.analytics.performance import PerformanceAnalytics
-from qtrader.analytics.telemetry import Telemetry
-from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.core.event import SystemEvent
-from qtrader.core.event_bus import EventBus
+
+if TYPE_CHECKING:
+    from bot.performance import PerformanceTracker
+
+    from qtrader.analytics.drift import DriftMonitor
+    from qtrader.analytics.performance import PerformanceAnalytics
+    from qtrader.analytics.telemetry import Telemetry
+    from qtrader.backtest.tearsheet import TearsheetMetrics
+    from qtrader.core.event_bus import EventBus
 
 logger = logging.getLogger(__name__)
 

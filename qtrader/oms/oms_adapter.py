@@ -14,7 +14,7 @@ from qtrader.execution.smart_router import SmartOrderRouter
 class OMSAdapter(ABC):
     """Abstract base class for OMS adapters."""
 
-    def __init__(self, name: str = "OMSAdapter"):
+    def __init__(self, name: str = "OMSAdapter") -> None:
         self.name = name
         self.logger = logger
 
@@ -46,7 +46,7 @@ class OMSAdapter(ABC):
 class SimpleOMSAdapter(OMSAdapter):
     """Simple OMS adapter that creates market orders."""
 
-    def __init__(self, name: str = "SimpleOMSAdapter"):
+    def __init__(self, name: str = "SimpleOMSAdapter") -> None:
         super().__init__(name)
 
     async def create_order(
@@ -116,7 +116,7 @@ class SimpleOMSAdapter(OMSAdapter):
         }
     )
 
-    async def cancel_all_orders(self):
+    async def cancel_all_orders(self) -> None:
         """Cancel all open orders (simple implementation)."""
         self.logger.info("Cancelling all open orders (simple implementation)")
         # In a real implementation, we would call the OMS to cancel all orders
@@ -134,7 +134,7 @@ class ExecutionOMSAdapter(OMSAdapter):
         max_order_size: Decimal | None = None,
         split_size: Decimal | None = None,
         name: str = "ExecutionOMSAdapter",
-    ):
+    ) -> None:
         """
         Initialize ExecutionOMSAdapter.
 
@@ -276,7 +276,7 @@ class ExecutionOMSAdapter(OMSAdapter):
         except Exception as e:
             self.logger.error(f"Error submitting order {order_event.order_id}: {e}", exc_info=True)
 
-    async def cancel_all_orders(self):
+    async def cancel_all_orders(self) -> None:
         """Cancel all open orders (delegated to execution engine)."""
         self.logger.info("Cancelling all open orders via ExecutionOMSAdapter")
         # In a real implementation, we would track pending orders and cancel them

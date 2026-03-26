@@ -35,7 +35,7 @@ class OrderIDGenerator:
         """
         # Normalize exchange and symbol to uppercase for consistency
         exchange_norm = exchange.upper()
-        symbol_norm = symbol.upper()
+        symbol.upper()
         # Get current timestamp in nanoseconds
         timestamp_ns = time.time_ns()
         # Generate UUID4

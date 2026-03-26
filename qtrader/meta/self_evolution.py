@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import random
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import polars as pl
+if TYPE_CHECKING:
+    import polars as pl
 
 
 class SelfEvolutionEngine:

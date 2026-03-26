@@ -21,7 +21,7 @@ class MomentumAlpha:
         log_close = close.log()
         log_ret = log_close - log_close.shift(self.lookback)
         ret_std = log_ret.rolling_std(self.lookback)
-        vol_adj = log_ret / (ret_std + 1e-12)
+        log_ret / (ret_std + 1e-12)
         
         signal = log_ret / (ret_std + 1e-12)
         return signal.rename(self.name)

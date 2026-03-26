@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from qtrader.execution.paper_engine import TradeRecord
+if TYPE_CHECKING:
+    from qtrader.execution.paper_engine import TradeRecord
 
 # ---------------------------------------------------------------------------
 # Result dataclass

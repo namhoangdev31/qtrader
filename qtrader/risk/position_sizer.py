@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
 
 from qtrader.risk.base import RiskModule
-from qtrader.risk.volatility import VolatilityTargeting
+
+if TYPE_CHECKING:
+    from qtrader.risk.volatility import VolatilityTargeting
 
 
 class PositionSizer(RiskModule):

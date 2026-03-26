@@ -113,7 +113,7 @@ class OnlineLearner:
         if not self._is_initialized or self.weights is None:
             return np.zeros(x_baked.shape[0])
 
-        return cast(np.ndarray[Any, Any], np.dot(x_baked, self.weights) + self.bias)
+        return cast("np.ndarray[Any, Any]", np.dot(x_baked, self.weights) + self.bias)
 
     @property
     def coefficients(self) -> np.ndarray[Any, Any]:

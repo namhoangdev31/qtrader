@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import polars as pl
+from typing import TYPE_CHECKING
 
 from qtrader.feature.alpha.ic import SignalAnalyzer
+
+if TYPE_CHECKING:
+    import polars as pl
 
 
 class AlphaDecayDetector:

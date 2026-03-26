@@ -14,7 +14,7 @@ logger = StructuredLogger()
 class CoinbaseAdapter(ExchangeAdapter):
     """Coinbase exchange adapter implementing the exchange interface."""
 
-    def __init__(self, api_key: str, api_secret: str, passphrase: str, sandbox: bool = False):
+    def __init__(self, api_key: str, api_secret: str, passphrase: str, sandbox: bool = False) -> None:
         """
         Initialize Coinbase adapter.
 
@@ -61,7 +61,7 @@ class CoinbaseAdapter(ExchangeAdapter):
             
             # Simulate creating a fill event for immediate execution
             # In reality, this would come from the exchange via websocket or polling
-            fill_event = FillEvent(
+            FillEvent(
                 order_id=order_id,
                 symbol=order.symbol,
                 timestamp=datetime.utcnow(),

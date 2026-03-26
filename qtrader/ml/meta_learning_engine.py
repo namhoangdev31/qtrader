@@ -23,7 +23,7 @@ class MetaLearningEngine:
         decay_penalty: float = 0.5,
         min_weight: float = 0.01,
         max_weight: float = 0.50,
-    ):
+    ) -> None:
         """
         Initialize meta-learning engine.
 

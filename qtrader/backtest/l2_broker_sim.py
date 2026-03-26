@@ -216,7 +216,7 @@ class L2BrokerSim:
                     await self._execute_fill(qo, self.best_bid, qo.remaining_qty)
                     self.ask_queue.remove(qo)
 
-    async def _apply_trade_logger.info(
+    async def _apply_trade_info(
         self,
         *,
         trade_price: float,

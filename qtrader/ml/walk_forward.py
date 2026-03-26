@@ -38,7 +38,7 @@ class WalkForwardPipeline:
         while start + self.train_size + self.embargo + self.test_size <= n:
             train_end = start + self.train_size
             test_start = train_end + self.embargo
-            test_end = test_start + self.test_size
+            test_start + self.test_size
 
             train_df = df.slice(start, self.train_size)
             test_df = df.slice(test_start, self.test_size)

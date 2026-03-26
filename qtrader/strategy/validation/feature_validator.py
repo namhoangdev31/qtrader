@@ -9,7 +9,7 @@ from qtrader.core.types import AlphaOutput, ValidatedFeatures
 class FeatureValidator(ABC):
     """Abstract base class for feature validation."""
 
-    def __init__(self, name: str = "FeatureValidator"):
+    def __init__(self, name: str = "FeatureValidator") -> None:
         self.name = name
         self.logger = logger
 
@@ -30,7 +30,7 @@ class FeatureValidator(ABC):
 class SimpleFeatureValidator(FeatureValidator):
     """Simple feature validator that passes through all features."""
 
-    def __init__(self, name: str = "SimpleFeatureValidator"):
+    def __init__(self, name: str = "SimpleFeatureValidator") -> None:
         super().__init__(name)
 
     async def validate(self, alpha_output: AlphaOutput) -> ValidatedFeatures:

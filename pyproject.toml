@@ -19,10 +19,8 @@ dependencies = [
     "shap>=0.45",
     "mlflow>=2.14",
     "scikit-learn>=1.5",
-    "hmmlearn>=0.3",
     "ray[tune]>=2.9",
     "torch>=2.2",
-    "arcticdb>=3.0; (sys_platform != 'linux' or platform_machine != 'aarch64')",
     "asyncpg>=0.29",
     "aiohttp>=3.10",
     "uvloop>=0.20",
@@ -32,14 +30,9 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.0",
     "loguru>=0.7",
-    "opentelemetry-api>=1.25",
-    "streamlit>=1.35",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "statsmodels>=0.14.6",
-    "plotly>=6.6.0",
-    "nbformat>=5.10.4",
-    "nbclient>=0.10.4",
 ]
 
 [project.optional-dependencies]
@@ -70,12 +63,14 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
-ignore = ["COM812", "ISC001"]
+select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF", "ANN", "S", "TCH", "TID"]
+ignore = ["COM812", "ISC001", "ANN101", "ANN102", "ANN401"]
 
 [tool.mypy]
 python_version = "3.10"
 strict = true
+warn_unreachable = true
+show_error_codes = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

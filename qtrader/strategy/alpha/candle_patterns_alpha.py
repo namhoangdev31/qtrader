@@ -13,7 +13,7 @@ class CandleAlphaEngine(AlphaBase):
     This engine maintains a buffer of historical data to compute features on each new tick.
     """
     
-    def __init__(self, name: str = "CandleAlpha", max_history: int = 500):
+    def __init__(self, name: str = "CandleAlpha", max_history: int = 500) -> None:
         super().__init__(name)
         self.max_history = max_history
         # Buffer to store historical data as list of dicts
@@ -141,7 +141,7 @@ class CandleAlphaEngine(AlphaBase):
         breakout_dn = (c < roll_low.shift(1)).cast(pl.Float64)
         # Volume confirmation
         vol_ma = v.rolling_mean(window_size=20, min_periods=1)
-        vol_std = v.rolling_std(window_size=20, min_periods=1)
+        v.rolling_std(window_size=20, min_periods=1)
         vol_ratio = pl.when(vol_ma > 1e-8).then(v / vol_ma).otherwise(1.0)
         breakout_strength = (breakout_up - breakout_dn) * vol_ratio.clip(0.0, 5.0)
         features['breakout_strength'] = self._normalize_series(breakout_strength.fill_null(0.0))
