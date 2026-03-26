@@ -61,6 +61,8 @@ class EventType(str, Enum):
     ATTRIBUTION_ERROR = "ATTRIBUTION_ERROR"
     VENUE_RANKING = "VENUE_RANKING"
     VENUE_ERROR = "VENUE_ERROR"
+    TCA_REPORT = "TCA_REPORT"
+    TCA_REPORT_ERROR = "TCA_REPORT_ERROR"
 
 
 class MarketPayload(BaseModel):
@@ -389,6 +391,27 @@ class VenueErrorPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class TCAReportPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    period_start: int
+    period_end: int
+    avg_shortfall: float
+    avg_slippage: float
+    vwap_diff: float
+    cost_breakdown: dict[str, float]
+    best_venue: str
+    total_cost: float
+    trade_count: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TCAReportErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -686,31 +709,25 @@ class AttributionErrorEvent(BaseEvent):
     payload: AttributionErrorPayload
 
 
-class VenueRankingPayload(BasePayload):
-    """Payload for VenueRankingEvent, containing data about venue performance ranking."""
-    # Add specific fields for venue ranking data here, e.g.,
-    # venue_id: str
-    # rank: int
-    # performance_metric: float
-    pass
-
-
 class VenueRankingEvent(BaseEvent):
     """Event representing the comparative ranking of execution venues."""
     event_type: EventType = EventType.VENUE_RANKING
     payload: VenueRankingPayload
 
 
-class VenueErrorPayload(BasePayload):
-    """Payload for VenueErrorEvent, containing details about a venue-specific execution analysis failure."""
-    # Add specific fields for venue error data here, e.g.,
-    # venue_id: str
-    # error_message: str
-    # error_code: str
-    pass
-
-
 class VenueErrorEvent(BaseEvent):
     """Event representing a failure in venue-specific execution analysis."""
     event_type: EventType = EventType.VENUE_ERROR
     payload: VenueErrorPayload
+
+
+class TCAReportEvent(BaseEvent):
+    """Event representing the global aggregation of TCA metrics."""
+    event_type: EventType = EventType.TCA_REPORT
+    payload: TCAReportPayload
+
+
+class TCAReportErrorEvent(BaseEvent):
+    """Event representing a failure in global TCA report generation."""
+    event_type: EventType = EventType.TCA_REPORT_ERROR
+    payload: TCAReportErrorPayload
