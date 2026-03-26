@@ -63,6 +63,16 @@ class EventType(str, Enum):
     VENUE_ERROR = "VENUE_ERROR"
     TCA_REPORT = "TCA_REPORT"
     TCA_REPORT_ERROR = "TCA_REPORT_ERROR"
+    STRATEGY_STATE = "STRATEGY_STATE"
+    FSM_ERROR = "FSM_ERROR"
+    SANDBOX_REPORT = "SANDBOX_REPORT"
+    SANDBOX_ERROR = "SANDBOX_ERROR"
+    MODEL_RISK_SCORE = "MODEL_RISK_SCORE"
+    RISK_SCORE_ERROR = "RISK_SCORE_ERROR"
+    STRATEGY_APPROVAL = "STRATEGY_APPROVAL"
+    APPROVAL_ERROR = "APPROVAL_ERROR"
+    STRATEGY_KILL = "STRATEGY_KILL"
+    KILL_ERROR = "KILL_ERROR"
 
 
 class MarketPayload(BaseModel):
@@ -412,6 +422,94 @@ class TCAReportErrorPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class StrategyStatePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    old_state: str
+    new_state: str
+    reason: str = "COMMAND_ISSUED"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class FSMErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    entity_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SandboxReportPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    pnl: float
+    drawdown: float
+    sharpe: float
+    status: str
+    trade_count: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SandboxErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ModelRiskScorePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    model_id: str
+    risk_score: float
+    volatility: float
+    drawdown: float
+    stability: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RiskScoreErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    model_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StrategyApprovalPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    approved: bool
+    risk_score: float
+    reason: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StrategyKillPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    reason: str
+    metric: str
+    threshold: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class KillErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -731,3 +829,63 @@ class TCAReportErrorEvent(BaseEvent):
     """Event representing a failure in global TCA report generation."""
     event_type: EventType = EventType.TCA_REPORT_ERROR
     payload: TCAReportErrorPayload
+
+
+class StrategyStateEvent(BaseEvent):
+    """Event representing a transition in strategy lifecycle state."""
+    event_type: EventType = EventType.STRATEGY_STATE
+    payload: StrategyStatePayload
+
+
+class FSMErrorEvent(BaseEvent):
+    """Event representing a failed finite state machine transition."""
+    event_type: EventType = EventType.FSM_ERROR
+    payload: FSMErrorPayload
+
+
+class SandboxReportEvent(BaseEvent):
+    """Event representing the performance report of a sandbox simulation."""
+    event_type: EventType = EventType.SANDBOX_REPORT
+    payload: SandboxReportPayload
+
+
+class SandboxErrorEvent(BaseEvent):
+    """Event representing a failure or crash in the sandbox environment."""
+    event_type: EventType = EventType.SANDBOX_ERROR
+    payload: SandboxErrorPayload
+
+
+class ModelRiskScoreEvent(BaseEvent):
+    """Event representing the quantitative risk score of a trading model."""
+    event_type: EventType = EventType.MODEL_RISK_SCORE
+    payload: ModelRiskScorePayload
+
+
+class RiskScoreErrorEvent(BaseEvent):
+    """Event representing a failure in the model risk scoring pipeline."""
+    event_type: EventType = EventType.RISK_SCORE_ERROR
+    payload: RiskScoreErrorPayload
+
+
+class StrategyApprovalEvent(BaseEvent):
+    """Event representing the formal approval or rejection of a trading strategy."""
+    event_type: EventType = EventType.STRATEGY_APPROVAL
+    payload: StrategyApprovalPayload
+
+
+class ApprovalErrorEvent(BaseEvent):
+    """Event representing a failure in the strategy approval pipeline."""
+    event_type: EventType = EventType.APPROVAL_ERROR
+    payload: ApprovalErrorPayload
+
+
+class StrategyKillEvent(BaseEvent):
+    """Event representing an emergency shutdown of a trading strategy."""
+    event_type: EventType = EventType.STRATEGY_KILL
+    payload: StrategyKillPayload
+
+
+class KillErrorEvent(BaseEvent):
+    """Event representing a failure in the kill switch system."""
+    event_type: EventType = EventType.KILL_ERROR
+    payload: KillErrorPayload
