@@ -18,6 +18,8 @@ from qtrader.core.events import (
     MarketDeltaEvent,
     MarketEvent,
     NAVEvent,
+    DecisionErrorEvent,
+    DecisionTraceEvent,
     LedgerEntryEvent,
     OrderEvent,
     PipelineErrorEvent,
@@ -62,6 +64,8 @@ class EventFactory:
         EventType.RISK_APPROVED: RiskApprovedEvent,
         EventType.RISK_REJECTED: RiskRejectedEvent,
         EventType.PIPELINE_ERROR: PipelineErrorEvent,
+        EventType.DECISION_TRACE: DecisionTraceEvent,
+        EventType.DECISION_ERROR: DecisionErrorEvent,
     }
 
     @classmethod
