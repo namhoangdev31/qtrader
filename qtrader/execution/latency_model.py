@@ -43,8 +43,7 @@ class LatencyModel:
         processing_latency = self.base_processing_latency_ms + random.gauss(0, self.processing_jitter_ms)
         processing_latency = max(0.0, processing_latency)
         total_latency_ms = network_latency + processing_latency
-        # Sleep for the latency duration (convert milliseconds to seconds)
-        await asyncio.sleep(total_latency_ms / 1000.0)
+        # Zero Latency: Simulated delay removed
         return total_latency_ms
 
     def get_latency_statistics(self) -> dict[str, float]:

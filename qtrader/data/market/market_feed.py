@@ -2,24 +2,29 @@ import asyncio
 import logging
 from typing import Any
 
-from qtrader.core.event import MarketDataEvent
-from qtrader.core.trace import TraceManager
-from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
+from qtrader.core.event import EventType, MarketDataEvent
+from qtrader.core.event_bus import EventBus
+from qtrader.data.pipeline.sources.coinbase import CoinbaseConnector
 from qtrader.execution.market_state import MarketStateUpdater
 
 _LOG = logging.getLogger("qtrader.market_feed")
 
 class MarketFeedService:
     """
-    Polls Coinbase Advanced Trade for top-of-book L2 quotes 
-    and feeds them into the UnifiedOMS via MarketStateUpdater.
+    Event-driven MarketFeedService using WebSocket connectors.
+    Eliminates polling and replaces it with real-time stream subscriptions.
     """
     
-    def __init__(self, symbols: list[str], state_updater: MarketStateUpdater, interval_sec: float = 1.0) -> None:
+    def __init__(
+        self, 
+        symbols: list[str], 
+        state_updater: MarketStateUpdater, 
+        event_bus: EventBus | None = None
+    ) -> None:
         self.symbols = symbols
         self.state_updater = state_updater
-        self.interval_sec = interval_sec
-        self.client = CoinbaseMarketDataClient()
+        self.event_bus = event_bus
+        self.connector = CoinbaseConnector(product_ids=symbols)
         self._is_running = False
         self._task: asyncio.Task[Any] | None = None
         
@@ -27,11 +32,13 @@ class MarketFeedService:
         if self._is_running:
             return
         self._is_running = True
-        self._task = asyncio.create_task(self._poll_loop())
-        _LOG.info(f"MarketFeedService started for {self.symbols} at {self.interval_sec}s interval")
+        # Start the WebSocket connector in a background task
+        self._task = asyncio.create_task(self.connector.connect(self._on_market_data))
+        _LOG.info(f"MarketFeedService started for {self.symbols} using WebSocket connector")
         
     async def stop(self) -> None:
         self._is_running = False
+        self.connector.stop()
         if self._task:
             self._task.cancel()
             try:
@@ -40,26 +47,18 @@ class MarketFeedService:
                 pass
         _LOG.info("MarketFeedService stopped")
         
-    async def _poll_loop(self) -> None:
-        while self._is_running:
-            try:
-                # Using Coinbase REST API for polling quotes.
-                bba = self.client.get_best_bid_ask(self.symbols)
-                for sym, quotes in bba.items():
-                    trace_id = TraceManager.generate()
-                    event = MarketDataEvent(
-                        symbol=sym,
-                        trace_id=trace_id,
-                        data={
-                            "bid": quotes["bid"],
-                            "ask": quotes["ask"],
-                            "bid_size": quotes["bid_size"],
-                            "ask_size": quotes["ask_size"],
-                            "venue": "coinbase"  # Matches adapter name
-                        }
-                    )
-                    await self.state_updater.on_market_data(event)
-            except Exception as e:
-                _LOG.error(f"MarketFeed poll error: {e}")
+    async def _on_market_data(self, event: MarketDataEvent) -> None:
+        """Callback for incoming market data from the connector."""
+        if not self._is_running:
+            return
+            
+        try:
+            # Update internal market state
+            await self.state_updater.on_market_data(event)
+            
+            # Publish to global event bus if available
+            if self.event_bus:
+                await self.event_bus.publish(EventType.MARKET_DATA, event)
                 
-            await asyncio.sleep(self.interval_sec)
+        except Exception as e:
+            _LOG.error(f"Error processing market data event: {e}")

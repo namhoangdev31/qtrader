@@ -48,8 +48,8 @@ class BinanceAdapter(ExchangeAdapter):
         # 3. Handle the response and update the order
         # For now, we'll simulate a successful order placement
         try:
-            # Simulate network delay
-            await asyncio.sleep(0.01)
+            # Simulate network delay - Removed for Zero Latency
+            pass
             
             # Generate a Binance order ID
             binance_order_id = f"binance_{int(datetime.utcnow().timestamp() * 1000)}"
@@ -83,7 +83,8 @@ class BinanceAdapter(ExchangeAdapter):
         # 2. Handle the response
         # For now, we'll simulate success
         try:
-            await asyncio.sleep(0.01)
+            # Simulate network delay - Removed for Zero Latency
+            pass
             self.logger.info(f"Order {order_id} cancelled on Binance")
             return True, None
         except Exception as e:

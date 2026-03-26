@@ -96,7 +96,7 @@ class CoinbaseBrokerAdapter:
         )
 
         if self.simulate:
-            await asyncio.sleep(0.1)  # Simulated network latency
+            # Simulated network latency removed for zero latency
             fill = self._simulate_fill(order=order, broker_order_id=broker_oid)
             self._fills.setdefault(broker_oid, []).append(fill)
             self._apply_simulated_position(fill)

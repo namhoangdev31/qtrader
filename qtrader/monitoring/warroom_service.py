@@ -32,17 +32,11 @@ class WarRoomService:
         self._subscribers.append(callback)
 
     async def start(self) -> None:
-        """Start the background processing and update loops."""
+        """Start the background event processing task."""
         self._running = True
-
         process_task = asyncio.create_task(self._process_events())
-        broadcast_task = asyncio.create_task(self._broadcast_loop())
-
         self._tasks.add(process_task)
-        self._tasks.add(broadcast_task)
-
         process_task.add_done_callback(self._tasks.discard)
-        broadcast_task.add_done_callback(self._tasks.discard)
 
     async def stop(self) -> None:
         """Stop all background tasks."""
@@ -58,38 +52,32 @@ class WarRoomService:
     async def _process_events(self) -> None:
         """Background task to process events from the queue."""
         while self._running:
-            event = await self._event_queue.get()
-            event_type = event["type"]
-            data = event["data"]
-
             try:
+                event = await self._event_queue.get()
+                event_type = event["type"]
+                data = event["data"]
+
                 if event_type == "pnl_update":
                     self.aggregator.update_pnl(nav=data["nav"], realized=data.get("realized", 0.0))
                 elif event_type == "latency_record":
                     self.aggregator.record_latency(
                         stage=data["stage"], latency_ms=data["latency_ms"]
                     )
-                # Handle other types like 'risk_limit_violation', etc.
+                
+                # Zero Latency: Update snapshot and broadcast immediately after processing
+                self._latest_snapshot = self.aggregator.get_summary()
+                for subscriber in self._subscribers:
+                    try:
+                        subscriber(self._latest_snapshot)
+                    except Exception as e:
+                        logger.info(f"Subscriber error: {e}")
+
             except (KeyError, TypeError, ValueError) as e:
-                # In production, use loguru to log this error
                 logger.info(f"Error processing event {event_type}: {e}")
             finally:
                 self._event_queue.task_done()
 
-    async def _broadcast_loop(self) -> None:
-        """Periodic task to refresh the dashboard snapshot."""
-        while self._running:
-            self._latest_snapshot = self.aggregator.get_summary()
-            
-            # Notify all registered WebSocket/API subscribers
-            for subscriber in self._subscribers:
-                try:
-                    subscriber(self._latest_snapshot)
-                except Exception as e:
-                    # Log exception safely in production
-                    logger.info(f"Subscriber error: {e}")
-                    
-            await asyncio.sleep(self.update_interval_s)
+    # Redundant broadcast loop removed for event-driven architecture
 
     def get_dashboard_snapshot(self) -> dict[str, Any]:
         """

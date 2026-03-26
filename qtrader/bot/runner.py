@@ -127,10 +127,15 @@ class TradingBot:
 
         self._init_execution_venues()
 
+        self._last_signal_ts: float = 0.0
+        self._last_risk_ts: float = 0.0
+        self._last_rebalance_ts: float = 0.0
+
         self.bus.subscribe(EventType.FILL, self._on_fill)
         self.bus.subscribe(EventType.ORDER, self._on_order)
         self.bus.subscribe(EventType.RISK, self._on_risk_event)
         self.bus.subscribe(EventType.SYSTEM, self._on_system_event)
+        self.bus.subscribe(EventType.MARKET_DATA, self._on_market_tick)
 
     async def _on_fill(self, event: FillEvent) -> None:
         """Handle fill: update OMS and performance."""
@@ -301,191 +306,184 @@ class TradingBot:
             order_id=str(uuid.uuid4()),
         )
 
-    async def _signal_loop(self) -> None:
-        """Every signal_interval_s: fetch data, features, alpha, regime, gates, publish orders."""
-        while self._running and self.state.can_trade():
-            try:
-                # Check and update HFT throttling/safety mode
-                self.hft_optimizer.check_and_update_safety_mode()
+    async def _on_market_tick(self, event: MarketDataEvent) -> None:
+        """Central event handler for market data. Triggers signal, risk, and rebalance logic."""
+        if not self._running or not self.state.can_trade():
+            return
+            
+        current_ts = event.timestamp.timestamp()
+        
+        # 1. RISK CHECK (Immediate and most frequent)
+        if current_ts - self._last_risk_ts >= float(self.config.risk_check_interval_s):
+            await self._check_risk()
+            self._last_risk_ts = current_ts
+            
+        # 2. SIGNAL GENERATION
+        if current_ts - self._last_signal_ts >= float(self.config.signal_interval_s):
+            await self._run_alpha_models(event.symbol)
+            self._last_signal_ts = current_ts
+            
+        # 3. PORTFOLIO REBALANCING
+        if current_ts - self._last_rebalance_ts >= float(self.config.rebalance_interval_s):
+            await self._run_rebalance()
+            self._last_rebalance_ts = current_ts
 
-                # Get adaptive signal interval if HFT mode is enabled
-                signal_interval = self.config.signal_interval_s
-                if self.config.hft_enabled:
-                    adaptive_interval = self.hft_optimizer.get_adaptive_signal_interval(
-                        base_interval=float(self.config.signal_interval_s)
+    async def _run_alpha_models(self, symbol: str) -> None:
+        """Core alpha generation logic (refactored from signal loop)."""
+        try:
+            # Check and update HFT throttling/safety mode
+            self.hft_optimizer.check_and_update_safety_mode()
+
+            # Track market data to alpha latency
+            with self.hft_optimizer.latency_context("market_data_to_alpha"):
+                df = await self._fetch_latest_bars(symbol, n_bars=500)
+
+            if df.height < 50:
+                return
+
+            # Track alpha computation latency
+            with self.hft_optimizer.latency_context("alpha_to_signal"):
+                features = self.feature_engine.compute_latest(df)
+                if features.is_empty():
+                    return
+                full = self.feature_engine.compute(df)
+                if full.is_empty():
+                    return
+                alpha_df = self.alpha_engine.compute_all(full)
+                if alpha_df.is_empty():
+                    return
+                
+                feature_cols = [c for c in self.config.feature_cols if c in alpha_df.columns]
+                if not feature_cols:
+                    return
+                    
+                try:
+                    if not self.regime_detector._is_fitted:
+                        self.regime_detector.fit(alpha_df, feature_cols)
+                    regime_id, confidence = self.regime_detector.current_regime_confidence(
+                        alpha_df, feature_cols
                     )
-                    if adaptive_interval != float(self.config.signal_interval_s):
-                        signal_interval = adaptive_interval
-                        _LOG.debug(
-                            f"Using adaptive signal interval: {signal_interval}s (base: {self.config.signal_interval_s}s)"
+                    if self.regime_detector.is_transitioning(alpha_df, feature_cols):
+                        return
+                except Exception as e:
+                    _LOG.debug("Regime check failed: %s", e)
+                    regime_id, confidence = 0, 0.5
+                    
+                for name in self.alpha_engine.alpha_names:
+                    if name in alpha_df.columns:
+                        self.alpha_combiner.register_alpha(
+                            name,
+                            float(alpha_df[name][-1]),
+                            self.alpha_engine._ic.get(name, 0.0),
                         )
+                composite = self.alpha_combiner.combine()
+                wr = self.performance.win_rate
+                wins = self.performance._fills_df.filter(pl.col("pnl") > 0)["pnl"]
+                losses = self.performance._fills_df.filter(pl.col("pnl") < 0)["pnl"]
+                avg_win = float(wins.mean()) if wins.len() else 1.0
+                avg_loss = abs(float(losses.mean())) if losses.len() else 1.0
+                if avg_win <= 0:
+                    avg_win = 1.0
+                    
+                ev = self.ev_optimizer.compute_trade_ev(
+                    wr, float(avg_win), avg_loss, 10.0, self.config.initial_capital * 0.02
+                )
+                ev_ok = self.ev_optimizer.should_enter(
+                    ev, 10.0 * self.config.initial_capital * 0.02 / 10_000.0
+                )
+                wr_ok = self.win_rate_opt.signal_passes_filter(
+                    composite, confidence, 0.0, 0.0
+                )
+                
+                if ev_ok and wr_ok:
+                    price = float(df["close"][-1]) if "close" in df.columns else 0.0
+                    with self.hft_optimizer.latency_context("signal_to_order"):
+                        order = self._create_order(symbol, composite, regime_id, price)
+                        if order is not None:
+                            await self.bus.publish(order)
+        except Exception as e:
+            _LOG.error("Alpha model execution error", exc_info=e)
+        self._last_heartbeat = time.time()
 
-                for symbol in self.config.symbols:
-                    # Track market data to alpha latency
-                    with self.hft_optimizer.latency_context("market_data_to_alpha"):
-                        df = await self._fetch_latest_bars(symbol, n_bars=500)
-
-                    if df.height < 50:
-                        continue
-
-                    # Track alpha computation latency
-                    with self.hft_optimizer.latency_context("alpha_to_signal"):
-                        features = self.feature_engine.compute_latest(df)
-                        if features.is_empty():
-                            continue
-                        full = self.feature_engine.compute(df)
-                        if full.is_empty():
-                            continue
-                        alpha_df = self.alpha_engine.compute_all(full)
-                        if alpha_df.is_empty():
-                            continue
-                        (
-                            float(alpha_df["composite_alpha"][-1])
-                            if "composite_alpha" in alpha_df.columns
-                            else 0.0
-                        )
-                        feature_cols = [
-                            c for c in self.config.feature_cols if c in alpha_df.columns
-                        ]
-                        if not feature_cols:
-                            continue
-                        try:
-                            if not self.regime_detector._is_fitted:
-                                self.regime_detector.fit(alpha_df, feature_cols)
-                            regime_id, confidence = self.regime_detector.current_regime_confidence(
-                                alpha_df, feature_cols
-                            )
-                            if self.regime_detector.is_transitioning(alpha_df, feature_cols):
-                                continue
-                        except Exception as e:
-                            _LOG.debug("Regime check failed: %s", e)
-                            regime_id, confidence = 0, 0.5
-                        for name in self.alpha_engine.alpha_names:
-                            if name in alpha_df.columns:
-                                self.alpha_combiner.register_alpha(
-                                    name,
-                                    float(alpha_df[name][-1]),
-                                    self.alpha_engine._ic.get(name, 0.0),
-                                )
-                        composite = self.alpha_combiner.combine()
-                        wr = self.performance.win_rate
-                        wins = self.performance._fills_df.filter(pl.col("pnl") > 0)["pnl"]
-                        losses = self.performance._fills_df.filter(pl.col("pnl") < 0)["pnl"]
-                        avg_win = float(wins.mean()) if wins.len() else 1.0
-                        avg_loss = abs(float(losses.mean())) if losses.len() else 1.0
-                        if avg_win <= 0:
-                            avg_win = 1.0
-                        ev = self.ev_optimizer.compute_trade_ev(
-                            wr, float(avg_win), avg_loss, 10.0, self.config.initial_capital * 0.02
-                        )
-                        ev_ok = self.ev_optimizer.should_enter(
-                            ev, 10.0 * self.config.initial_capital * 0.02 / 10_000.0
-                        )
-                        wr_ok = self.win_rate_opt.signal_passes_filter(
-                            composite, confidence, 0.0, 0.0
-                        )
-                        if ev_ok and wr_ok:
-                            price = float(df["close"][-1]) if "close" in df.columns else 0.0
-                            # Track signal to order latency
-                            with self.hft_optimizer.latency_context("signal_to_order"):
-                                order = self._create_order(symbol, composite, regime_id, price)
-                                if order is not None:
-                                    await self.bus.publish(order)
-                                    # Track order to fill latency (will be updated when fill arrives)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                _LOG.error("Signal loop error", exc_info=e)
-            self._last_heartbeat = time.time()
-            await asyncio.sleep(signal_interval)
-
-    async def _rebalance_loop(self) -> None:
-        """Every rebalance_interval_s: get positions, optimizer weights, vol target, rebalance orders."""
-        while self._running and self.state.can_trade():
-            try:
-                returns_df = await self._fetch_returns_matrix(lookback_days=60)
-                if returns_df is None:
-                    await asyncio.sleep(float(self.config.rebalance_interval_s))
+    async def _run_rebalance(self) -> None:
+        """Core rebalancing logic (refactored from rebalance loop)."""
+        try:
+            returns_df = await self._fetch_returns_matrix(lookback_days=60)
+            if returns_df is None:
+                return
+            symbols_present = [c for c in returns_df.columns if c in self.config.symbols]
+            if not symbols_present:
+                return
+                
+            weights = self.portfolio_optimizer.optimize(returns_df)
+            if not weights:
+                weights = {s: 1.0 / len(symbols_present) for s in symbols_present}
+                
+            positions_df = self.oms.position_manager.get_all_positions()
+            current_prices: dict[str, float] = {}
+            for sym in self.config.symbols:
+                pos = self.oms.position_manager.get_position(sym)
+                if pos and pos.qty != 0:
+                    current_prices[sym] = pos.avg_cost
+                    
+            equity = self.performance.initial_capital
+            if self.performance._fills_df.height > 0:
+                equity = float(self.performance.equity_curve[-1])
+                
+            for symbol in symbols_present:
+                w = weights.get(symbol, 0.0)
+                if w <= 0:
                     continue
-                symbols_present = [c for c in returns_df.columns if c in self.config.symbols]
-                if not symbols_present:
-                    await asyncio.sleep(float(self.config.rebalance_interval_s))
+                vol = float(returns_df[symbol].std()) if symbol in returns_df.columns else 0.01
+                target_val = self.vol_sizer.size(symbol, vol, equity)
+                price = current_prices.get(symbol, 100.0)
+                target_qty = target_val / price if price and price > 0 else 0.0
+                current_qty = 0.0
+                if not positions_df.is_empty() and "symbol" in positions_df.columns:
+                    row = positions_df.filter(pl.col("symbol") == symbol)
+                    if row.height > 0:
+                        current_qty = float(row["qty"][0])
+                diff = target_qty - current_qty
+                if abs(diff) < 1e-6:
                     continue
-                weights = self.portfolio_optimizer.optimize(returns_df)
-                if not weights:
-                    weights = {s: 1.0 / len(symbols_present) for s in symbols_present}
-                positions_df = self.oms.position_manager.get_all_positions()
-                current_prices: dict[str, float] = {}
-                for sym in self.config.symbols:
-                    pos = self.oms.position_manager.get_position(sym)
-                    if pos and pos.qty != 0:
-                        current_prices[sym] = pos.avg_cost
-                equity = self.performance.initial_capital
-                if self.performance._fills_df.height > 0:
-                    equity = float(self.performance.equity_curve[-1])
-                for symbol in symbols_present:
-                    w = weights.get(symbol, 0.0)
-                    if w <= 0:
-                        continue
-                    vol = float(returns_df[symbol].std()) if symbol in returns_df.columns else 0.01
-                    target_val = self.vol_sizer.size(symbol, vol, equity)
-                    price = current_prices.get(symbol, 100.0)
-                    target_qty = target_val / price if price and price > 0 else 0.0
-                    current_qty = 0.0
-                    if not positions_df.is_empty() and "symbol" in positions_df.columns:
-                        row = positions_df.filter(pl.col("symbol") == symbol)
-                        if row.height > 0:
-                            current_qty = float(row["qty"][0])
-                    diff = target_qty - current_qty
-                    if abs(diff) < 1e-6:
-                        continue
-                    side = "BUY" if diff > 0 else "SELL"
-                    order = OrderEvent(
-                        type=EventType.ORDER,
-                        symbol=symbol,
-                        order_type="MARKET",
-                        quantity=abs(diff),
-                        price=None,
-                        side=side,
-                        order_id=str(uuid.uuid4()),
-                    )
-                    await self.bus.publish(order)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                _LOG.error("Rebalance loop error", exc_info=e)
-            self._last_heartbeat = time.time()
-            await asyncio.sleep(float(self.config.rebalance_interval_s))
+                side = "BUY" if diff > 0 else "SELL"
+                order = OrderEvent(
+                    type=EventType.ORDER,
+                    symbol=symbol,
+                    order_type="MARKET",
+                    quantity=abs(diff),
+                    price=None,
+                    side=side,
+                    order_id=str(uuid.uuid4()),
+                )
+                await self.bus.publish(order)
+        except Exception as e:
+            _LOG.error("Rebalance execution error", exc_info=e)
+        self._last_heartbeat = time.time()
 
     async def start(self) -> None:
         """Start the bot: transition to WARMING_UP then TRADING and run loops."""
         if self._running:
             return
         self._running = True
-        self.state.transition(BotState.WARMING_UP, "start")
-        await asyncio.sleep(0)
+        self.state.transition(BotState.TRADING, "warmup complete")
         self.state.transition(BotState.TRADING, "warmup complete")
         self._last_heartbeat = time.time()
         self._tasks = [
             asyncio.create_task(self.bus.start()),
-            asyncio.create_task(self._signal_loop()),
-            asyncio.create_task(self._risk_loop()),
-            asyncio.create_task(self._rebalance_loop()),
         ]
         _LOG.info("TradingBot started; state=%s", self.state.state.value)
 
-    async def _risk_loop(self) -> None:
-        """Every risk_check_interval_s: check limits, halt if breach."""
-        while self._running and self.state.can_trade():
-            self._last_heartbeat = time.time()
-            breaches = self.risk_engine.check_all_limits()
-            if breaches:
-                _LOG.warning("Risk breach: %s", [b.reason for b in breaches])
-                try:
-                    self.state.transition(BotState.RISK_HALTED, breaches[0].reason)
-                except ValueError:
-                    pass
-            await asyncio.sleep(float(self.config.risk_check_interval_s))
+    async def _check_risk(self) -> None:
+        """Check all risk limits (refactored from risk loop)."""
+        breaches = self.risk_engine.check_all_limits()
+        if breaches:
+            _LOG.warning("Risk breach: %s", [b.reason for b in breaches])
+            try:
+                self.state.transition(BotState.RISK_HALTED, breaches[0].reason)
+            except ValueError:
+                pass
+        self._last_heartbeat = time.time()
 
     async def emergency_shutdown(self, reason: str) -> None:
         """Cancel all orders, flatten positions, persist state, exit."""
@@ -500,9 +498,8 @@ class TradingBot:
             t.cancel()
         try:
             await asyncio.gather(*self._tasks, return_exceptions=True)
-        except Exception:
-            pass
-        # Close broker sessions if supported
+        except Exception as e:
+            _LOG.error(f"Error during task cleanup: {e}")
         for adapter in self.oms.adapters.values():
             close = getattr(adapter, "close", None)
             if callable(close):
@@ -526,8 +523,9 @@ def _run_bot(config_path: str) -> None:
     async def main() -> None:
         await bot.start()
         try:
-            while True:
-                await asyncio.sleep(1)
+            # Main blocking wait - NO SLEEP
+            stop_event = asyncio.Event()
+            await stop_event.wait()
         except asyncio.CancelledError:
             pass
 

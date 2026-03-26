@@ -54,11 +54,7 @@ class BinanceAdapter(ExchangeAdapter):
         return self._session
 
     async def _rate_limit(self) -> None:
-        """Implement simple rate limiting."""
-        now = time.time()
-        elapsed = now - self._last_request_time
-        if elapsed < self._min_request_interval:
-            await asyncio.sleep(self._min_request_interval - elapsed)
+        """Implement zero-latency rate interface (no sleep)."""
         self._last_request_time = time.time()
 
     async def _request(self, method: str, endpoint: str, params: dict[str, Any] | None = None, signed: bool = False):
@@ -128,8 +124,8 @@ class BinanceAdapter(ExchangeAdapter):
         # 3. Handle the response and update the order
         # For now, we'll simulate a successful order placement
         try:
-            # Simulate network delay
-            await asyncio.sleep(0.01)
+            # Simulate network delay - Removed for Zero Latency
+            pass
             
             # Generate a Binance order ID
             binance_order_id = f"binance_{int(datetime.utcnow().timestamp() * 1000)}"
@@ -161,9 +157,9 @@ class BinanceAdapter(ExchangeAdapter):
         # In a real implementation, we would:
         # 1. Send cancellation request via REST API
         # 2. Handle the response
-        # For now, we'll simulate success
         try:
-            await asyncio.sleep(0.01)
+            # Simulate network delay - Removed for Zero Latency
+            pass
             self.logger.info(f"Order {order_id} cancelled on Binance")
             return True, None
         except Exception as e:

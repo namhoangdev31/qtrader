@@ -171,32 +171,29 @@ class LiveMonitor:
         logger.debug("Monitor cycle complete: %s", report)
         return report
 
-    async def start(self, interval_s: int = 300) -> None:
-        """Continuous monitoring loop with cancellation safety.
+    async def on_event(self, event: Any) -> None:
+        """Trigger a monitoring cycle on fill or signal events (zero latency)."""
+        try:
+            # Throttle if needed based on real-time frequency, but for safety monitor every fill
+            # or use a simple timestamp check
+            current_ts = datetime.utcnow()
+            if hasattr(self, "_last_run_ts") and (current_ts - self._last_run_ts).total_seconds() < 60:
+                return
+                
+            feature_snapshot = await self._fetch_live_features()
+            report = await self.run_cycle(feature_snapshot)
+            
+            if report.has_critical_alerts:
+                alert_msg = report.critical_alerts[0]
+                logger.warning("Publishing EMERGENCY_HALT: %s", alert_msg)
+                await self.bus.publish(
+                    SystemEvent(action="EMERGENCY_HALT", reason=alert_msg)
+                )
+            self._last_run_ts = current_ts
+        except Exception as e:
+            logger.error("Monitor cycle error", exc_info=e)
 
-        Args:
-            interval_s: Seconds between monitoring cycles.
-        """
-        logger.info("Starting live monitor with interval %ds", interval_s)
-        while True:
-            try:
-                # In a real system, we would fetch live features from the datalake or feature store.
-                # For now, we pass an empty DataFrame and rely on the drift monitor to handle it.
-                # The user must override _fetch_live_features or pass a feature snapshot.
-                feature_snapshot = await self._fetch_live_features()
-                report = await self.run_cycle(feature_snapshot)
-                if report.has_critical_alerts:
-                    alert_msg = report.critical_alerts[0]
-                    logger.warning("Publishing EMERGENCY_HALT: %s", alert_msg)
-                    await self.bus.publish(
-                        SystemEvent(action="EMERGENCY_HALT", reason=alert_msg)
-                    )
-            except asyncio.CancelledError:
-                logger.info("Live monitor cancelled")
-                raise
-            except Exception as e:
-                logger.error("Monitor cycle error", exc_info=e)
-            await asyncio.sleep(interval_s)
+    # loop/sleep start method removed in favor of event-driven on_event
 
     async def _fetch_live_features(self) -> Any:
         """Fetch the latest live features for drift detection.

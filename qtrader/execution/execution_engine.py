@@ -299,9 +299,9 @@ class ExecutionEngine:
         self.avg_price_tracker: dict[str, tuple[Decimal, Decimal]] = {}  # symbol -> (total_cost, total_quantity)
         
         # Background tasks
-        self._processing_task: asyncio.Task | None = None
-        self._failover_processor_task: asyncio.Task | None = None
         self._is_running = False
+        self._failover_processor_task: asyncio.Task | None = None
+        self._event_bus: Any | None = None
     
     async def start(self) -> None:
         """Start the execution engine background tasks."""
@@ -309,7 +309,6 @@ class ExecutionEngine:
             return
         
         self._is_running = True
-        self._processing_task = asyncio.create_task(self._process_order_queue())
         if self.enable_failover_queue:
             self._failover_processor_task = asyncio.create_task(self._process_failover_queue())
         self.logger.info("ExecutionEngine started")
@@ -317,12 +316,6 @@ class ExecutionEngine:
     async def stop(self) -> None:
         """Stop the execution engine background tasks."""
         self._is_running = False
-        if self._processing_task:
-            self._processing_task.cancel()
-            try:
-                await self._processing_task
-            except asyncio.CancelledError:
-                pass
         if self._failover_processor_task:
             self._failover_processor_task.cancel()
             try:
@@ -347,7 +340,7 @@ class ExecutionEngine:
             self.logger.warning(f"Order validation failed: {validation_error}")
             return False, None
         
-        # Attempt to send order with retries
+        # Attempt to send order with retries (Immediate retry for zero-latency)
         for attempt in range(self.max_retry_attempts + 1):
             try:
                 success, result = await self.exchange_adapter.send_order(order)
@@ -367,36 +360,24 @@ class ExecutionEngine:
                         fill_event = await asyncio.wait_for(future, timeout=timeout)
                         return True, fill_event
                     except asyncio.TimeoutError:
-                        # If timeout, we might still have a pending order
-                        # For simulation, we can check if it's filled now
-                        if isinstance(self.exchange_adapter, SimulatedExchangeAdapter):
-                            # In simulation, we might need to trigger fill checking
-                            # This is a simplification; in reality, we'd have event listeners
-                            pass
-                        # Return the order ID as pending? We'll treat timeout as failure for now
-                        # In a real system, we'd have a separate mechanism to check order status
+                        # If timeout, we treat as failure for now
                         return False, None
                 # Send failed
                 elif attempt < self.max_retry_attempts:
-                    delay = self.retry_delay_base * (2 ** attempt)  # Exponential backoff
-                    self.logger.warning(f"Order send failed (attempt {attempt+1}), retrying in {delay}s: {result}")
-                    await asyncio.sleep(delay)
+                    self.logger.warning(f"Order send failed (attempt {attempt+1}), retrying immediately: {result}")
                 else:
                     self.logger.error(f"Order send failed after {self.max_retry_attempts+1} attempts: {result}")
                     # If failover queue is enabled, add to queue
                     if self.enable_failover_queue and self.failover_queue is not None:
                         await self.failover_queue.put((order, datetime.utcnow()))
-                        return False, None
                     return False, None
             except Exception as e:
                 self.logger.error(f"Unexpected error executing order (attempt {attempt+1}): {e}", exc_info=True)
                 if attempt < self.max_retry_attempts:
-                    delay = self.retry_delay_base * (2 ** attempt)
-                    await asyncio.sleep(delay)
+                    pass # Retry immediately
                 else:
                     if self.enable_failover_queue and self.failover_queue is not None:
                         await self.failover_queue.put((order, datetime.utcnow()))
-                        return False, None
                     return False, None
         
         return False, None
@@ -460,72 +441,32 @@ class ExecutionEngine:
         
         return None
     
-    async def _process_order_queue(self) -> None:
-        """Background task to process order fills and update position tracking."""
-        while self._is_running:
-            try:
-                # In a real system, we would listen to exchange fill events via websockets or polling
-                # For this implementation, we'll simulate by checking for fills in the exchange adapter
-                # if it's a simulated exchange, or we'd have a callback mechanism.
-                #
-                # Since we don't have a generic way to get fills from the exchange adapter,
-                # we'll rely on the order futures being set by the exchange adapter's send_order
-                # in the case of immediate fills (like market orders in simulation).
-                #
-                # For limit orders, we would need a separate mechanism. For simplicity in this
-                # implementation, we'll assume that the exchange adapter has a way to notify
-                # of fills (e.g., via a callback or by polling). However, to keep the adapter
-                # interface simple, we'll handle simulation-specific logic in the simulated adapter.
-                #
-                # For now, we'll just sleep and let the execution_engine's execute_order method
-                # handle waiting for fills via the future mechanism.
-                #
-                # In a production system, this task would handle:
-                # - Listening to exchange fill streams
-                # - Updating order status
-                # - Triggering futures when orders fill
-                # - Updating position tracking
-                #
-                # We'll implement a simple version that works with the simulated exchange by
-                # periodically checking for limit order fills.
-                
-                await asyncio.sleep(0.1)  # Check every 100ms
-                
-                # If we have a simulated exchange, check for limit order fills
-                if isinstance(self.exchange_adapter, SimulatedExchangeAdapter):
-                    # We would need current prices to check limit orders
-                    # In a real system, we'd get this from market data feed
-                    # For now, we'll skip this and rely on the caller to trigger fill checks
-                    # via a separate method (not ideal, but keeps the example focused)
-                    pass
-                
-            except Exception as e:
-                self.logger.error(f"Error in order processing loop: {e}", exc_info=True)
-                await asyncio.sleep(1.0)  # Avoid tight loop on error
+    # Redundant loop removed for event-driven architecture
     
     async def _process_failover_queue(self) -> None:
         """Background task to process orders from the failover queue."""
+        if not self.failover_queue:
+            return
+            
         while self._is_running:
             try:
-                # Get order from queue with timeout to allow checking _is_running
-                try:
-                    order, _timestamp = await asyncio.wait_for(self.failover_queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
+                # Blocking wait on the queue - NO POLLING / NO SLEEP / NO TIMEOUT
+                order, _timestamp = await self.failover_queue.get()
                 
                 self.logger.info(f"Processing order from failover queue: {order.symbol} {order.side} {order.quantity}")
                 
                 # Try to execute the order
                 success, result = await self.execute_order(order)
                 if not success:
-                    # If it fails again, put it back in the queue (with a limit to avoid infinite loops)
-                    # For simplicity, we'll just log and drop it; in reality, you'd have a retry limit
+                    # If it fails again, we log and discard to avoid tight loop or use a secondary handler
                     self.logger.warning(f"Failed to execute order from failover queue: {result}")
-                # If successful, nothing more to do
                 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.logger.error(f"Error in failover processing loop: {e}", exc_info=True)
-                await asyncio.sleep(1.0)
+                # Yield to other tasks - Removed for Zero Latency
+                pass
     
     # Methods to be called by the exchange adapter or market data feed to update order status
     def _on_order_filled(self, order_id: str, fill_event: FillEvent) -> None:
