@@ -55,3 +55,40 @@ class SafetyLayer:
         self.is_halted = True
         if oms:
             await oms.cancel_all_orders()
+
+
+class ShadowEnforcer:
+    """[SHADOW_ENFORCEMENT] Safety gate that requires 7 days of verified shadow performance."""
+
+    def __init__(self, shadow_data_path: str = "data_lake/shadow") -> None:
+        self.shadow_data_path = shadow_data_path
+        self.required_shadow_days = 7
+
+    def verify_history(self) -> bool:
+        """Validate if the current strategy has at least 7 days of shadow history."""
+        import os
+        from glob import glob
+        
+        if not os.path.exists(self.shadow_data_path):
+            return False
+            
+        # Count unique dates from shadow_fills_YYYYMMDD.jsonl
+        pattern = os.path.join(self.shadow_data_path, "shadow_fills_*.jsonl")
+        fill_files = glob(pattern)
+        
+        # Extract unique dates from filenames
+        unique_days = set()
+        for f in fill_files:
+            # name = "shadow_fills_20240101.jsonl"
+            basename = os.path.basename(f)
+            parts = basename.replace(".jsonl", "").split("_")
+            if len(parts) >= 3:
+                unique_days.add(parts[2])
+                
+        count = len(unique_days)
+        if count < self.required_shadow_days:
+            logging.error(f"SHADOW_ENFORCEMENT | Strategy REJECTED: Only {count}/{self.required_shadow_days} shadow days found.")
+            return False
+            
+        logging.info(f"SHADOW_ENFORCEMENT | Verified strategy for live trading ({count} shadow days).")
+        return True

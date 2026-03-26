@@ -519,7 +519,18 @@ class TradingBot:
         if self._running:
             return
         self._running = True
-        self.state.transition(BotState.TRADING, "warmup complete")
+        
+        # [SHADOW_ENFORCEMENT]: Verify 7-day shadow performance before live TRADING
+        from qtrader.execution.safety import ShadowEnforcer
+        enforcer = ShadowEnforcer(
+            shadow_data_path=getattr(self.config, "shadow_data_path", "data_lake/shadow")
+        )
+        if not enforcer.verify_history():
+            reason = "SHADOW_ENFORCEMENT breach: 7-day minimum shadow performance required"
+            _logger.critical(reason)
+            self.state.transition(BotState.EMERGENCY, reason)
+            return
+
         self.state.transition(BotState.TRADING, "warmup complete")
         self._last_heartbeat = time.time()
         self._tasks = [
