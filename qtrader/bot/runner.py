@@ -296,11 +296,19 @@ class TradingBot:
         regime_id: int,
         price: float,
     ) -> OrderEvent | None:
-        """Build OrderEvent from composite signal and current price."""
+        """Build OrderEvent from composite signal and current price with fallback protection."""
         if composite_signal == 0.0:
             return None
         side = "BUY" if composite_signal > 0 else "SELL"
+        
+        # Base notional from capital allocator
         notional = self.config.initial_capital * 0.02
+        
+        # [FALLBACK_STRATEGY]: Reduce exposure by 50% if system is in fallback mode
+        if self.state.is_fallback():
+            _logger.warning("FALLBACK_STRATEGY: Reducing order size by 50%", symbol=symbol)
+            notional *= 0.5
+            
         qty = notional / price if price and price > 0 else 0.0
         if qty <= 0:
             return None

@@ -18,6 +18,7 @@ class BotState(str, Enum):
     TRADING = "trading"
     RISK_HALTED = "risk_halted"
     RETRAINING = "retraining"
+    FALLBACK = "fallback"
     SHUTTING_DOWN = "shutting_down"
     EMERGENCY = "emergency"
 
@@ -26,16 +27,36 @@ class StateMachine:
     """State machine for bot lifecycle with enforced transitions."""
 
     ALLOWED_TRANSITIONS: dict[BotState, list[BotState]] = {
-        BotState.INITIALIZING: [BotState.WARMING_UP],
-        BotState.WARMING_UP: [BotState.TRADING, BotState.EMERGENCY],
+        BotState.INITIALIZING: [BotState.WARMING_UP, BotState.EMERGENCY],
+        BotState.WARMING_UP: [
+            BotState.TRADING,
+            BotState.FALLBACK,
+            BotState.EMERGENCY,
+        ],
         BotState.TRADING: [
             BotState.RISK_HALTED,
             BotState.RETRAINING,
+            BotState.FALLBACK,
             BotState.SHUTTING_DOWN,
             BotState.EMERGENCY,
         ],
-        BotState.RISK_HALTED: [BotState.TRADING, BotState.SHUTTING_DOWN, BotState.EMERGENCY],
-        BotState.RETRAINING: [BotState.TRADING, BotState.EMERGENCY],
+        BotState.RISK_HALTED: [
+            BotState.TRADING,
+            BotState.FALLBACK,
+            BotState.SHUTTING_DOWN,
+            BotState.EMERGENCY,
+        ],
+        BotState.RETRAINING: [
+            BotState.TRADING,
+            BotState.FALLBACK,
+            BotState.EMERGENCY,
+        ],
+        BotState.FALLBACK: [
+            BotState.TRADING,
+            BotState.RISK_HALTED,
+            BotState.SHUTTING_DOWN,
+            BotState.EMERGENCY,
+        ],
         BotState.SHUTTING_DOWN: [],
         BotState.EMERGENCY: [],
     }
@@ -70,8 +91,12 @@ class StateMachine:
         self._reason = reason
 
     def can_trade(self) -> bool:
-        """Return True only when state is TRADING."""
-        return self._state == BotState.TRADING
+        """Return True when state is TRADING or FALLBACK."""
+        return self._state in (BotState.TRADING, BotState.FALLBACK)
+
+    def is_fallback(self) -> bool:
+        """Return True only when state is FALLBACK."""
+        return self._state == BotState.FALLBACK
 
 
 """
