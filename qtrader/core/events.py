@@ -36,6 +36,13 @@ class EventType(str, Enum):
     FEED_EVENT = "FEED_EVENT"
     RETRY_ORDER = "RETRY_ORDER"
     FEEDBACK_UPDATE = "FEEDBACK_UPDATE"
+    NAV_UPDATED = "NAV_UPDATED"
+    LEDGER_ENTRY = "LEDGER_ENTRY"
+    FEE_CALCULATED = "FEE_CALCULATED"
+    FUNDING_CALCULATED = "FUNDING_CALCULATED"
+    CONFIG_CHANGED = "CONFIG_CHANGED"
+    RISK_APPROVED = "RISK_APPROVED"
+    RISK_REJECTED = "RISK_REJECTED"
 
 
 class MarketPayload(BaseModel):
@@ -153,6 +160,68 @@ class RetryOrderPayload(BaseModel):
     attempt: int
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+class NAVPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    nav: float
+    cash: float
+    realized_pnl: float
+    unrealized_pnl: float
+    total_fees: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class LedgerEntryPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    account_id: str
+    debit: float
+    credit: float
+    currency: str = "USD"
+    description: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class FeePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    order_id: str
+    symbol: str
+    fee_amount: float
+    currency: str = "USD"
+    fee_type: str = "TAKER"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class FundingPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    symbol: str
+    position_size: float
+    funding_rate: float
+    funding_amount: float
+    mark_price: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConfigChangePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    config_key: str
+    old_value: Any
+    new_value: Any
+    version: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RiskApprovedPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    order_id: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RiskRejectedPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    order_id: str
+    reason: str
+    metric_value: float
+    threshold: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 class BaseEvent(BaseModel):
     """
@@ -171,6 +240,11 @@ class BaseEvent(BaseModel):
     )
     source: str = Field(description="Originating module name")
     payload: Any = Field(description="Event-specific data (BaseModel or dict)")
+    
+    # Metadata for distributed event bus and storage
+    partition_key: str | None = Field(default=None, description="Key used for deterministic routing")
+    delivery_attempt: int = Field(default=1, description="Number of times this event has been attempted")
+    offset: int | None = Field(default=None, description="Monotonically increasing sequence ID per partition")
 
     @property
     def type(self) -> EventType:
@@ -312,3 +386,45 @@ class GapFreeMarketEvent(BaseEvent):
 class ClockSyncEvent(BaseEvent):
     event_type: EventType = EventType.CLOCK_SYNC
     payload: ClockSyncPayload
+
+
+class NAVEvent(BaseEvent):
+    """Event representing a portfolio NAV update."""
+    event_type: EventType = EventType.NAV_UPDATED
+    payload: NAVPayload
+
+
+class LedgerEntryEvent(BaseEvent):
+    """Event representing a double-entry ledger record."""
+    event_type: EventType = EventType.LEDGER_ENTRY
+    payload: LedgerEntryPayload
+
+
+class FeeEvent(BaseEvent):
+    """Event representing a trading fee calculation."""
+    event_type: EventType = EventType.FEE_CALCULATED
+    payload: FeePayload
+
+
+class FundingEvent(BaseEvent):
+    """Event representing a funding rate payment."""
+    event_type: EventType = EventType.FUNDING_CALCULATED
+    payload: FundingPayload
+
+
+class ConfigChangeEvent(BaseEvent):
+    """Event representing a runtime configuration update."""
+    event_type: EventType = EventType.CONFIG_CHANGED
+    payload: ConfigChangePayload
+
+
+class RiskApprovedEvent(BaseEvent):
+    """Event representing a risk approval for an order."""
+    event_type: EventType = EventType.RISK_APPROVED
+    payload: RiskApprovedPayload
+
+
+class RiskRejectedEvent(BaseEvent):
+    """Event representing a risk rejection for an order."""
+    event_type: EventType = EventType.RISK_REJECTED
+    payload: RiskRejectedPayload

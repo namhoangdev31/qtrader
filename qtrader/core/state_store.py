@@ -59,6 +59,8 @@ class SystemState:
     last_approved_risk_metrics: dict[str, Any] = field(default_factory=dict)
     current_risk_multiplier: Decimal = Decimal('1.0')
     last_signal_timestamp: datetime | None = None
+    cash: Decimal = Decimal('0')
+    total_fees: Decimal = Decimal('0')
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -253,3 +255,27 @@ class StateStore:
         # Since version is just an integer and we are incrementing by 1, and reading an integer
         # is atomic, it's safe. We'll do without lock for version.
         return self._state.version
+
+    async def get_cash(self) -> Decimal:
+        """Get the current cash balance."""
+        async with self._lock:
+            return self._state.cash
+
+    async def set_cash(self, cash: Decimal) -> None:
+        """Set the current cash balance."""
+        async with self._lock:
+            self._state.cash = cash
+            self._state.version += 1
+            self._state.timestamp = datetime.utcnow()
+
+    async def get_total_fees(self) -> Decimal:
+        """Get the cumulative total fees."""
+        async with self._lock:
+            return self._state.total_fees
+
+    async def set_total_fees(self, fees: Decimal) -> None:
+        """Set the cumulative total fees."""
+        async with self._lock:
+            self._state.total_fees = fees
+            self._state.version += 1
+            self._state.timestamp = datetime.utcnow()
