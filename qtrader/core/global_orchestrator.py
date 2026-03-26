@@ -49,6 +49,9 @@ class GlobalOrchestrator:
         self._orchestrators[name] = orchestrator
         logger.info(f"Registered orchestrator: {name}")
 
+    from qtrader.security.rbac import rbac_required, Permission
+
+    @rbac_required(Permission.MANAGE)
     def set_fund_mode(self, mode: Literal["LIVE", "SHADOW", "BACKTEST"]) -> None:
         """Synchronize mode across all portfolios."""
         self._mode = FundMode(mode)
@@ -56,6 +59,7 @@ class GlobalOrchestrator:
         # In a real system, we would update child orchestrator configs here
         # For now, we propagate it to any child that supports it
 
+    @rbac_required(Permission.MANAGE)
     async def engage_global_kill_switch(self, reason: str) -> None:
         """Halt ALL trading activity immediately across all orchestrators."""
         self._kill_switch_active = True
@@ -75,6 +79,7 @@ class GlobalOrchestrator:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    @rbac_required(Permission.MANAGE)
     async def run_fund_allocation(self, strategy_returns: pl.DataFrame | None = None) -> None:
         """Re-allocate capital across all registered orchestrators."""
         if not self._orchestrators:
@@ -109,6 +114,7 @@ class GlobalOrchestrator:
                         f"risk multiplier to {multiplier:.2f}"
                     )
 
+    @rbac_required(Permission.READ)
     async def get_total_fund_risk(self) -> dict[str, Any]:
         """Aggregate positions and calculate total fund factor risk."""
         total_positions: dict[str, float] = {}

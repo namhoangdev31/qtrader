@@ -66,8 +66,13 @@ class ShadowEngine:
         # Internal state
         self.recent_signals: dict[str, SignalEvent] = {}
         self.recent_shadow_fills: dict[str, ShadowFillEvent] = {}
+        self.shadow_positions: dict[str, Decimal] = {}
+        self.shadow_cost_basis: dict[str, Decimal] = {}
+        
         self.metrics = {
             "shadow_pnl": 0.0,
+            "shadow_realized_pnl": 0.0,
+            "shadow_unrealized_pnl": 0.0,
             "slippage_diff": 0.0,
             "execution_error": 0.0
         }
@@ -170,6 +175,49 @@ class ShadowEngine:
         for signal_id, signal in signals_to_process:
             await self._simulate_and_record(signal_id, signal, orderbook)
 
+        # [SHADOW_PNL_ENGINE]: Recalculate unrealized PnL for all active positions
+        unrealized = 0.0
+        best_bid = orderbook['bids'][0][0] if orderbook['bids'] else Decimal('0')
+        best_ask = orderbook['asks'][0][0] if orderbook['asks'] else Decimal('0')
+        mid_price = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else Decimal('0')
+
+        if mid_price > 0:
+            for symbol, qty in self.shadow_positions.items():
+                if qty == 0: continue
+                avg_cost = self.shadow_cost_basis.get(symbol, Decimal('0'))
+                unrealized += float(qty) * (float(mid_price) - float(avg_cost))
+        
+        self.metrics["shadow_unrealized_pnl"] = unrealized
+        self.metrics["shadow_pnl"] = self.metrics["shadow_realized_pnl"] + unrealized
+
+    def _update_shadow_inventory(self, fill: ShadowFillEvent) -> None:
+        """Update shadow inventory and compute realized PnL increment."""
+        symbol = fill.symbol
+        qty = Decimal(str(fill.quantity)) if fill.side == "BUY" else -Decimal(str(fill.quantity))
+        price = fill.fill_price
+        
+        current_qty = self.shadow_positions.get(symbol, Decimal('0'))
+        
+        # Realized PnL logic (LIFO or Average Cost-base reduction)
+        # If we are reducing exposure, calculate the delta PnL
+        if (current_qty * qty) < 0:
+            avg_cost = self.shadow_cost_basis.get(symbol, Decimal('0'))
+            close_qty = min(abs(current_qty), abs(qty))
+            pnl_increment = float(close_qty) * (float(price) - float(avg_cost))
+            if current_qty < 0: # Closing a short
+                pnl_increment = -pnl_increment
+            self.metrics["shadow_realized_pnl"] += pnl_increment
+            
+        # Update cost basis if position is increasing
+        elif (current_qty * qty) >= 0 or current_qty == 0:
+            total_qty = abs(current_qty) + abs(qty)
+            if total_qty > 0:
+                old_cost = self.shadow_cost_basis.get(symbol, Decimal('0'))
+                new_cost = (abs(current_qty) * old_cost + abs(qty) * price) / total_qty
+                self.shadow_cost_basis[symbol] = new_cost
+        
+        self.shadow_positions[symbol] = current_qty + qty
+
     async def _on_fill(self, event: FillEvent) -> None:
         """Handle live fill event for comparison."""
         if not self._running:
@@ -241,8 +289,8 @@ class ShadowEngine:
             # Write to data lake
             await self._write_shadow_fill(shadow_fill)
 
-            # Update shadow PnL (simplified)
-            self.metrics["shadow_pnl"] += self._calculate_pnl(shadow_fill)
+            # Update shadow inventory and realized PnL
+            self._update_shadow_inventory(shadow_fill)
 
             # Standardized shadow trade log
             from qtrader.execution.trade_logger import TradeLogger
@@ -287,11 +335,76 @@ class ShadowEngine:
         except Exception as e:
             logger.error(f"Error updating metrics: {e}")
 
-    def _calculate_pnl(self, shadow_fill: ShadowFillEvent) -> float:
-        """Calculate PnL increment for this shadow fill based on side and price."""
-        # Simple mark-to-market PnL is not possible without the next price, 
-        # but we can track the cost basis here. Real PnL is computed against current mid.
-        return 0.0 # Will be refined once we have a position state in shadow engine.
+
+    def compare_with_live(self, live_pnl: float, live_trade_count: int) -> dict[str, Any]:
+        """[SHADOW_COMPARE] Generate a detailed comparison between live and shadow performance.
+        
+        Args:
+            live_pnl: Realized PnL from the live performance tracker.
+            live_trade_count: Number of fills recorded in live trading.
+            
+        Returns:
+            Dictionary containing execution gap, slippage alpha, and tracking error.
+        """
+        shadow_pnl = self.metrics["shadow_pnl"]
+        shadow_trade_count = len(self.recent_shadow_fills)
+        
+        # Execution Gap: Live PnL - Shadow PnL (Positive means live outperformed shadow)
+        execution_gap = live_pnl - shadow_pnl
+        
+        # Tracking Error: Difference in trade counts (indicates missed signals or fills)
+        tracking_error = abs(live_trade_count - shadow_trade_count)
+        
+        # Slippage Alpha: The average price improvement (or degradation) per trade
+        # computed as slippage_diff / trade_count.
+        avg_slippage_gap = self.metrics["slippage_diff"] / max(1, live_trade_count)
+        
+        comparison = {
+            "live_pnl": live_pnl,
+            "shadow_pnl": shadow_pnl,
+            "execution_gap": execution_gap,
+            "execution_gap_pct": (execution_gap / abs(shadow_pnl)) * 100 if shadow_pnl != 0 else 0.0,
+            "live_trade_count": live_trade_count,
+            "shadow_trade_count": shadow_trade_count,
+            "tracking_error": tracking_error,
+            "avg_slippage_gap": avg_slippage_gap,
+            "status": "HEALTHY" if abs(execution_gap) < (abs(shadow_pnl) * 0.1) else "DEGRADED"
+        }
+        
+        # [SHADOW_AUTO_DISABLE]: Trigger emergency halt if performance gap is too wide
+        self.check_auto_disable(comparison)
+        
+        return comparison
+
+    def check_auto_disable(self, comparison: dict[str, Any]) -> None:
+        """Evaluate if strategy should be autonomously disabled based on shadow delta."""
+        if not self.event_bus:
+            return
+
+        gap_pct = comparison.get("execution_gap_pct", 0.0)
+        
+        # Criteria 1: Severe Execution Gap (> 20% degradation vs shadow)
+        if gap_pct < -20.0:
+            from qtrader.core.types import SystemEvent
+            reason = f"SHADOW_AUTO_DISABLE | Execution Gap Breach: {gap_pct:.2f}%"
+            logger.critical(reason)
+            # Create a task to publish the halt event
+            asyncio.create_task(self.event_bus.publish(
+                SystemEvent(type="SYSTEM", action="EMERGENCY_HALT", reason=reason)
+            ))
+
+        # Criteria 2: Tracking Error Discrepancy (> 30% missed trades)
+        live_count = comparison.get("live_trade_count", 0)
+        shadow_count = comparison.get("shadow_trade_count", 0)
+        if shadow_count > 10: # Only check after a meaningful sample
+            miss_rate = abs(live_count - shadow_count) / shadow_count
+            if miss_rate > 0.3:
+                from qtrader.core.types import SystemEvent
+                reason = f"SHADOW_AUTO_DISABLE | High Tracking Error: {miss_rate:.2%} miss rate"
+                logger.critical(reason)
+                asyncio.create_task(self.event_bus.publish(
+                    SystemEvent(type="SYSTEM", action="EMERGENCY_HALT", reason=reason)
+                ))
 
     def get_metrics(self) -> dict[str, float]:
         """Get current metrics."""
