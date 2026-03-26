@@ -157,8 +157,8 @@ mod tests {
 
     #[test]
     fn test_matching_engine_slippage_calculation() {
-        // 0.01 fractional slippage = 1%
-        let matching = MatchingEngine::new(0, 0.0, 0.01); 
+        // 100 bps slippage = 1.0%
+        let matching = MatchingEngine::new(0, 0.0, 100.0); 
         let mut orders = HashMap::new();
         
         // Buy Market order
@@ -172,9 +172,6 @@ mod tests {
         let fills = matching.match_orders(&mut orders, 50000.0, 2000);
         assert_eq!(fills.len(), 2);
         
-        // Fills are returned in order of hash map iteration (which isn't strictly defined)
-        // Let's find each by Side (we know sell prices will be lower, buy prices higher)
-        // Wait, fills is returning (order_id, qty, price, comm)
         for fill in fills {
             if fill.0 == 1 {
                 assert_eq!(fill.2, 50500.0); // Buy: 50000 * 1.01

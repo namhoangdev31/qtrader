@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import json
-import logging
-from typing import Any, Dict, Optional
-from uuid import UUID
+from typing import Any
+from uuid import UUID  # noqa: TC003
 
 from pydantic import BaseModel, ConfigDict
 
-from qtrader.core.events import EventType
-from qtrader.audit.audit_store import AuditStore
-
-logger = logging.getLogger(__name__)
+from qtrader.core.events import (
+    BaseEvent,
+    EventType,
+    FillEvent,
+    NAVEvent,
+)
+from qtrader.core.logger import log as logger
 
 
 class TradeAuditRecord(BaseModel):
@@ -18,121 +19,99 @@ class TradeAuditRecord(BaseModel):
     Authoritative summary of a trade's end-to-end lifecycle.
     
     Links disparate events (Signal -> Order -> Risk -> Execution -> PnL) 
-    through a unified trace_id.
+    through a unified trace_id for deterministic reconstruction.
     """
     model_config = ConfigDict(frozen=True)
-    
+
     trace_id: UUID
-    symbol: str = "UNKNOWN"
-    status: str = "INCOMPLETE"
-    
-    # Lifecycle Timestamps (Microseconds)
-    signal_time: Optional[int] = None
-    order_time: Optional[int] = None
-    decision_time: Optional[int] = None # Risk decision
-    fill_time: Optional[int] = None
-    
-    # Financial Metadata
-    side: Optional[str] = None
-    order_price: Optional[float] = None
-    fill_price: Optional[float] = None
-    quantity: float = 0.0
+    symbol: str
+    decision_time: int  # Microseconds since epoch (t_signal)
+    execution_time: int | None = None  # t_exec
+    executed_price: float | None = None
     pnl: float = 0.0
-    
-    # Performance KPIs
-    execution_latency_ms: float = 0.0
-    slippage_bps: float = 0.0
-    
-    # Rejection Info
-    rejection_reason: Optional[str] = None
+    status: str  # COMPLETED, INCOMPLETE, REJECTED
 
 
-class TradeLifecycleEngine:
+class TradeAudit:
     """
-    Reconstructs trade histories from the analytical AuditStore.
-    
-    This engine extracts the 'trade story' by grouping raw events by trace_id 
-    and identifying the transition between lifecycle phases.
+    Senior Audit Engine responsible for trade lifecycle reconstruction.
     """
 
-    def __init__(self, audit_store: AuditStore) -> None:
+    def build(self, events: list[BaseEvent]) -> TradeAuditRecord:
         """
-        Initialize the audit engine.
-        
-        Args:
-            audit_store: The DuckDB-powered analytical store containing trace logs.
+        Reconstruct a full trade lifecycle from a sequence of events.
         """
-        self._audit_store = audit_store
+        if not events:
+            raise ValueError("Reconstruction requires a non-empty event stream.")
 
-    def reconstruct(self, trace_id: UUID) -> TradeAuditRecord:
-        """
-        Reconstruct a trade's story from its trace_id.
+        sorted_events = sorted(events, key=lambda x: x.timestamp)
         
-        Args:
-            trace_id: The correlation ID shared by all events in the lifecycle.
-            
-        Returns:
-            TradeAuditRecord: The authoritative summary of the trade.
-        """
-        # Query all events for the trace_id, ordered by time
-        query = f"SELECT * FROM audit_events WHERE trace_id = '{trace_id}' ORDER BY timestamp_us ASC"
-        events_df = self._audit_store.query_olap(query)
-        
-        if events_df.is_empty():
-            logger.warning(f"TRADE_AUDIT_NOT_FOUND | trace_id: {trace_id}")
-            return TradeAuditRecord(trace_id=trace_id, status="MISSING")
+        trace_id = sorted_events[0].trace_id
+        symbol = "UNKNOWN"
+        decision_time = sorted_events[0].timestamp
+        execution_time: int | None = None
+        executed_price: float | None = None
+        pnl = 0.0
+        status = "INCOMPLETE"
 
-        # Initialize data dictionary for the Pydantic record
-        data: Dict[str, Any] = {"trace_id": trace_id}
-        
-        for row in events_df.to_dicts():
-            etype = row["event_type"]
-            ts = row["timestamp_us"]
-            # Extract payload from DuckDB JSON column
-            payload = json.loads(row["payload_json"])["payload"]
-            
-            # Map event types to lifecycle milestones
-            if etype == EventType.SIGNAL.value:
-                data["signal_time"] = ts
-                data["symbol"] = payload.get("symbol", data.get("symbol"))
-                
-            elif etype in (EventType.ORDER.value, EventType.ORDER_CREATED.value):
-                data["order_time"] = ts
-                data["order_price"] = payload.get("price")
-                data["quantity"] = payload.get("quantity")
-                data["side"] = payload.get("action") or payload.get("side")
-                data["symbol"] = payload.get("symbol", data.get("symbol"))
-                
-            elif etype == EventType.RISK_APPROVED.value:
-                data["decision_time"] = ts
-                
-            elif etype == EventType.RISK_REJECTED.value:
-                data["decision_time"] = ts
-                data["status"] = "REJECTED"
-                data["rejection_reason"] = payload.get("reason")
-                
-            elif etype in (EventType.FILL.value, EventType.ORDER_FILLED.value):
-                data["fill_time"] = ts
-                data["fill_price"] = payload.get("price")
-                data["status"] = "COMPLETED"
-                
-            elif etype == EventType.NAV_UPDATED.value:
-                # Realized PnL is often the final settling event
-                data["pnl"] = payload.get("realized_pnl", data.get("pnl", 0.0))
+        # Intermediate reconstruction state
+        has_execution = False
+        buy_price = 0.0
+        sell_price = 0.0
+        quantity = 0.0
+        cost = 0.0
 
-        # --- Automated Financial Analysis ---
-        
-        # 1. Execution Latency (Signal -> Fill)
-        if data.get("signal_time") and data.get("fill_time"):
-            data["execution_latency_ms"] = (data["fill_time"] - data["signal_time"]) / 1000.0
-            
-        # 2. Slippage Calculation (Order Price vs Execution Price)
-        if data.get("order_price") and data.get("fill_price") and data.get("side"):
-            op = data["order_price"]
-            fp = data["fill_price"]
-            # Slippage is positive if fill price is worse than order price
-            diff = (fp - op) if data["side"] == "BUY" else (op - fp)
-            if op > 0:
-                data["slippage_bps"] = (diff / op) * 10000
+        for event in sorted_events:
+            symbol = self._extract_symbol(event) or symbol
 
-        return TradeAuditRecord(**data)
+            if event.event_type == EventType.SIGNAL:
+                decision_time = event.timestamp
+            elif event.event_type == EventType.RISK_REJECTED:
+                status = "REJECTED"
+            elif event.event_type == EventType.FILL and isinstance(event, FillEvent):
+                has_execution = True
+                execution_time = event.timestamp
+                executed_price = event.payload.price
+                quantity = event.payload.quantity
+                cost += event.payload.commission
+                if event.payload.side == "BUY":
+                    buy_price = executed_price
+                else:
+                    sell_price = executed_price
+                status = "COMPLETED"
+            elif event.event_type == EventType.NAV_UPDATED and isinstance(event, NAVEvent):
+                pnl = event.payload.realized_pnl
+
+        if has_execution and pnl == 0.0:
+            pnl = self.compute_pnl(buy_price, sell_price, quantity, cost)
+
+        if not has_execution and status != "REJECTED":
+            logger.warning(f"AUDIT_GAP | trace_id: {trace_id} | Missing execution.")
+            status = "INCOMPLETE"
+
+        return TradeAuditRecord(
+            trace_id=trace_id,
+            symbol=symbol,
+            decision_time=decision_time,
+            execution_time=execution_time,
+            executed_price=executed_price,
+            pnl=pnl,
+            status=status
+        )
+
+    def _extract_symbol(self, event: BaseEvent) -> str | None:
+        """Helper to extract symbol from various event structures."""
+        if hasattr(event, "symbol"):
+            return str(event.symbol)
+        payload: Any = getattr(event, "payload", None)
+        if payload and hasattr(payload, "symbol"):
+            return str(payload.symbol)
+        return None
+
+    def compute_pnl(self, buy: float, sell: float, qty: float, cost: float) -> float:
+        """Mathematical model: PnL = (sell_price - buy_price) * quantity - cost"""
+        return (sell - buy) * qty - cost
+
+    def execution_latency(self, t_exec: int, t_signal: int) -> int:
+        """Calculate execution latency in microseconds."""
+        return t_exec - t_signal

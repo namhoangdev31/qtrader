@@ -32,6 +32,10 @@ class BaseEventStore(Protocol):
         """Retrieve events based on partition and offset range for replay."""
         ...
 
+    async def get_events_by_trace_id(self, trace_id: str | UUID) -> List[BaseEvent]:
+        """Retrieve all events across all partitions sharing a common trace_id."""
+        ...
+
 
 class FileEventStore:
     """
@@ -151,10 +155,12 @@ class FileEventStore:
                         # Reconstruct specialized event subclass via factory
                         event = EventFactory.from_dict(json.loads(line))
                         
-                        # Apply offset filters
-                        if start_offset is not None and event.offset < start_offset:
+                        # Apply offset filters with safety guards
+                        if (start_offset is not None and event.offset is not None 
+                            and event.offset < start_offset):
                             continue
-                        if end_offset is not None and event.offset > end_offset:
+                        if (end_offset is not None and event.offset is not None 
+                            and event.offset > end_offset):
                             continue
                             
                         events.append(event)
@@ -162,4 +168,36 @@ class FileEventStore:
                         continue
                         
         # Default sort by global timestamp for cross-partition queries
+        return sorted(events, key=lambda x: x.timestamp)
+
+    async def get_events_by_trace_id(self, trace_id: str | UUID) -> List[BaseEvent]:
+        """
+        Scan all partitions for a specific trace_id.
+        This enables cross-functional forensic analysis of a single trade lifecycle.
+        """
+        events: List[BaseEvent] = []
+        target_trace = str(trace_id)
+        
+        if not os.path.exists(self.partitions_dir):
+            return []
+
+        # Optimization: scan all .jsonl partition logs
+        for filename in os.listdir(self.partitions_dir):
+            if not filename.endswith(".jsonl"):
+                continue
+            
+            filepath = os.path.join(self.partitions_dir, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        # Pre-check for trace_id before full Pydantic parsing
+                        if target_trace not in line:
+                            continue
+                            
+                        event = EventFactory.from_dict(json.loads(line))
+                        if str(event.trace_id) == target_trace:
+                            events.append(event)
+                    except Exception:
+                        continue
+                        
         return sorted(events, key=lambda x: x.timestamp)

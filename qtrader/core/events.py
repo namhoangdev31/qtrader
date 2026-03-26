@@ -47,6 +47,20 @@ class EventType(str, Enum):
     PIPELINE_ERROR = "PIPELINE_ERROR"
     DECISION_TRACE = "DECISION_TRACE"
     DECISION_ERROR = "DECISION_ERROR"
+    AUDIT_WARNING = "AUDIT_WARNING"
+    REPLAY_FAILURE = "REPLAY_FAILURE"
+    COMPLIANCE_EXPORT = "COMPLIANCE_EXPORT"
+    COMPLIANCE_ERROR = "COMPLIANCE_ERROR"
+    IMPLEMENTATION_SHORTFALL = "IMPLEMENTATION_SHORTFALL"
+    TCA_ERROR = "TCA_ERROR"
+    SLIPPAGE_BREAKDOWN = "SLIPPAGE_BREAKDOWN"
+    TCA_WARNING = "TCA_WARNING"
+    BENCHMARK_COMPARISON = "BENCHMARK_COMPARISON"
+    BENCHMARK_ERROR = "BENCHMARK_ERROR"
+    COST_ATTRIBUTION = "COST_ATTRIBUTION"
+    ATTRIBUTION_ERROR = "ATTRIBUTION_ERROR"
+    VENUE_RANKING = "VENUE_RANKING"
+    VENUE_ERROR = "VENUE_ERROR"
 
 
 class MarketPayload(BaseModel):
@@ -240,6 +254,7 @@ class DecisionTracePayload(BaseModel):
     model_id: str
     features: dict[str, float]
     signal: float
+    decision_price: float
     decision: str
     config_version: int
 
@@ -247,6 +262,128 @@ class DecisionTracePayload(BaseModel):
 class DecisionErrorPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     module_name: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AuditWarningPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    reason: str
+    missing_event_type: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReplayAuditErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ComplianceExportPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    report_type: str
+    file_path: str
+    trace_id: UUID | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ComplianceErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ImplementationShortfallPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    decision_price: float
+    executed_price: float
+    quantity: float
+    shortfall: float
+    total_cost: float
+    side: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TCAErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SlippageBreakdownPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    total_slippage: float
+    market_impact: float
+    timing_cost: float
+    fees: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TCAWarningPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    message: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BenchmarkComparisonPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    exec_price: float
+    vwap: float
+    twap: float
+    arrival_price: float
+    perf_vwap: float
+    perf_twap: float
+    side: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BenchmarkErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CostAttributionPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    trace_id: UUID
+    total_cost: float
+    impact_pct: float
+    timing_pct: float
+    fee_pct: float
+    funding_pct: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AttributionErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class VenueRankingPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    venue: str
+    score: float
+    rank: int
+    metrics: dict[str, float]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class VenueErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    venue: str
     error_type: str
     details: str
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -475,3 +612,105 @@ class DecisionErrorEvent(BaseEvent):
     """Event representing a strategy decision failure."""
     event_type: EventType = EventType.DECISION_ERROR
     payload: DecisionErrorPayload
+
+
+class AuditWarningEvent(BaseEvent):
+    """Event representing a failure in trade lifecycle reconstruction."""
+    event_type: EventType = EventType.AUDIT_WARNING
+    payload: AuditWarningPayload
+
+
+class ReplayAuditErrorEvent(BaseEvent):
+    """Event representing a failure in deterministic decision replay."""
+    event_type: EventType = EventType.REPLAY_FAILURE
+    payload: ReplayAuditErrorPayload
+
+
+class ComplianceExportEvent(BaseEvent):
+    """Event representing a successful compliance data export."""
+    event_type: EventType = EventType.COMPLIANCE_EXPORT
+    payload: ComplianceExportPayload
+
+
+class ComplianceErrorEvent(BaseEvent):
+    """Event representing a failure in regulatory reporting or export."""
+    event_type: EventType = EventType.COMPLIANCE_ERROR
+    payload: ComplianceErrorPayload
+
+
+class ImplementationShortfallEvent(BaseEvent):
+    """Event representing the implementation shortfall (TCA) of a trade."""
+    event_type: EventType = EventType.IMPLEMENTATION_SHORTFALL
+    payload: ImplementationShortfallPayload
+
+
+class TCAErrorEvent(BaseEvent):
+    """Event representing a failure in Transaction Cost Analysis."""
+    event_type: EventType = EventType.TCA_ERROR
+    payload: TCAErrorPayload
+
+
+class SlippageBreakdownEvent(BaseEvent):
+    """Event representing the decomposition of execution slippage."""
+    event_type: EventType = EventType.SLIPPAGE_BREAKDOWN
+    payload: SlippageBreakdownPayload
+
+
+class TCAWarningEvent(BaseEvent):
+    """Event representing a non-critical inconsistency during TCA analysis."""
+    event_type: EventType = EventType.TCA_WARNING
+    payload: TCAWarningPayload
+
+
+class BenchmarkComparisonEvent(BaseEvent):
+    """Event representing the comparison of execution against market benchmarks."""
+    event_type: EventType = EventType.BENCHMARK_COMPARISON
+    payload: BenchmarkComparisonPayload
+
+
+class BenchmarkErrorEvent(BaseEvent):
+    """Event representing a failure in execution benchmarking."""
+    event_type: EventType = EventType.BENCHMARK_ERROR
+    payload: BenchmarkErrorPayload
+
+
+class CostAttributionEvent(BaseEvent):
+    """Event representing the granular attribution of trading costs."""
+    event_type: EventType = EventType.COST_ATTRIBUTION
+    payload: CostAttributionPayload
+
+
+class AttributionErrorEvent(BaseEvent):
+    """Event representing a failure in cost attribution analysis."""
+    event_type: EventType = EventType.ATTRIBUTION_ERROR
+    payload: AttributionErrorPayload
+
+
+class VenueRankingPayload(BasePayload):
+    """Payload for VenueRankingEvent, containing data about venue performance ranking."""
+    # Add specific fields for venue ranking data here, e.g.,
+    # venue_id: str
+    # rank: int
+    # performance_metric: float
+    pass
+
+
+class VenueRankingEvent(BaseEvent):
+    """Event representing the comparative ranking of execution venues."""
+    event_type: EventType = EventType.VENUE_RANKING
+    payload: VenueRankingPayload
+
+
+class VenueErrorPayload(BasePayload):
+    """Payload for VenueErrorEvent, containing details about a venue-specific execution analysis failure."""
+    # Add specific fields for venue error data here, e.g.,
+    # venue_id: str
+    # error_message: str
+    # error_code: str
+    pass
+
+
+class VenueErrorEvent(BaseEvent):
+    """Event representing a failure in venue-specific execution analysis."""
+    event_type: EventType = EventType.VENUE_ERROR
+    payload: VenueErrorPayload
