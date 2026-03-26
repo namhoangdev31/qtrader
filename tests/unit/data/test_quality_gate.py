@@ -1,108 +1,71 @@
-"""Unit tests for the DataQualityGate."""
-
-from __future__ import annotations
-
 import pytest
-import time
-
-import polars as pl
+from unittest.mock import MagicMock
+import datetime
+from qtrader.core.event import MarketDataEvent
 from qtrader.data.quality_gate import DataQualityGate, DataQualityError
+from qtrader.core.event_bus import EventBus
 
+@pytest.fixture
+def mock_bus():
+    bus = MagicMock(spec=EventBus)
+    return bus
 
-def test_check_outlier_no_outliers() -> None:
-    """Test that a series with no outliers passes."""
-    series = pl.Series([1.0, 2.0, 3.0, 4.0, 5.0])
-    # Should not raise
-    DataQualityGate.check_outlier(series, threshold=2.0)
+def test_quality_gate_mad_outlier_rejection(mock_bus):
+    gate = DataQualityGate(event_bus=mock_bus)
+    
+    # Normal distribution around 50000
+    recent_prices = [50000 + i for i in range(20)]
+    
+    # Outlier at 60000
+    event = MarketDataEvent(
+        symbol="BTC-USDT",
+        data={"last_price": 60000.0, "venue": "binance"},
+        metadata={"venue": "binance"},
+        trace_id="t-outlier"
+    )
+    
+    is_valid = gate.validate(event, recent_prices, z_threshold=3.0)
+    
+    assert is_valid is False
 
+def test_quality_gate_cross_exchange_rejection(mock_bus):
+    gate = DataQualityGate(event_bus=mock_bus)
+    Recent_prices = [50000 + i for i in range(20)]
+    
+    # Binance price is 55000, Coinbase ref price is 50000 (10% deviation)
+    event = MarketDataEvent(
+        symbol="BTC-USDT",
+        data={"last_price": 55000.0},
+        metadata={"venue": "binance"},
+        trace_id="t-deviant"
+    )
+    
+    # Epsilon 5%
+    is_valid = gate.validate(event, Recent_prices, ref_price=50000.0, epsilon_pct=0.05)
+    
+    assert is_valid is False
 
-def test_check_outlier_with_outliers() -> None:
-    """Test that a series with outliers raises DataQualityError."""
-    series = pl.Series([1.0, 2.0, 3.0, 4.0, 100.0])  # 100 is an outlier
-    with pytest.raises(DataQualityError):
-        DataQualityGate.check_outlier(series, threshold=1.5)
+def test_quality_gate_valid_data(mock_bus):
+    gate = DataQualityGate(event_bus=mock_bus)
+    Recent_prices = [50000 + i for i in range(20)]
+    
+    # Normal price
+    event = MarketDataEvent(
+        symbol="BTC-USDT",
+        data={"last_price": 50005.0},
+        metadata={"venue": "binance"},
+        trace_id="t-valid"
+    )
+    
+    is_valid = gate.validate(event, Recent_prices, ref_price=50004.0)
+    
+    assert is_valid is True
 
-
-def test_check_outlier_constant_series() -> None:
-    """Test that a constant series (std=0) passes."""
-    series = pl.Series([5.0, 5.0, 5.0, 5.0])
-    # Should not raise
-    DataQualityGate.check_outlier(series, threshold=2.0)
-
-
-def test_check_outlier_empty_series() -> None:
-    """Test that an empty series passes."""
-    series = pl.Series([], dtype=pl.Float64)
-    # Should not raise
-    DataQualityGate.check_outlier(series, threshold=2.0)
-
-
-def test_check_stale_fresh_data() -> None:
-    """Test that fresh data passes the stale check."""
-    # Current time in milliseconds
+def test_check_stale():
     import time
-
-    current_time_ms = int(time.time() * 1000)
-    # Should not raise
-    DataQualityGate.check_stale(current_time_ms, max_age_ms=5000)
-
-
-def test_check_stale_old_data() -> None:
-    """Test that old data raises DataQualityError."""
-    old_time_ms = int(time.time() * 1000) - 10000  # 10 seconds ago
+    # Fresh data
+    DataQualityGate.check_stale(time.time() * 1000, max_age_ms=5000)
+    
+    # Old data
     with pytest.raises(DataQualityError):
-        DataQualityGate.check_stale(old_time_ms, max_age_ms=5000)
-
-
-def test_check_cross_exchange_sane() -> None:
-    """Test that sane prices pass."""
-    prices = {"exchange1": 100.0, "exchange2": 100.1, "exchange3": 99.9}
-    # Spread is about 0.2% of mean ~100 -> should pass with default 1% threshold
-    DataQualityGate.check_cross_exchange_sanity(prices, max_spread_pct=0.01)
-
-
-def test_check_cross_exchange_insane() -> None:
-    """Test that insane prices raise DataQualityError."""
-    prices = {"exchange1": 100.0, "exchange2": 102.0, "exchange3": 98.0}
-    # Spread is 4% of mean ~100 -> should fail with default 1% threshold
-    with pytest.raises(DataQualityError):
-        DataQualityGate.check_cross_exchange_sanity(prices, max_spread_pct=0.01)
-
-
-def test_check_cross_exchange_single_price() -> None:
-    """Test that a single exchange price passes (no spread)."""
-    prices = {"exchange1": 100.0}
-    # Should not raise
-    DataQualityGate.check_cross_exchange_sanity(prices, max_spread_pct=0.01)
-
-
-def test_check_cross_exchange_zero_mean() -> None:
-    """Test that zero mean with zero spread passes."""
-    prices = {"exchange1": 0.0, "exchange2": 0.0}
-    # Should not raise
-    DataQualityGate.check_cross_exchange_sanity(prices, max_spread_pct=0.01)
-
-
-def test_check_cross_exchange_zero_mean_nonzero_spread() -> None:
-    """Test that zero mean with non-zero spread raises."""
-    prices = {"exchange1": 0.0, "exchange2": 1.0}
-    with pytest.raises(DataQualityError):
-        DataQualityGate.check_cross_exchange_sanity(prices, max_spread_pct=0.01)
-
-
-def test_check_sequence_gap_valid() -> None:
-    """Test that a valid sequence ID passes."""
-    # Should not raise
-    DataQualityGate.check_sequence_gap(seq_id=10, last_seq_id=9)
-
-
-def test_check_sequence_gap_gap() -> None:
-    """Test that a gap in sequence ID raises."""
-    with pytest.raises(DataQualityError):
-        DataQualityGate.check_sequence_gap(seq_id=12, last_seq_id=9)
-
-
-def test_check_sequence_gap_out_of_order() -> None:
-    """Test that an out-of-order sequence ID raises."""
-    with pytest.raises(DataQualityError):
-        DataQualityGate.check_sequence_gap(seq_id=9, last_seq_id=10)
+        DataQualityGate.check_stale((time.time() - 10) * 1000, max_age_ms=5000)

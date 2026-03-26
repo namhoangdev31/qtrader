@@ -1,58 +1,62 @@
 from __future__ import annotations
 
-from typing import Any
+import uuid
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from qtrader.core.event import EventType, GapDetectedEvent
-from qtrader.core.event_bus import EventBus
-from qtrader.oms.event_store import EventStore
+
+if TYPE_CHECKING:
+    from qtrader.core.event_bus import EventBus
+    from qtrader.oms.event_store import EventStore
 
 
 class GapDetector:
-    """Monitors sequence IDs to identify discontinuities in market data streams.
+    """Detects sequence discontinuities in market data streams.
     
-    This implementation is entirely stateless, relying on the `EventStore`
-    to retrieve the expected sequence for each symbol.
+    A gap is defined as any sequence ID that is not (last_sequence + 1).
+    This stage is stateless: it fetches the last known sequence from the EventStore.
     """
 
     def __init__(self, event_store: EventStore, event_bus: EventBus | None = None) -> None:
         self.event_store = event_store
         self.event_bus = event_bus
 
-    async def handle(self, event: dict[str, Any]) -> dict[str, Any] | None:
-        """Inspect the event for sequence gaps against the persistent EventStore.
+    async def handle(self, event: dict[str, Any]) -> dict[str, Any]:
+        """Check for sequence gaps in the incoming event.
         
         Args:
-            event: Raw event dict from Arbitration.
+            event: Canonical MarketEvent dict.
             
         Returns:
-            The event if valid, or signals recovery if a gap is detected.
+            The event, potentially tagged with gap metadata if a skip is detected.
         """
-        if not event:
-            return None
-            
         symbol = event.get("symbol", "unknown")
         seq_id = event.get("seq_id", 0)
-
-        if seq_id == 0:
-            return event
-            
-        # Stateless fetch of expected sequence
+        
+        # 1. Fetch last known sequence for this symbol from EventStore
+        # Note: EventStore must provide a fast (indexed or in-memory) lookup for head sequence.
         last_seq = self.event_store.get_last_sequence(symbol)
         
-        # Initial check (Gap == 1 is valid)
+        # 2. Sequence Validation
         if last_seq > 0:
             expected = last_seq + 1
             if seq_id != expected:
                 gap_size = seq_id - expected
                 logger.warning(
-                    f"GapDetector: Sequence mismatch for {symbol}. Expected {expected}, got {seq_id} (Gap: {gap_size})"
+                    f"GapDetector: Sequence mismatch for {symbol}. "
+                    f"Expected {expected}, got {seq_id} (Gap: {gap_size})"
                 )
+                
+                # Tag the event to trigger the Recovery stage
+                metadata = event.setdefault("metadata", {})
+                metadata["gap_detected"] = True
+                metadata["expected_seq"] = expected
+                metadata["received_seq"] = seq_id
                 
                 # Emit GapDetectedEvent
                 if self.event_bus:
-                    import uuid
                     gap_event = GapDetectedEvent(
                         event_id=str(uuid.uuid4()),
                         trace_id=event.get("trace_id", "pending"),
@@ -61,17 +65,5 @@ class GapDetector:
                         received_seq=seq_id,
                     )
                     await self.event_bus.publish(EventType.GAP_DETECTED, gap_event)
-                
-                # Tag event for Recovery stage
-                if "metadata" not in event:
-                    event["metadata"] = {}
-                event["metadata"]["gap_detected"] = True
-                event["metadata"]["expected_seq"] = expected
-                event["metadata"]["received_seq"] = seq_id
-        
+                    
         return event
-
-    def reset_for_symbol(self, symbol: str) -> None:
-        """Reset sequence tracker for a symbol (e.g., after a manual recovery)."""
-        if symbol in self._last_seq_id:
-            del self._last_seq_id[symbol]

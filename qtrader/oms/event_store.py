@@ -115,18 +115,24 @@ class EventStore:
         deltas.sort(key=lambda x: x.get("seq_id", 0))
         return deltas
 
-    def _serialize(self, obj: Any) -> dict[str, Any]:
+    def _serialize(self, obj: Any) -> Any:
         """Deep serialization for events with Decimals/Enums."""
         if is_dataclass(obj):
             return {k: self._serialize(v) for k, v in asdict(obj).items()}
+        
         if isinstance(obj, dict):
             return {k: self._serialize(v) for k, v in obj.items()}
+            
         if isinstance(obj, list):
             return [self._serialize(v) for v in obj]
+            
+        # Combine simple scalar types into a single return path to satisfy Ruff PLR0911
+        res = obj
         if isinstance(obj, Decimal):
-            return float(obj)
-        if isinstance(obj, Enum):
-            return obj.name
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return obj
+            res = float(obj)
+        elif isinstance(obj, Enum):
+            res = obj.name
+        elif isinstance(obj, datetime):
+            res = obj.isoformat()
+            
+        return res

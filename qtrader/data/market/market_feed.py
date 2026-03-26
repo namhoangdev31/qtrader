@@ -48,7 +48,7 @@ class MarketFeedService:
                 normalizer=UnifiedNormalizer(),
                 arbitrator=Arbitrator(primary_feed="A"),
                 gap_detector=GapDetector(self.event_store, self.event_bus),
-                recovery_service=None, # Will be auto-initialized by Orchestrator with RecoveryEngine
+                recovery_service=None,  # Auto-initialized by Orchestrator
                 quality_gate=DataQualityGate(),
             )
         else:
@@ -83,7 +83,10 @@ class MarketFeedService:
                     task = asyncio.create_task(self._listen_to_connector(connector))
                 self._tasks.append(task)
                 
-        _LOG.info(f"MarketFeedService multi-venue started for {self.symbols} on venues: {self.venues}")
+        _LOG.info(
+            f"MarketFeedService started for {self.symbols} "
+            f"on venues: {self.venues}"
+        )
         
     async def _listen_to_connector(self, connector: Any) -> None:
         """Generic listener for StreamingConnector protocol."""
