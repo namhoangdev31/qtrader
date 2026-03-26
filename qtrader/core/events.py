@@ -24,10 +24,6 @@ class EventType(Enum):
     MODEL_RETRAIN = auto()
     ERROR = auto()
     HEARTBEAT = auto()
-    ORDER_CREATED = auto()
-    ORDER_FILLED = auto()
-    ORDER_REJECTED = auto()
-    TRADING_HALT = auto()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -175,34 +171,3 @@ class ErrorEvent(Event):
     severity: str = "ERROR" # INFO, WARNING, ERROR, CRITICAL
     metadata: dict[str, Any] = field(default_factory=dict)
     type: EventType = EventType.ERROR
-
-
-@dataclass(frozen=True, kw_only=True)
-class OrderCreatedEvent(Event):
-    order: OrderEvent
-    type: EventType = EventType.ORDER_CREATED
-
-
-@dataclass(frozen=True, kw_only=True)
-class OrderFilledEvent(Event):
-    order_id: str
-    symbol: str
-    quantity: float
-    price: float
-    side: str
-    remaining: float
-    type: EventType = EventType.ORDER_FILLED
-
-
-@dataclass(frozen=True, kw_only=True)
-class TradingHaltEvent(Event):
-    reason: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-    type: EventType = EventType.TRADING_HALT
-
-
-@dataclass(frozen=True, kw_only=True)
-class OrderRejectedEvent(Event):
-    order_id: str
-    reason: str
-    type: EventType = EventType.ORDER_REJECTED

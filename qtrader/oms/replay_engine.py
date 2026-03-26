@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, List
 
@@ -20,7 +21,7 @@ class ReplayEngine:
         self.state_store = state_store or StateStore()
         self.events: List[dict[str, Any]] = []
 
-    def load_log(self, log_path: str = "data/events/event_log.jsonl") -> int:
+    def load_log(self, log_path: str = "data/events/order_event_log.jsonl") -> int:
         """Load history from file into memory for faster re-processing."""
         log_file = Path(log_path)
         if not log_file.exists():
@@ -40,9 +41,7 @@ class ReplayEngine:
         """Reconstruct state from start up to T."""
         _LOG.info(f"REPLAY_ENGINE | Replaying up to {target_time.isoformat()}")
         
-        # Reset local state before replay
-        # In a real system, we might clone the current one or use a clean instance.
-        
+        # Iteratively process events
         for event in self.events:
             ts_str = event.get("timestamp")
             if not ts_str:
@@ -57,51 +56,74 @@ class ReplayEngine:
         _LOG.info("REPLAY_ENGINE | Replay complete.")
 
     async def _process_single_event(self, event: dict[str, Any]) -> None:
-        """Feeds a single event into the state store logic."""
-        etype = event.get("type")
+        """Feeds a single event into the state store logic using the authoritative FSM."""
+        etype_val = event.get("type")
         
-        if etype == "FILL":
+        # Standardizing EventType lookup
+        try:
+            # Handle if etype_val is a string (e.g. from JSON value) or int
+            if isinstance(etype_val, str):
+                # Check for standardized event types
+                if etype_val == "ORDER": etype = EventType.ORDER
+                elif etype_val == "FILL": etype = EventType.FILL
+                elif etype_val == "RISK": etype = EventType.RISK
+                elif etype_val == "ORDER_CREATED": etype = EventType.ORDER_CREATED
+                elif etype_val == "ORDER_FILLED": etype = EventType.ORDER_FILLED
+                elif etype_val == "ORDER_REJECTED": etype = EventType.ORDER_REJECTED
+                else: etype = None
+            else:
+                etype = None
+        except Exception:
+            etype = None
+
+        if etype == EventType.FILL or etype == EventType.ORDER_FILLED:
             # Reconstruction logic for fills (updates positions)
             symbol = event["symbol"]
-            qty = event["quantity"]
-            price = event["price"]
+            qty = Decimal(str(event["quantity"]))
+            price = Decimal(str(event["price"]))
             side = event["side"]
             
-            # Use current state_store getters/setters
-            pos = await self.state_store.get_position(symbol)
-            qty_dec = float(qty) if side == "BUY" else -float(qty)
+            p = await self.state_store.get_position(symbol)
+            qty_delta = qty if side == "BUY" else -qty
             
-            if pos:
-                # Basic average price reconstruction
-                new_qty = float(pos.quantity) + qty_dec
-                # Simplified cost basis update for replay
-                # Replace with Decimal if fidelity is required
+            if p:
+                new_qty = p.quantity + qty_delta
+                # Simple average cost update during reconstruction
+                new_cost = p.average_price
+                if new_qty != 0 and qty_delta * p.quantity >= 0: # increasing position
+                    new_cost = (p.quantity * p.average_price + qty * price) / new_qty
+                
                 await self.state_store.set_position(Position(
                     symbol=symbol,
                     quantity=new_qty,
-                    average_price=float(price) # Placeholder
+                    average_price=new_cost
                 ))
             else:
                 await self.state_store.set_position(Position(
                     symbol=symbol,
-                    quantity=qty_dec,
-                    average_price=float(price)
+                    quantity=qty_delta,
+                    average_price=price
                 ))
 
-        elif etype == "ORDER":
-            # Reconstruction logic for orders
+        elif etype == EventType.ORDER or etype == EventType.ORDER_CREATED:
+            # Sync active orders in StateStore
+            # Extract common order details
+            o_data = event.get("order", event)
             await self.state_store.set_order(Order(
-                order_id=event["order_id"],
-                symbol=event["symbol"],
-                side=event["side"],
-                order_type=event["order_type"],
-                quantity=event["quantity"],
-                status="PENDING" # Replay starts in pending
+                order_id=o_data["order_id"],
+                symbol=o_data["symbol"],
+                side=o_data["side"],
+                order_type=o_data["order_type"],
+                quantity=Decimal(str(o_data["quantity"])),
+                price=Decimal(str(o_data["price"])) if o_data.get("price") else None,
+                status="ACK" if etype == EventType.ORDER_CREATED else "NEW"
             ))
+
+        elif etype == EventType.ORDER_REJECTED:
+            order_id = event["order_id"]
+            # Clear or update order status in state store
+            await self.state_store.remove_order(order_id)
             
-        elif etype == "RISK":
-            # Reconstruct risk state
-            # If the log contains metrics, we apply them to state_store
-            metrics = event.get("metrics", {})
-            # In a real system, we'd apply to self.state_store.set_risk_state()
+        elif etype == EventType.RISK:
+            # Reconstruct high-fidelity risk metrics
             pass

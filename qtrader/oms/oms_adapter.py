@@ -10,6 +10,7 @@ from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
 from qtrader.execution.multi_exchange_adapter import MultiExchangeAdapter
 from qtrader.execution.smart_router import SmartOrderRouter
+from qtrader.oms.order_management_system import UnifiedOMS
 
 
 class OMSAdapter(ABC):
@@ -131,7 +132,7 @@ class ExecutionOMSAdapter(OMSAdapter):
     def __init__(
         self,
         exchange_adapters: dict[str, ExchangeAdapter],
-        state_store: StateStore,
+        oms: UnifiedOMS,
         routing_mode: str = "smart",
         max_order_size: Decimal | None = None,
         split_size: Decimal | None = None,
@@ -149,7 +150,7 @@ class ExecutionOMSAdapter(OMSAdapter):
             name: Name of this adapter
         """
         super().__init__(name)
-        self.state_store = state_store
+        self.oms = oms
         self.exchange_adapters = exchange_adapters
         self.routing_mode = routing_mode
         self.max_order_size = max_order_size
@@ -259,16 +260,8 @@ class ExecutionOMSAdapter(OMSAdapter):
             }
         )
 
-        # [OMS_STATE_CENTRALIZATION]: Persist order to central state store
-        await self.state_store.set_order(Order(
-            order_id=order_event.order_id,
-            symbol=order_event.symbol,
-            side=order_event.side,
-            order_type=order_event.order_type,
-            quantity=order_event.quantity,
-            timestamp=order_event.timestamp,
-            status="PENDING"
-        ))
+        # [OMS_STATE_CENTRALIZATION]: Persist order to central OMS
+        await self.oms.create_order(order_event)
 
         self.logger.debug(f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}")
 
@@ -282,19 +275,11 @@ class ExecutionOMSAdapter(OMSAdapter):
         try:
             self.logger.info(f"Submitting order {order_event.order_id} via execution engine")
             success, result = await self.execution_engine.execute_order(order_event)
-            
-            # [OMS_STATE_CENTRALIZATION]: Update order status in central state store
-            def update_status(order: Order) -> None:
-                order.status = "SUCCESS" if success else "REJECTED"
-                if not success:
-                    # In a real system, we'd store the rejection reason
-                    pass
-
-            await self.state_store.update_order(order_event.order_id, update_status)
-
             if success:
+                await self.oms.on_ack(order_event.order_id)
                 self.logger.info(f"Order {order_event.order_id} submitted successfully, result: {result}")
             else:
+                await self.oms.on_reject(order_event.order_id, str(result))
                 self.logger.warning(f"Order {order_event.order_id} submission failed: {result}")
         except Exception as e:
             self.logger.error(f"Error submitting order {order_event.order_id}: {e}", exc_info=True)

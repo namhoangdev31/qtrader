@@ -18,13 +18,21 @@ from bot.win_rate_optimizer import WinRateOptimizer
 from qtrader.analytics.drift import DriftMonitor
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.analytics.telemetry import Telemetry
-from qtrader.core.bus import EventBus
-from qtrader.core.event import EventType, FillEvent, OrderEvent, RiskEvent, SystemEvent
+from qtrader.core.event_bus import EventBus
+from qtrader.core.state_store import StateStore
+from qtrader.core.event import EventType, FillEvent, HeartbeatEvent, MarketDataEvent, OrderEvent, RiskEvent, SystemEvent, TradingHaltEvent
+from qtrader.core.timer import TimerService
 from qtrader.core.logger import log
 from qtrader.data.datalake import DataLake
 from qtrader.execution.brokers.binance import BinanceBrokerAdapter
 from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
 from qtrader.execution.safety import SafetyLayer
+from qtrader.execution.reconciliation_engine import ReconciliationEngine
+from qtrader.execution.shadow_engine import ShadowEngine
+from qtrader.monitoring.shadow_compare import ShadowCompare
+from qtrader.monitoring.latency_tracker import LatencyTracker
+from qtrader.monitoring.trace_manager import TraceManager
+from qtrader.risk.fallback_engine import FallbackEngine
 from qtrader.execution.sor import SmartOrderRouter
 from qtrader.feature.alpha.registry import AlphaEngine
 from qtrader.feature.features.engine import FactorEngine
@@ -66,10 +74,24 @@ class TradingBot:
         """Wire up all components from config."""
         self.config = config
         self.bus = EventBus()
-        self.oms = UnifiedOMS()
+        self.state_store = StateStore()
+        self.timer_service = TimerService(self.bus)
+        self.oms = UnifiedOMS(self.state_store, self.bus)
         self.safety = SafetyLayer()
         self.sor = SmartOrderRouter(self.oms)
+        self.reconciliation = ReconciliationEngine(self.bus, self.oms, self.state_store)
         self.risk_engine = RealTimeRiskEngine()
+        
+        # Shadow trading infrastructure
+        self.shadow_engine = ShadowEngine({
+            "shadow_mode": config.shadow_mode if hasattr(config, 'shadow_mode') else True,
+            "event_bus": self.bus
+        })
+        self.shadow_compare = ShadowCompare()
+        self.fallback_engine = FallbackEngine(self.bus)
+        self.latency_tracker = LatencyTracker()
+        self.trace_manager = TraceManager()
+        
         self.state = StateMachine()
         self.performance = PerformanceTracker(config.initial_capital)
         self.ev_optimizer = EVOptimizer()
@@ -128,8 +150,9 @@ class TradingBot:
         self._init_execution_venues()
 
         self._last_signal_ts: float = 0.0
-        self._last_risk_ts: float = 0.0
-        self._last_rebalance_ts: float = 0.0
+        self._last_signals = {}
+        self._is_running = False
+        self._loop_task: asyncio.Task | None = None
 
         self.bus.subscribe(EventType.SIGNAL, self._on_signal)
         self.bus.subscribe(EventType.MARKET_DATA, self._on_market_tick)
@@ -137,7 +160,8 @@ class TradingBot:
         self.bus.subscribe(EventType.FILL, self._on_fill)
         self.bus.subscribe(EventType.RISK, self._on_risk_event)
         self.bus.subscribe(EventType.SYSTEM, self._on_system_event)
-        self._last_signals: dict[str, float] = {}
+        self.bus.subscribe(EventType.HEARTBEAT, self._on_heartbeat)
+        self.bus.subscribe(EventType.TRADING_HALT, self._on_trading_halt)
 
     async def _on_fill(self, event: FillEvent) -> None:
         """Handle fill: update OMS and performance."""
@@ -160,6 +184,11 @@ class TradingBot:
         if event.action == "EMERGENCY_HALT":
             _logger.critical("System EMERGENCY_HALT", reason=event.reason)
             await self.emergency_shutdown(event.reason)
+
+    async def _on_trading_halt(self, event: TradingHaltEvent) -> None:
+        """Immediate system-wide halt triggered on position mismatch."""
+        _logger.critical(f"TRADING_HALT received: {event.reason} | Metadata: {event.metadata}")
+        await self.emergency_shutdown(event.reason)
 
     def _init_execution_venues(self) -> None:
         """Attach broker adapters based on configured venues (Coinbase default)."""
@@ -217,7 +246,15 @@ class TradingBot:
         return await self.sor.get_best_venue(order.symbol, order.side)
 
     async def _on_order(self, event: OrderEvent) -> None:
-        """Handle order: safety check -> route -> publish fills."""
+        """Handle order: fallback check -> safety check -> route -> publish fills."""
+        if not self.fallback_engine.is_trading_allowed():
+            _logger.warning(
+                "Order BLOCKED by FallbackEngine",
+                mode=self.fallback_engine.state.mode.name,
+                symbol=event.symbol,
+            )
+            return
+
         try:
             venue = await self._pick_venue(event)
             order = self._adapt_order_for_venue(event, venue)
@@ -323,26 +360,53 @@ class TradingBot:
         )
 
     async def _on_market_tick(self, event: MarketDataEvent) -> None:
-        """Central event handler for market data. Triggers signal, risk, and rebalance logic."""
-        if not self._running or not self.state.can_trade():
-            return
-            
-        current_ts = event.timestamp.timestamp()
+        """Executed on every tick: Pure reactive alpha generation."""
+        try:
+            # High-priority: Alpha generation on every tick
+            await self._run_alpha_models(event)
+        except Exception as e:
+            _logger.error(f"Tick handler failed: {e}")
+
+    async def _on_heartbeat(self, event: Any) -> None:
+        """Reactive periodic tasks triggered by global system pulse."""
+        current_ts = time.time()
         
-        # 1. RISK CHECK (Immediate and most frequent)
-        if current_ts - self._last_risk_ts >= float(self.config.risk_check_interval_s):
+        # 1. Periodic Risk Check
+        if not hasattr(self, "_last_risk"):
+            self._last_risk = 0.0
+        if current_ts - self._last_risk >= float(self.config.risk_check_interval_s):
             await self._check_risk()
-            self._last_risk_ts = current_ts
-            
-        # 2. SIGNAL GENERATION
-        if current_ts - self._last_signal_ts >= float(self.config.signal_interval_s):
-            await self._run_alpha_models(event.symbol)
-            self._last_signal_ts = current_ts
-            
-        # 3. PORTFOLIO REBALANCING
-        if current_ts - self._last_rebalance_ts >= float(self.config.rebalance_interval_s):
+            self._last_risk = current_ts
+
+        # 2. Periodic Rebalance
+        if not hasattr(self, "_last_rebal"):
+            self._last_rebal = 0.0
+        if current_ts - self._last_rebal >= float(self.config.rebalance_interval_s):
             await self._run_rebalance()
-            self._last_rebalance_ts = current_ts
+            self._last_rebal = current_ts
+
+        # 3. Periodic Shadow Compare
+        if not hasattr(self, "_last_shadow"):
+            self._last_shadow = 0.0
+        if current_ts - self._last_shadow >= 60.0:  # Trace divergence every minute
+            if hasattr(self, "shadow_engine") and self.shadow_engine.is_running():
+                metrics = self.shadow_engine.get_metrics()
+                live_pnl = float(self.performance.realized_pnl + self.performance.unrealized_pnl)
+                shadow_pnl = float(metrics.get("shadow_pnl", 0.0))
+                self.shadow_compare.track_divergence(live_pnl, shadow_pnl)
+            self._last_shadow = current_ts
+
+        # 4. [FAILSAFE_SYSTEM]: Periodic de-escalation attempt
+        await self.fallback_engine.try_deescalate()
+
+        # 5. [LATENCY_TRACE_SYSTEM]: Periodic stats log
+        if not hasattr(self, "_last_latency_log"):
+            self._last_latency_log = 0.0
+        if current_ts - self._last_latency_log >= 300.0:  # Every 5 min
+            stats = self.latency_tracker.get_stats()
+            if stats["total_traces"] > 0:
+                _logger.info("Latency stats", **stats)
+            self._last_latency_log = current_ts
 
     async def _run_alpha_models(self, symbol: str) -> None:
         """Core alpha generation logic (refactored from signal loop)."""
@@ -515,27 +579,29 @@ class TradingBot:
         self._last_heartbeat = time.time()
 
     async def start(self) -> None:
-        """Start the bot: transition to WARMING_UP then TRADING and run loops."""
-        if self._running:
-            return
+        """Start the bot: INITIALIZING -> WARMING_UP -> TRADING"""
+        self.state.transition_to(BotState.INITIALIZING)
+        await self.bus.start()
+        await self.timer_service.start()
+        await self.reconciliation.start()
+        await self.shadow_engine.start()
+        await self.fallback_engine.start()
+        _logger.info("Bot components started")
         self._running = True
         
-        # [SHADOW_ENFORCEMENT]: Verify 7-day shadow performance before live TRADING
-        from qtrader.execution.safety import ShadowEnforcer
-        enforcer = ShadowEnforcer(
-            shadow_data_path=getattr(self.config, "shadow_data_path", "data_lake/shadow")
-        )
-        if not enforcer.verify_history():
-            reason = "SHADOW_ENFORCEMENT breach: 7-day minimum shadow performance required"
-            _logger.critical(reason)
-            self.state.transition(BotState.EMERGENCY, reason)
-            return
+        if not self.shadow_compare.can_transition_to_live():
+            from qtrader.execution.safety import ShadowEnforcer
+            enforcer = ShadowEnforcer(
+                shadow_data_path=getattr(self.config, "shadow_data_path", "data_lake/shadow")
+            )
+            if not enforcer.verify_history():
+                reason = "SHADOW_ENFORCEMENT breach: 7-day minimum shadow performance required"
+                _logger.critical(reason)
+                self.state.transition(BotState.EMERGENCY, reason)
+                return
 
         self.state.transition(BotState.TRADING, "warmup complete")
         self._last_heartbeat = time.time()
-        self._tasks = [
-            asyncio.create_task(self.bus.start()),
-        ]
         _logger.info("TradingBot started", state=self.state.state.name)
 
     async def _check_risk(self) -> None:
@@ -558,6 +624,7 @@ class TradingBot:
         except ValueError:
             pass
         await self.bus.shutdown()
+        await self.timer_service.stop()
         for t in self._tasks:
             t.cancel()
         try:

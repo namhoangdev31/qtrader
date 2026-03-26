@@ -46,6 +46,8 @@ class EventBus:
         self._events_failed = 0
         self._events_retried = 0
         self._dead_letter_count = 0
+        self.last_event_process_ms: float | None = None
+        self.max_queue_depth_seen = 0
 
     async def start(self) -> None:
         """Start the event bus processing loop."""
@@ -74,6 +76,8 @@ class EventBus:
             try:
                 # Get event from queue (waits if empty)
                 event_type, data = await self._queue.get()
+                start_time = time.perf_counter()
+                
                 if event_type in self._subscribers:
                     # Process each subscriber concurrently but with error handling
                     tasks = []
@@ -89,6 +93,10 @@ class EventBus:
                 
                 self._queue.task_done()
                 self._events_processed += 1
+                duration = (time.perf_counter() - start_time) * 1000
+                self.last_event_process_ms = duration
+                if duration > 50.0:
+                    self._logger.warning(f"Latency breach: Event {event_type} processed in {duration:.2f}ms (>50ms!)")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -175,10 +183,24 @@ class EventBus:
     async def publish(self, event_type: EventType, data: Any) -> None:
         """
         Publish an event to the bus with backpressure handling.
-
-        Waits if the queue is full (based on maxsize).
         """
         await self._queue.put((event_type, data))
+        self.max_queue_depth_seen = max(self.max_queue_depth_seen, self._queue.qsize())
+
+    async def shutdown(self) -> None:
+        """Graceful alias for stop()."""
+        await self.stop()
+
+    def get_stats(self) -> dict[str, Any]:
+        """Unified stats collection for telemetry."""
+        return {
+            "published": self._events_processed + self._events_failed,
+            "processed": self._events_processed,
+            "failed": self._events_failed,
+            "last_latency_ms": self.last_event_process_ms,
+            "queue_size": self._queue.qsize(),
+            "max_depth": self.max_queue_depth_seen
+        }
 
     def subscribe(self, event_type: EventType, callback: Callable) -> None:
         """Subscribe a callback to an event type."""

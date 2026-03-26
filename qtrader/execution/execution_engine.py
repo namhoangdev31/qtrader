@@ -299,8 +299,6 @@ class ExecutionEngine:
         # [STATELESS_EXECUTION]: In-memory trackers removed.
         # Position and cost basis are fetched from StateStore.
         self.failover_queue: asyncio.Queue | None = asyncio.Queue() if enable_failover_queue else None
-        self.pending_orders: dict[str, OrderEvent] = {}  # Per-request transient cache
-        self.order_futures: dict[str, asyncio.Future] = {}  # Per-request transient futures
         
         # Subscribe to retries if event bus is available
         if self._event_bus:
@@ -331,10 +329,10 @@ class ExecutionEngine:
             except asyncio.CancelledError:
                 pass
         self.logger.info("ExecutionEngine stopped")
-    
+
     from qtrader.core.latency import enforce_latency
     @enforce_latency(threshold_ms=50.0)
-    async def execute_order(self, order: OrderEvent, attempt: int = 1) -> tuple[bool, FillEvent | None]:
+    async def execute_order(self, order: OrderEvent, attempt: int = 1) -> tuple[bool, str | None]:
         """
         Execute an order with validation and event-based retry logic.
         
@@ -343,7 +341,7 @@ class ExecutionEngine:
             attempt: Current attempt number
             
         Returns:
-            Tuple (success, fill_event or None if failed/retrying)
+            Tuple (success, order_id or None if failed/retrying)
         """
         # Validate order on first attempt
         if attempt == 1:
@@ -357,25 +355,16 @@ class ExecutionEngine:
             if success:
                 assert isinstance(result, str), "send_order must return order_id as string on success"
                 order_id = result
-                self.pending_orders[order_id] = order
-                future = asyncio.Future()
-                self.order_futures[order_id] = future
-                
-                try:
-                    timeout = 5.0 if order.order_type == OrderType.MARKET.value else 30.0
-                    fill_event = await asyncio.wait_for(future, timeout=timeout)
-                    return True, fill_event
-                except asyncio.TimeoutError:
-                    self.logger.warning(f"Order {order_id} timed out waiting for fill")
-                    return False, None
+                self.logger.info(f"Order {order_id} dispatched via event loop")
+                return True, order_id
             
             # Send failed: use event-driven retry
             if attempt <= self.max_retry_attempts:
                 self.logger.warning(f"Order send failed (attempt {attempt}), scheduling retry via event: {result}")
                 if self._event_bus:
-                    from qtrader.core.event import RetryOrderEvent
+                    from qtrader.core.event import RetryOrderEvent, EventType
                     retry_event = RetryOrderEvent(order=order, attempt=attempt + 1)
-                    await self._event_bus.publish(retry_event)
+                    await self._event_bus.publish(EventType.RETRY_ORDER, retry_event)
                 return False, None
             else:
                 self.logger.error(f"Order send failed after {attempt} attempts: {result}")
@@ -387,8 +376,8 @@ class ExecutionEngine:
             self.logger.error(f"Unexpected error executing order (attempt {attempt}): {e}", exc_info=True)
             if attempt <= self.max_retry_attempts:
                 if self._event_bus:
-                    from qtrader.core.event import RetryOrderEvent
-                    await self._event_bus.publish(RetryOrderEvent(order=order, attempt=attempt + 1))
+                    from qtrader.core.event import RetryOrderEvent, EventType
+                    await self._event_bus.publish(EventType.RETRY_ORDER, RetryOrderEvent(order=order, attempt=attempt + 1))
             elif self.enable_failover_queue and self.failover_queue is not None:
                 await self.failover_queue.put((order, datetime.utcnow()))
             return False, None
@@ -400,31 +389,8 @@ class ExecutionEngine:
             await self.execute_order(event.order, attempt=event.attempt)
     
     async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
-        """
-        Cancel an order.
-        
-        Args:
-            order_id: ID of the order to cancel
-            
-        Returns:
-            Tuple (success, error_message)
-        """
-        # Check if it's in our pending orders
-        if order_id in self.pending_orders:
-            success, error = await self.exchange_adapter.cancel_order(order_id)
-            if success:
-                # Remove from tracking
-                if order_id in self.pending_orders:
-                    del self.pending_orders[order_id]
-                if order_id in self.order_futures:
-                    # Cancel the future if it's still waiting
-                    future = self.order_futures.pop(order_id)
-                    if not future.done():
-                        future.set_exception(asyncio.CancelledError())
-            return success, error
-        else:
-            # Try to cancel on exchange anyway (might be a stale ID)
-            return await self.exchange_adapter.cancel_order(order_id)
+        """Cancel an order via the adapter purely stateless."""
+        return await self.exchange_adapter.cancel_order(order_id)
     
     def _validate_order(self, order: OrderEvent) -> str | None:
         """
@@ -487,24 +453,8 @@ class ExecutionEngine:
     
     # Methods to be called by the exchange adapter or market data feed to update order status
     def _on_order_filled(self, order_id: str, fill_event: FillEvent) -> None:
-        """
-        Callback to handle an order fill (to be called by exchange adapter or market data handler).
-        
-        Args:
-            order_id: ID of the order that was filled
-            fill_event: FillEvent details
-        """
-        if order_id in self.order_futures:
-            future = self.order_futures.pop(order_id)
-            if not future.done():
-                future.set_result(fill_event)
-        
-        # Update position tracking
-        self._update_position_from_fill(fill_event)
-        
-        # Remove from pending orders
-        if order_id in self.pending_orders:
-            del self.pending_orders[order_id]
+        """Callback to handle an order fill."""
+        # Note: the fill events are propagated to OMS
         
         # Standardized institutional trade log
         from qtrader.execution.trade_logger import TradeLogger
@@ -519,20 +469,7 @@ class ExecutionEngine:
         )
     
     def _on_order_cancelled(self, order_id: str) -> None:
-        """
-        Callback to handle an order cancellation.
-        
-        Args:
-            order_id: ID of the order that was cancelled
-        """
-        if order_id in self.order_futures:
-            future = self.order_futures.pop(order_id)
-            if not future.done():
-                future.set_exception(asyncio.CancelledError())
-        
-        if order_id in self.pending_orders:
-            del self.pending_orders[order_id]
-        
+        """Callback to handle an order cancellation."""
         self.logger.info(f"Order cancelled: {order_id}")
 
     async def _update_position_from_fill(self, fill_event: FillEvent) -> None:
