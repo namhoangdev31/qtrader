@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 
 from qtrader.core.logger import logger
+from qtrader.core.state_store import Order, StateStore
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
 from qtrader.execution.multi_exchange_adapter import MultiExchangeAdapter
@@ -130,6 +131,7 @@ class ExecutionOMSAdapter(OMSAdapter):
     def __init__(
         self,
         exchange_adapters: dict[str, ExchangeAdapter],
+        state_store: StateStore,
         routing_mode: str = "smart",
         max_order_size: Decimal | None = None,
         split_size: Decimal | None = None,
@@ -140,12 +142,14 @@ class ExecutionOMSAdapter(OMSAdapter):
 
         Args:
             exchange_adapters: Dictionary mapping exchange name to exchange adapter instance
+            state_store: Centralized state store for order tracking
             routing_mode: Routing strategy ("best_price", "smart", "manual")
             max_order_size: Maximum order size for a single exchange (for splitting)
             split_size: Size of each split (if None, defaults to max_order_size)
             name: Name of this adapter
         """
         super().__init__(name)
+        self.state_store = state_store
         self.exchange_adapters = exchange_adapters
         self.routing_mode = routing_mode
         self.max_order_size = max_order_size
@@ -255,11 +259,20 @@ class ExecutionOMSAdapter(OMSAdapter):
             }
         )
 
+        # [OMS_STATE_CENTRALIZATION]: Persist order to central state store
+        await self.state_store.set_order(Order(
+            order_id=order_event.order_id,
+            symbol=order_event.symbol,
+            side=order_event.side,
+            order_type=order_event.order_type,
+            quantity=order_event.quantity,
+            timestamp=order_event.timestamp,
+            status="PENDING"
+        ))
+
         self.logger.debug(f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}")
 
         # Submit the order via the execution engine (non-blocking)
-        # We don't wait for the fill result, just fire and forget
-        # In a real system, we might want to track fills via callbacks
         asyncio.create_task(self._submit_order(order_event))
 
         return order_event
@@ -269,16 +282,34 @@ class ExecutionOMSAdapter(OMSAdapter):
         try:
             self.logger.info(f"Submitting order {order_event.order_id} via execution engine")
             success, result = await self.execution_engine.execute_order(order_event)
+            
+            # [OMS_STATE_CENTRALIZATION]: Update order status in central state store
+            def update_status(order: Order) -> None:
+                order.status = "SUCCESS" if success else "REJECTED"
+                if not success:
+                    # In a real system, we'd store the rejection reason
+                    pass
+
+            await self.state_store.update_order(order_event.order_id, update_status)
+
             if success:
                 self.logger.info(f"Order {order_event.order_id} submitted successfully, result: {result}")
             else:
                 self.logger.warning(f"Order {order_event.order_id} submission failed: {result}")
         except Exception as e:
             self.logger.error(f"Error submitting order {order_event.order_id}: {e}", exc_info=True)
+            # Update status to error for future recovery
+            await self.state_store.update_order(order_event.order_id, lambda x: setattr(x, "status", "ERROR"))
 
     async def cancel_all_orders(self) -> None:
         """Cancel all open orders (delegated to execution engine)."""
         self.logger.info("Cancelling all open orders via ExecutionOMSAdapter")
-        # In a real implementation, we would track pending orders and cancel them
-        # For now, we just log the action
-        pass
+        
+        # [OMS_STATE_CENTRALIZATION]: Iterate and cancel all active orders tracked in state store
+        active_orders = await self.state_store.get_active_orders()
+        for order_id, order in active_orders.items():
+            if order.status in ["PENDING", "PARTIAL"]:
+                # In a real system, we would call a specific exchange cancellation method
+                self.logger.info(f"Initiating cancellation for tracked order: {order_id}")
+                # For now, mark as cancelled in the state store
+                await self.state_store.update_order(order_id, lambda x: setattr(x, "status", "CANCELLED"))

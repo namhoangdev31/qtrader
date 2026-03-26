@@ -115,10 +115,9 @@ class TradingOrchestrator:
             )
         else:
             self.mlflow_manager = None
-        # Current risk multiplier from meta-learner (default 1.0)
-        self.current_risk_multiplier = Decimal('1.0')
-        # Counter for feedback updates to control logging frequency
-        self._feedback_update_count = 0
+        # [STATELESS_STRATEGY]: Internal state variables moved to StateStore
+        # All decision-making state (risk multipliers, approved metrics) is now durable.
+        self._local_feedback_count = 0 
 
         # State limits (example values - should be configurable via constructor or config)
         self.max_drawdown = Decimal('0.20')  # 20%
@@ -278,6 +277,13 @@ class TradingOrchestrator:
             
             log.info(f"Processing signal: {signal_event.signal_type} with strength {signal_event.strength}")
             
+            # [STATELESS_STRATEGY]: Idempotency check
+            last_ts = await self.state_store.get_last_signal_timestamp()
+            if last_ts and last_ts == signal_event.timestamp:
+                log.warning("Duplicate signal detected, skipping")
+                return
+            await self.state_store.set_last_signal_timestamp(signal_event.timestamp)
+
             # Compute allocation
             allocation_weights = await self.portfolio_allocator.allocate(signal_event)
             if allocation_weights is None:
@@ -304,7 +310,12 @@ class TradingOrchestrator:
                 })
                 return
             
-            self.last_approved_risk_metrics = risk_metrics
+            # [STATELESS_STRATEGY]: Commit approved metrics to store
+            await self.state_store.set_last_approved_risk_metrics({
+                "portfolio_var": float(risk_metrics.portfolio_var),
+                "max_drawdown": float(risk_metrics.max_drawdown),
+                "leverage": float(risk_metrics.leverage)
+            })
             log.info(f"Risk check passed. VaR={risk_metrics.portfolio_var}, Drawdown={risk_metrics.max_drawdown}, Leverage={risk_metrics.leverage}")
             
             # Publish ORDERS event
@@ -334,11 +345,21 @@ class TradingOrchestrator:
             if not allocation_dict:
                 log.warning("No allocation in orders data")
                 return
-            # Use the last approved risk metrics
-            risk_metrics = self.last_approved_risk_metrics
-            if risk_metrics is None:
-                log.warning("No approved risk metrics available for order")
+            
+            # [STATELESS_STRATEGY]: Retrieve approved metrics from durable store
+            risk_data = await self.state_store.get_last_approved_risk_metrics()
+            if not risk_data:
+                log.warning("No approved risk metrics available in StateStore for order")
                 return
+            
+            # Reconstruct RiskMetrics for the OMS adapter (Simplified)
+            from qtrader.core.types import RiskMetrics
+            risk_metrics = RiskMetrics(
+                portfolio_var=Decimal(str(risk_data["portfolio_var"])),
+                max_drawdown=Decimal(str(risk_data["max_drawdown"])),
+                leverage=Decimal(str(risk_data["leverage"])),
+                timestamp=datetime.utcnow()
+            )
             # Convert allocation dict to AllocationWeights
             allocation_weights = AllocationWeights(
                 timestamp=orders_data.get("timestamp", datetime.utcnow()),
@@ -487,11 +508,10 @@ class TradingOrchestrator:
                 
                 # Update allocator with risk multiplier if available
                 risk_multiplier = meta_result.get('risk_multiplier', 1.0)
-                if risk_multiplier != 1.0 and hasattr(self.portfolio_allocator, 'set_risk_multiplier'):
+                await self.state_store.set_current_risk_multiplier(Decimal(str(risk_multiplier)))
+                if hasattr(self.portfolio_allocator, 'set_risk_multiplier'):
                     self.portfolio_allocator.set_risk_multiplier(risk_multiplier)
                     logger.debug(f"Set allocator risk multiplier to {risk_multiplier}")
-                elif risk_multiplier != 1.0:
-                    logger.info(f"Would set allocator risk multiplier to {risk_multiplier} (method not available)")
                 
                 # Update drift detector with new live and historical data
                 try:
@@ -596,8 +616,8 @@ class TradingOrchestrator:
                 
                 # Log to MLflow periodically (every 10 updates)
                 if self.mlflow_manager and self.mlflow_manager.is_enabled():
-                    self._feedback_update_count += 1
-                    if self._feedback_update_count % 10 == 0:
+                    self._local_feedback_count += 1
+                    if self._local_feedback_count % 10 == 0:
                         try:
                             # Extract strategy name from feedback data if available
                             strategy_name = data.get('strategy_name', 'unknown')

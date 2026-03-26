@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any
 
 from qtrader.core.logger import logger
+from qtrader.core.state_store import StateStore, Position
 from qtrader.core.types import FillEvent, LoggerProtocol, OrderEvent
 
 from .orderbook_simulator import OrderbookSimulator
@@ -273,6 +274,7 @@ class ExecutionEngine:
     def __init__(
         self,
         exchange_adapter: ExchangeAdapter,
+        state_store: StateStore | None = None,
         max_order_size: float = 1000000.0,  # Default max order size in quote currency
         max_slippage: float = 0.01,         # 1% max slippage for market orders
         max_retry_attempts: int = 3,
@@ -282,6 +284,7 @@ class ExecutionEngine:
         logger: LoggerProtocol = logger
     ) -> None:
         self.exchange_adapter = exchange_adapter
+        self.state_store = state_store or StateStore()
         # If the adapter supports fill callback, set it
         if hasattr(exchange_adapter, 'set_fill_callback'):
             exchange_adapter.set_fill_callback(self._on_order_filled)
@@ -293,12 +296,11 @@ class ExecutionEngine:
         self.logger = logger
         self._event_bus = event_bus
         
-        # State
+        # [STATELESS_EXECUTION]: In-memory trackers removed.
+        # Position and cost basis are fetched from StateStore.
         self.failover_queue: asyncio.Queue | None = asyncio.Queue() if enable_failover_queue else None
-        self.pending_orders: dict[str, OrderEvent] = {}  # order_id -> order
-        self.order_futures: dict[str, asyncio.Future] = {}  # order_id -> future for result
-        self.position_tracker: dict[str, Decimal] = {}  # symbol -> position size
-        self.avg_price_tracker: dict[str, tuple[Decimal, Decimal]] = {}  # symbol -> (total_cost, total_quantity)
+        self.pending_orders: dict[str, OrderEvent] = {}  # Per-request transient cache
+        self.order_futures: dict[str, asyncio.Future] = {}  # Per-request transient futures
         
         # Subscribe to retries if event bus is available
         if self._event_bus:
@@ -532,39 +534,45 @@ class ExecutionEngine:
             del self.pending_orders[order_id]
         
         self.logger.info(f"Order cancelled: {order_id}")
-    
-    def _update_position_from_fill(self, fill_event: FillEvent) -> None:
-        """Update internal position tracking from a fill event."""
+
+    async def _update_position_from_fill(self, fill_event: FillEvent) -> None:
+        """[STATELESS_EXECUTION]: Update central state store instead of local trackers."""
         symbol = fill_event.symbol
         quantity = fill_event.quantity if fill_event.side == "BUY" else -fill_event.quantity
         
-        # Update position size
-        self.position_tracker[symbol] = self.position_tracker.get(symbol, Decimal('0')) + quantity
-        
-        # Update average price
-        if symbol in self.avg_price_tracker:
-            total_cost, total_qty = self.avg_price_tracker[symbol]
-            new_cost = total_cost + (fill_event.price * fill_event.quantity)
-            new_qty = total_qty + fill_event.quantity
-            if new_qty != 0:
-                new_cost / new_qty
-            else:
-                Decimal('0')
-            self.avg_price_tracker[symbol] = (new_cost, new_qty)
+        # We rely on the orchestrator to do the primary update, but we ensure 
+        # consistency here if required. However, for a truly stateless worker, 
+        # we can just fetch and verify.
+        current = await self.state_store.get_position(symbol)
+        if current:
+            # Recompute average price and update
+            new_qty = current.quantity + quantity
+            new_cost = (current.quantity * current.average_price) + (fill_event.quantity * fill_event.price)
+            new_avg = new_cost / new_qty if new_qty != 0 else Decimal('0')
+            await self.state_store.set_position(Position(
+                symbol=symbol,
+                quantity=new_qty,
+                average_price=new_avg,
+                timestamp=datetime.utcnow()
+            ))
         else:
-            self.avg_price_tracker[symbol] = (fill_event.price * fill_event.quantity, fill_event.quantity)
+            await self.state_store.set_position(Position(
+                symbol=symbol,
+                quantity=quantity,
+                average_price=fill_event.price,
+                timestamp=datetime.utcnow()
+            ))
+
+    async def get_position(self, symbol: str) -> Decimal:
+        """[STATELESS_EXECUTION]: Fetch current position from central state store."""
+        pos = await self.state_store.get_position(symbol)
+        return pos.quantity if pos else Decimal('0')
+
+    async def get_average_price(self, symbol: str) -> Decimal | None:
+        """[STATELESS_EXECUTION]: Fetch average price from central state store."""
+        pos = await self.state_store.get_position(symbol)
+        return pos.average_price if pos else None
     
-    def get_position(self, symbol: str) -> Decimal:
-        """Get current tracked position for a symbol."""
-        return self.position_tracker.get(symbol, Decimal('0'))
-    
-    def get_average_price(self, symbol: str) -> Decimal | None:
-        """Get average price for a position."""
-        if symbol in self.avg_price_tracker:
-            total_cost, total_qty = self.avg_price_tracker[symbol]
-            if total_qty != 0:
-                return total_cost / total_qty
-        return None
 
 # Example usage (not part of the required output, but for illustration)
 if __name__ == "__main__":
