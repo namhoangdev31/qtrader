@@ -55,6 +55,9 @@ class SystemState:
     equity_curve: list[tuple[datetime, Decimal]] = field(default_factory=list)
     active_orders: dict[str, Order] = field(default_factory=dict)
     risk_state: RiskState = field(default_factory=RiskState)
+    last_approved_risk_metrics: dict[str, Any] = field(default_factory=dict)
+    current_risk_multiplier: Decimal = Decimal('1.0')
+    last_signal_timestamp: datetime | None = None
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -200,6 +203,42 @@ class StateStore:
             self._state.version += 1  # Increment version on restore
             self._state.timestamp = datetime.utcnow()
             self._logger.info("State restored from snapshot")
+
+    async def get_last_approved_risk_metrics(self) -> dict[str, Any]:
+        """Get the last approved risk metrics."""
+        async with self._lock:
+            return copy.deepcopy(self._state.last_approved_risk_metrics)
+
+    async def set_last_approved_risk_metrics(self, metrics: dict[str, Any]) -> None:
+        """Set the last approved risk metrics."""
+        async with self._lock:
+            self._state.last_approved_risk_metrics = copy.deepcopy(metrics)
+            self._state.version += 1
+            self._state.timestamp = datetime.utcnow()
+
+    async def get_current_risk_multiplier(self) -> Decimal:
+        """Get the current risk multiplier."""
+        async with self._lock:
+            return self._state.current_risk_multiplier
+
+    async def set_current_risk_multiplier(self, multiplier: Decimal) -> None:
+        """Set the current risk multiplier."""
+        async with self._lock:
+            self._state.current_risk_multiplier = multiplier
+            self._state.version += 1
+            self._state.timestamp = datetime.utcnow()
+
+    async def get_last_signal_timestamp(self) -> datetime | None:
+        """Get the last signal timestamp for idempotency."""
+        async with self._lock:
+            return self._state.last_signal_timestamp
+
+    async def set_last_signal_timestamp(self, ts: datetime) -> None:
+        """Set the last signal timestamp."""
+        async with self._lock:
+            self._state.last_signal_timestamp = ts
+            self._state.version += 1
+            self._state.timestamp = datetime.utcnow()
 
     def get_version(self) -> int:
         """Get the current state version (thread-safe for reads)."""

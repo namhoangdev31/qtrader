@@ -68,6 +68,11 @@ class QTraderSettings(BaseSettings):
     alert_min_severity: str = "WARNING"
     alert_cooldown_seconds: float = 60.0
 
+    # JWT Security
+    jwt_secret_key: str = "changeme-for-production"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
+
     @property
     def TRADING_SYMBOLS(self) -> List[str]:
         return self.trading_symbols
