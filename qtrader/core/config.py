@@ -1,12 +1,9 @@
-"""Central configuration via Pydantic Settings with validation and env loading."""
-
-from __future__ import annotations
-
+from typing import Any, Dict, List, Optional
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class QTraderSettings(BaseSettings):  # type: ignore[misc]
+class QTraderSettings(BaseSettings):
     """Centralized configuration for QTrader. Loads from .env with validation at startup."""
 
     model_config = SettingsConfigDict(
@@ -185,6 +182,15 @@ class QTraderSettings(BaseSettings):  # type: ignore[misc]
 
 # Module-level singleton; validated at import (fail-fast)
 settings: QTraderSettings = QTraderSettings()
+
+
+class ConfigLoader:
+    """Unified configuration loader for QTrader."""
+
+    @staticmethod
+    def load() -> QTraderSettings:
+        return settings
+
 
 # Backward compatibility alias for existing code using Config.BINANCE_API_KEY etc.
 Config: QTraderSettings = settings

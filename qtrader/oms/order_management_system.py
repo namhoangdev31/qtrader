@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from qtrader.core.event import FillEvent, OrderEvent
-from qtrader.execution.brokers.base import BrokerAdapter
+if TYPE_CHECKING:
+    from qtrader.core.event import FillEvent, OrderEvent
+    from qtrader.execution.brokers.base import BrokerAdapter
 
 __all__ = ["Position", "PositionManager", "UnifiedOMS"]
 
@@ -208,7 +209,7 @@ class UnifiedOMS:
         """Cancel all live orders across all venues."""
         import asyncio
         tasks = []
-        for venue, adapter in self.adapters.items():
+        for venue, _adapter in self.adapters.items():
             for oid in list(self.live_orders.keys()):
                 tasks.append(self.cancel_order(venue, oid))
         if tasks:

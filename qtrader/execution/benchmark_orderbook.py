@@ -95,7 +95,7 @@ def benchmark_simulator(simulator, orderbook, n_orders=1000):
         'total_orders': n_orders
     }
 
-def run_benchmarks():
+def run_benchmarks() -> None:
     """Run various benchmark scenarios."""
     logger.info("Orderbook Simulator Benchmark")
     logger.info("=" * 50)

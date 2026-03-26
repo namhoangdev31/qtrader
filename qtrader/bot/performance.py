@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 import polars as pl
 
-from qtrader.core.event import FillEvent
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from qtrader.core.event import FillEvent
 
 __all__ = ["PerformanceTracker"]
 

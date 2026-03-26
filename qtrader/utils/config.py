@@ -12,7 +12,7 @@ load_dotenv()
 class Config:
     """Configuration management for the QTrader system."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._config: dict[str, Any] = {}
         self._load_from_env()
 

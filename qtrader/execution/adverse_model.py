@@ -22,7 +22,7 @@ class AdverseSelectionModel:
     Model: P = sigmoid(alpha * imbalance + beta * delta_p + gamma * fill_rate + intercept)
     """
 
-    def __init__(self, params: AdverseModelParams | None = None):
+    def __init__(self, params: AdverseModelParams | None = None) -> None:
         """
         Initialize the model with parameters.
         """

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 def factor_exposure(
@@ -46,7 +49,7 @@ def factor_exposure(
     exposures = factor_loadings.T @ weights  # Shape: (n_factors,)
 
     # Create dictionary mapping factor name to exposure
-    return {name: float(exposure) for name, exposure in zip(factor_names, exposures)}
+    return {name: float(exposure) for name, exposure in zip(factor_names, exposures, strict=False)}
 
 
 def sector_exposure(
@@ -81,7 +84,7 @@ def sector_exposure(
     exposures: dict[str, float] = {}
 
     # Iterate over assets and accumulate weights by sector
-    for weight, sector in zip(weights, sector_mapping):
+    for weight, sector in zip(weights, sector_mapping, strict=False):
         # Convert sector to string to ensure dict key is string
         sector_str = str(sector)
         exposures[sector_str] = exposures.get(sector_str, 0.0) + float(weight)

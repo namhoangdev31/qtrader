@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from qtrader.backtest.tearsheet import TearsheetMetrics
-from qtrader.pipeline.research import ResearchResult
+if TYPE_CHECKING:
+    from qtrader.backtest.tearsheet import TearsheetMetrics
+    from qtrader.pipeline.research import ResearchResult
 
 logger = logging.getLogger(__name__)
 

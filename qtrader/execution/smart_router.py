@@ -26,7 +26,7 @@ class SmartOrderRouter:
         routing_mode: str = "smart",  # "best_price", "smart", "manual"
         max_order_size: Decimal | None = None,  # maximum order size before splitting
         split_size: Decimal | None = None,  # size of each split if max_order_size is set
-    ):
+    ) -> None:
         """
         Initialize smart order router.
 
@@ -89,7 +89,7 @@ class SmartOrderRouter:
             else:
                 self.logger.warning("No valid exchange specified for manual routing, defaulting to first exchange")
                 # Default to first exchange
-                exchange_name = list(self.exchanges.keys())[0]
+                exchange_name = next(iter(self.exchanges.keys()))
                 return [self._create_routed_order(order, exchange_name)]
 
         elif self.routing_mode == "best_price":
@@ -201,7 +201,7 @@ class SmartOrderRouter:
 
         # If we couldn't find a valid exchange, default to the first one
         if best_exchange is None:
-            best_exchange = list(self.exchanges.keys())[0]
+            best_exchange = next(iter(self.exchanges.keys()))
             self.logger.warning(f"No valid exchange found for best price, defaulting to {best_exchange}")
 
         return best_exchange
@@ -297,7 +297,7 @@ class SmartOrderRouter:
         # Select the exchange with the highest combined score
         if not scores:
             self.logger.warning("No valid exchanges found for smart routing, defaulting to first exchange")
-            return list(self.exchanges.keys())[0]
+            return next(iter(self.exchanges.keys()))
 
         best_exchange = max(scores, key=lambda x: scores[x])
         self.logger.debug(f"Selected exchange {best_exchange} with score {scores[best_exchange]}")

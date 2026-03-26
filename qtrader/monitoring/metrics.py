@@ -42,7 +42,7 @@ class MetricsAggregator:
     Optimized for sub-100ms updates via in-memory calculations.
     """
 
-    def __init__(self, window_size: int = 1000):
+    def __init__(self, window_size: int = 1000) -> None:
         """
         Args:
             window_size: Number of events to keep for rolling calculations (e.g., VaR).

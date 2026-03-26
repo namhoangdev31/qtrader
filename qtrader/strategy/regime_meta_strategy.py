@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-import polars as pl
+from typing import TYPE_CHECKING
 
 from qtrader.core.event import SignalEvent
-from qtrader.ml.regime import RegimeDetector
 from qtrader.strategy.meta_strategy import MetaStrategy
+
+if TYPE_CHECKING:
+    import polars as pl
+
+    from qtrader.ml.regime import RegimeDetector
 
 
 @dataclass

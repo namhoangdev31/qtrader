@@ -224,7 +224,7 @@ class DuckDBClient:
                 executor.submit(query_single, i, q): i 
                 for i, q in enumerate(queries)
             }
-            for future in as_completed(futures):
+            for _future in as_completed(futures):
                 pass  # Results are already stored
         
         return results

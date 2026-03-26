@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import polars as pl
 
-from qtrader.feature.alpha.base import Alpha
 from qtrader.feature.alpha.microstructure import (
     AmihudIlliquidityAlpha,
     OrderImbalanceAlpha,
     VPINAlpha,
 )
 from qtrader.feature.alpha.technical import MeanReversionAlpha, MomentumAlpha, TrendAlpha
+
+if TYPE_CHECKING:
+    from qtrader.feature.alpha.base import Alpha
 
 __all__ = ["AlphaEngine", "AlphaRegistry"]
 

@@ -8,18 +8,21 @@ portfolio optimization and risk engines.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
 from qtrader.analytics.performance import PerformanceAnalytics
-from qtrader.backtest.broker_sim import SimulatedBroker
-from qtrader.backtest.engine_vectorized import VectorizedEngine
-from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
-from qtrader.risk.portfolio.optimization import PortfolioOptimizer
-from qtrader.risk.realtime import RealTimeRiskEngine
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from qtrader.backtest.broker_sim import SimulatedBroker
+    from qtrader.backtest.engine_vectorized import VectorizedEngine
+    from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
+    from qtrader.risk.portfolio.optimization import PortfolioOptimizer
+    from qtrader.risk.realtime import RealTimeRiskEngine
 
 logger = logging.getLogger(__name__)
 
@@ -148,10 +151,9 @@ class BacktestHarness:
             # We'll compute weights for each bar (using expanding window or fixed lookback)
             # For now, we'll use a fixed lookback of 60 days.
             lookback = min(60, len(returns_df))
-            weights_list = []
             for i in range(lookback, len(returns_df)):
                 window = returns_df.slice(i - lookback, lookback)
-                weights = self.portfolio_optimizer.optimize(window)
+                self.portfolio_optimizer.optimize(window)
                 # Convert weights dict to a series aligned with the symbols in df
                 # We assume df has a 'symbol' column and we are processing one symbol at a time?
                 # This is a placeholder; the actual implementation would depend on the optimizer's interface.
@@ -374,7 +376,7 @@ class BacktestHarness:
 
         weights_list = []
         for i in range(lookback, len(returns)):
-            window = returns.iloc[i - lookback:i]  # assuming pandas-like iloc, but we are using Polars
+            returns.iloc[i - lookback:i]  # assuming pandas-like iloc, but we are using Polars
             # We need to use Polars slicing
             window_pl = returns.slice(i - lookback, lookback)
             # We'll compute the covariance matrix and then optimize
@@ -401,7 +403,7 @@ class BacktestHarness:
             ret_row = returns.row(i + lookback)  # assuming returns is a DataFrame and row returns a tuple
             # Convert w_dict to a list in the same order as returns.columns
             w_list = [w_dict.get(col, 0.0) for col in returns.columns]
-            port_ret = sum(w * r for w, r in zip(w_list, ret_row))
+            port_ret = sum(w * r for w, r in zip(w_list, ret_row, strict=False))
             portfolio_returns.append(port_ret)
 
         # We'll create a DataFrame for the portfolio returns with a timestamp index
@@ -421,7 +423,7 @@ class BacktestHarness:
         # Instead, we can compute the equity curve directly from the portfolio returns.
 
         # We'll compute the equity curve: cumulative product of (1 + return)
-        equity_curve = (1 + pl.Series(portfolio_returns)).cum_prod() * kwargs.get("initial_capital", 100_000.0)
+        (1 + pl.Series(portfolio_returns)).cum_prod() * kwargs.get("initial_capital", 100_000.0)
 
         # We'll also compute drawdown, etc. We can use the TearsheetGenerator on the equity curve.
         # But note: the TearsheetGenerator expects trades and equity curve? We don't have trades for the portfolio.

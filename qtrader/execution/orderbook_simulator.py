@@ -28,7 +28,7 @@ class OrderbookSimulator:
         market_impact_k: float = 0.1,
         max_slippage_pct: float = 0.01,
         random_seed: int | None = None
-    ):
+    ) -> None:
         """
         Initialize the orderbook simulator.
         

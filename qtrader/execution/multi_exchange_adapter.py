@@ -23,7 +23,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
         exchanges: dict[str, ExchangeAdapter],
         router: SmartOrderRouter,
         name: str = "MultiExchangeAdapter",
-    ):
+    ) -> None:
         """
         Initialize multi-exchange adapter.
 
@@ -82,7 +82,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
         except Exception as e:
             self.logger.error(f"Error selecting exchange: {e}")
             # Fallback to the first exchange
-            exchange_name = list(self.exchanges.keys())[0] if self.exchanges else None
+            exchange_name = next(iter(self.exchanges.keys())) if self.exchanges else None
 
         if not exchange_name or exchange_name not in self.exchanges:
             error_msg = "No valid exchange available for routing"

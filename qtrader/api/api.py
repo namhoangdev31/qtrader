@@ -1,5 +1,5 @@
 class QTraderAPI:
-    def __init__(self, host="localhost", port=8000):
+    def __init__(self, host="localhost", port=8000) -> None:
         self.host = host
         self.port = port
         self.engine = None

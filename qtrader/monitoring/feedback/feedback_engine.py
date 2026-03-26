@@ -144,7 +144,7 @@ class FeedbackEngine:
         for idx, entry in enumerate(self._signal_buffer):
             signal = entry.signal
             metadata = entry.metadata
-            signal_strategy = metadata.get('strategy', 'unknown')
+            metadata.get('strategy', 'unknown')
             signal_type = signal.signal_type
             signal_side = _get_signal_side(signal_type)
             fill_side = fill.side
@@ -262,7 +262,7 @@ class FeedbackEngine:
         """Compute Information Coefficient (IC) as correlation between feature values and returns."""
         if len(feature_data) < 2:
             return 0.0
-        values, returns = zip(*feature_data)
+        values, returns = zip(*feature_data, strict=False)
         try:
             # Using numpy for correlation
             ic = np.corrcoef(values, returns)[0, 1]

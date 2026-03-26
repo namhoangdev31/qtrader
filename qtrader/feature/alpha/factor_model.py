@@ -22,7 +22,7 @@ class FactorModel:
     - Optional Factor Neutralization
     """
 
-    def __init__(self, lookback: int = 20):
+    def __init__(self, lookback: int = 20) -> None:
         self.lookback = lookback
         self.logger = logger
 

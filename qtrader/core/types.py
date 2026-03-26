@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from qtrader.core.event import (
     EventType,
@@ -11,6 +9,10 @@ from qtrader.core.event import (
     OrderEvent,
     SignalEvent,
 )
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from decimal import Decimal
 
 # Aliases for compatibility
 Signal = SignalEvent

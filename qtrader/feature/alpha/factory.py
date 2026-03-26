@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import numpy as np
-import polars as pl
+from typing import TYPE_CHECKING
 
-from qtrader.feature.alpha.meta_selector import AlphaMetaSelector
+import numpy as np
+
 from qtrader.feature.alpha.models.gbdt_model import GBDTAlphaModel
-from qtrader.feature.features.engine import FactorEngine
 from qtrader.feature.features.interaction import InteractionGenerator
-from qtrader.ml.registry import ModelRegistry
+
+if TYPE_CHECKING:
+    import polars as pl
+
+    from qtrader.feature.alpha.meta_selector import AlphaMetaSelector
+    from qtrader.feature.features.engine import FactorEngine
+    from qtrader.ml.registry import ModelRegistry
 
 
 class AlphaFactory:

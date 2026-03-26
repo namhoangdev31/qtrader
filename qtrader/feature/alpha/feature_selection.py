@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import numpy as np
-import numpy.typing as npt
-import polars as pl
 from sklearn.feature_selection import mutual_info_regression
 
 from qtrader.feature.alpha.ic import SignalAnalyzer
+
+if TYPE_CHECKING:
+    import numpy as np
+    import numpy.typing as npt
+    import polars as pl
 
 MIN_MI_SAMPLES = 5
 
@@ -87,8 +89,8 @@ class FeatureSelector:
         std_val = clean_ic.std()
 
         return (
-            cast(float, mean_val) if mean_val is not None else 0.0,
-            cast(float, std_val) if std_val is not None else 1.0,
+            cast("float", mean_val) if mean_val is not None else 0.0,
+            cast("float", std_val) if std_val is not None else 1.0,
         )
 
     def _compute_mi(self, df: pl.DataFrame, features: list[str], target: str) -> dict[str, float]:

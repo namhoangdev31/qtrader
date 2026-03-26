@@ -36,7 +36,7 @@ except ImportError:
 class LatencyProfiler:
     """Tracks latency between stages in the trading pipeline professional."""
 
-    def __init__(self, max_history: int = 1000):
+    def __init__(self, max_history: int = 1000) -> None:
         self.max_history = max_history
         self.latency_history: deque = deque(maxlen=max_history)
         self.stage_timings: dict[str, float] = {}
@@ -147,7 +147,7 @@ class LatencyProfiler:
 class HFTOptimizer:
     """Optimizer for High-Frequency Trading to achieve sub-second latency."""
 
-    def __init__(self, latency_target_ms: float = 100.0):
+    def __init__(self, latency_target_ms: float = 100.0) -> None:
         self.latency_target_ms = latency_target_ms
         self.latency_profiler = LatencyProfiler()
         self._uvloop_set = False
@@ -238,7 +238,7 @@ class HFTOptimizer:
         return self._LatencyContext(self.latency_profiler, stage_name)
 
     class _LatencyContext:
-        def __init__(self, profiler: LatencyProfiler, stage_name: str):
+        def __init__(self, profiler: LatencyProfiler, stage_name: str) -> None:
             self.profiler = profiler
             self.stage_name = stage_name
 

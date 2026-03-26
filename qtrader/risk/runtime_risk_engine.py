@@ -23,7 +23,7 @@ class AdvancedRiskEngine:
         max_correlation: float = 0.70,
         kill_switch_drawdown: float = 0.30,
         kill_switch_consecutive_losses: int = 5,
-    ):
+    ) -> None:
         self.max_lookback = max_lookback
         self.max_drawdown_threshold = max_drawdown_threshold
         self.var_threshold = var_threshold
@@ -362,8 +362,8 @@ class AdvancedRiskEngine:
         # Drawdown
         drawdown_series = self._calculate_drawdown_series(portfolio_returns)
         if len(drawdown_series) > 0:
-            metrics["current_drawdown"] = float(cast(float, drawdown_series[-1]))
-            metrics["max_drawdown"] = float(cast(float, drawdown_series.max()))
+            metrics["current_drawdown"] = float(cast("float", drawdown_series[-1]))
+            metrics["max_drawdown"] = float(cast("float", drawdown_series.max()))
         else:
             metrics["current_drawdown"] = 0.0
             metrics["max_drawdown"] = 0.0

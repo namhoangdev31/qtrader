@@ -14,7 +14,7 @@ class WarRoomService:
     Coordinates metrics aggregation and dashboard data serving.
     """
 
-    def __init__(self, update_interval_s: float = 1.0):
+    def __init__(self, update_interval_s: float = 1.0) -> None:
         """
         Args:
             update_interval_s: Interval for broadcasting dashboard updates.

@@ -25,7 +25,7 @@ class ResourceMonitor:
     
     def __init__(self, 
                  thresholds: ResourceThresholds | None = None,
-                 window_size: int = 300):  # 5 minutes of 1-second samples
+                 window_size: int = 300) -> None:  # 5 minutes of 1-second samples
         self.thresholds = thresholds or ResourceThresholds()
         self.window_size = window_size
         
@@ -46,7 +46,7 @@ class ResourceMonitor:
         # Last loop time for latency calculation
         self._last_loop_time: float | None = None
 
-    async def start_monitoring(self):
+    async def start_monitoring(self) -> None:
         """Start background resource monitoring task."""
         if self._is_monitoring:
             return
@@ -55,7 +55,7 @@ class ResourceMonitor:
         self._monitoring_task = asyncio.create_task(self._monitor_loop())
         logger.info("Resource monitoring started")
         
-    async def stop_monitoring(self):
+    async def stop_monitoring(self) -> None:
         """Stop background resource monitoring."""
         self._is_monitoring = False
         if self._monitoring_task:
@@ -66,7 +66,7 @@ class ResourceMonitor:
                 pass
         logger.info("Resource monitoring stopped")
         
-    async def _monitor_loop(self):
+    async def _monitor_loop(self) -> None:
         """Main monitoring loop that checks resources and triggers throttling."""
         while self._is_monitoring:
             try:
@@ -136,19 +136,19 @@ class ResourceMonitor:
                 logger.error(f"Error in resource monitoring: {e}")
                 await asyncio.sleep(5.0)  # Back off on error
     
-    def register_throttle_callback(self, callback: Callable[[str, dict[str, Any]], None]):
+    def register_throttle_callback(self, callback: Callable[[str, dict[str, Any]], None]) -> None:
         """Register a callback to be executed when throttling is triggered (for processing throttling)."""
         self._throttle_callbacks.append(callback)
         
-    def register_drop_signal_callback(self, callback: Callable[[str, dict[str, Any]], None]):
+    def register_drop_signal_callback(self, callback: Callable[[str, dict[str, Any]], None]) -> None:
         """Register a callback to be executed when throttling is triggered (for dropping low-priority signals)."""
         self._drop_signal_callbacks.append(callback)
         
-    def register_warning_callback(self, callback: Callable[[str, dict[str, Any]], None]):
+    def register_warning_callback(self, callback: Callable[[str, dict[str, Any]], None]) -> None:
         """Register a callback to be executed when throttling is triggered (for warnings/alerts)."""
         self._warning_callbacks.append(callback)
         
-    async def _trigger_actions(self, reason: str, metrics: dict[str, float]):
+    async def _trigger_actions(self, reason: str, metrics: dict[str, float]) -> None:
         """Execute all registered callback groups."""
         logger.info(f"Triggering resource actions due to: {reason}")
         

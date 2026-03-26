@@ -6,7 +6,7 @@ import polars as pl
 class PerformanceAnalytics:
     """Calculates performance metrics from equity curve or returns."""
 
-    def __init__(self, name: str = "performance", risk_free_rate: float = 0.0):
+    def __init__(self, name: str = "performance", risk_free_rate: float = 0.0) -> None:
         self.name = name
         self.risk_free_rate = risk_free_rate
 

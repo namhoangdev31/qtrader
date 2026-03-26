@@ -6,9 +6,10 @@ compute() must be a pure Polars expression chain — no Python loops, no numpy.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-import polars as pl
+if TYPE_CHECKING:
+    import polars as pl
 
 __all__ = ["Feature", "FeaturePipeline"]
 

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import random
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from qtrader.meta.strategy_generator import StrategyGenerator
+if TYPE_CHECKING:
+    from qtrader.meta.strategy_generator import StrategyGenerator
 
 
 class GeneticEvolution:

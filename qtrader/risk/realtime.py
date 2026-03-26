@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import polars as pl
 
-from qtrader.core.bus import EventBus
-from qtrader.core.event import RiskEvent
 from qtrader.risk.limits import PortfolioState, RiskLimit
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from qtrader.core.bus import EventBus
+    from qtrader.core.event import RiskEvent
 
 __all__ = ["RealTimeRiskEngine"]
 

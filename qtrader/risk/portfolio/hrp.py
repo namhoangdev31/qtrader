@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import polars as pl
 from scipy.cluster.hierarchy import leaves_list, linkage, optimal_leaf_ordering
 from scipy.optimize import linprog
 from scipy.spatial.distance import squareform
 from sklearn.covariance import LedoitWolf
+
+if TYPE_CHECKING:
+    import polars as pl
 
 __all__ = ["CVaROptimizer", "HRPOptimizer"]
 
@@ -54,7 +57,7 @@ class HRPOptimizer:
         weights_ord = self._recursive_bisection(cov_ord)
 
         weights = np.zeros_like(weights_ord)
-        for idx, w in zip(order, weights_ord):
+        for idx, w in zip(order, weights_ord, strict=False):
             weights[idx] = w
 
         weights = np.clip(weights, 0.0, None)

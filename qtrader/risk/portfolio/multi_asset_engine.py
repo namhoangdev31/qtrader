@@ -5,15 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
 import polars as pl
 
 from qtrader.core.logger import logger
 from qtrader.core.types import AllocationWeights, SignalEvent
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass

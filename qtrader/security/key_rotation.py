@@ -18,7 +18,7 @@ class KeyRotationManager:
     Keys automatically expire after a configurable period.
     """
 
-    def __init__(self, rotation_days: int = 30):
+    def __init__(self, rotation_days: int = 30) -> None:
         """
         Args:
             rotation_days: Number of days before a key expires.

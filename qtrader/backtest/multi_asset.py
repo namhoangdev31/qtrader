@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 import polars as pl
 
-from qtrader.backtest.tearsheet import TearsheetGenerator
+if TYPE_CHECKING:
+    from qtrader.backtest.tearsheet import TearsheetGenerator
 
 __all__ = ["PortfolioBacktest"]
 
@@ -78,7 +80,7 @@ class PortfolioBacktest:
         df = df.join(signals, on="timestamp").join(returns, on="timestamp", suffix="_ret")
 
         # Derive target weights from explicit weights or signals.
-        weight_cols = [f"w_{c}" for c in symbol_cols]
+        [f"w_{c}" for c in symbol_cols]
         if weights is not None:
             w_df = weights.rename({c: f"w_{c}" for c in symbol_cols})
             df = df.join(w_df, on="timestamp")

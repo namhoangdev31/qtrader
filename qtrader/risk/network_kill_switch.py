@@ -22,7 +22,7 @@ class NetworkKillSwitch:
         logger_instance: logging.Logger | None = None,
         latency_threshold_ms: float = 500.0,
         max_errors: int = 5,
-    ):
+    ) -> None:
         """
         Initialize network kill switch.
 
@@ -129,7 +129,7 @@ class NetworkKillSwitch:
                         await self.oms_adapter.cancel_all_orders()
                     else:
                         # Call synchronous method; result intentionally ignored
-                        result = self.oms_adapter.cancel_all_orders()
+                        self.oms_adapter.cancel_all_orders()
                     self.logger.info("Cancelled all open orders via OMS adapter")
                 else:
                     self.logger.warning(

@@ -28,7 +28,7 @@ class OrderbookEnhanced:
         depth_levels: int = 10,
         volume_per_level: float = 1000.0,
         liquidity_decay_factor: float = 0.8,
-    ):
+    ) -> None:
         """
         Initialize enhanced orderbook simulator.
         
@@ -51,7 +51,7 @@ class OrderbookEnhanced:
         for symbol in symbols:
             self._orderbooks[symbol] = self._generate_initial_orderbook(symbol)
             
-    async def update_orderbook(self, symbol: str, market_data: Any):
+    async def update_orderbook(self, symbol: str, market_data: Any) -> None:
         """Update orderbook based on market data (trade, quote changes)."""
         # In a real implementation, this would process actual market data feeds
         # For simulation, we apply random walks to prices and volumes
@@ -262,7 +262,7 @@ class OrderbookEnhanced:
             cost_at_level = fill_at_level * price
             
             # Apply slippage if model provided
-            if slippage_model and deterministic == False:
+            if slippage_model and not deterministic:
                 # Calculate participation rate for this level
                 total_volume_on_side = sum(Decimal(str(level[1])) for level in book_side)
                 if total_volume_on_side > 0:
@@ -358,7 +358,7 @@ class OrderbookEnhanced:
             # For this simulation, we'll assume it gets filled immediately at limit price
             # but with maker fee
             filled_quantity = order.quantity
-            total_cost = filled_quantity * limit_price
+            filled_quantity * limit_price
             fees = filled_quantity * limit_price * maker_fee
             
             fill_event = FillEvent(

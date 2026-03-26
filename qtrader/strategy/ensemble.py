@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-import polars as pl
+if TYPE_CHECKING:
+    import polars as pl
 
-from qtrader.core.event import SignalEvent
-from qtrader.strategy.base import BaseStrategy
+    from qtrader.core.event import SignalEvent
+    from qtrader.strategy.base import BaseStrategy
 
 
 class EnsembleStrategy(ABC):
@@ -13,7 +15,7 @@ class EnsembleStrategy(ABC):
     Base class for ensemble strategies that combine multiple strategies.
     """
 
-    def __init__(self, strategies: list[BaseStrategy]):
+    def __init__(self, strategies: list[BaseStrategy]) -> None:
         """
         Initialize the ensemble strategy.
 

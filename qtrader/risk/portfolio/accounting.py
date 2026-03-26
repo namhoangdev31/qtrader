@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from qtrader.oms.order_management_system import Position
+if TYPE_CHECKING:
+    from qtrader.oms.order_management_system import Position
 
 
 @dataclass

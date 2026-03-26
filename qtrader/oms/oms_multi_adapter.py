@@ -30,7 +30,7 @@ class MultiExchangeOMSAdapter:
         max_order_size: Decimal | None = None,
         split_size: Decimal | None = None,
         name: str = "MultiExchangeOMSAdapter",
-    ):
+    ) -> None:
         """
         Initialize multi-exchange OMS adapter.
 
@@ -191,7 +191,7 @@ class MultiExchangeOMSAdapter:
                 return
 
             # Get the first exchange adapter
-            exchange_adapter = list(self.exchange_adapters.values())[0]
+            next(iter(self.exchange_adapters.values()))
             # We need to use an execution engine for this single exchange as well
             # to handle retries and failover consistently.
             # We can create a temporary execution engine or reuse the multi-exchange

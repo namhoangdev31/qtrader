@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-import numpy as np
-import polars as pl
+if TYPE_CHECKING:
+    import numpy as np
+    import polars as pl
 
 
 class AllocatorBase(ABC):

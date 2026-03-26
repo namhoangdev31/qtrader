@@ -63,7 +63,7 @@ class TradingOrchestrator:
         runtime_risk_engine: RuntimeRiskEngine,
         oms_adapter: OMSAdapter,
         state_store: StateStore | None = None,
-    ):
+    ) -> None:
         self.event_bus = event_bus
         self.market_data_adapter = market_data_adapter
         self.alpha_modules = alpha_modules
@@ -128,7 +128,7 @@ class TradingOrchestrator:
         # Register event handlers
         self._register_handlers()
 
-    def _register_handlers(self):
+    def _register_handlers(self) -> None:
         self.event_bus.subscribe(EventType.MARKET_DATA, self.handle_market_data)
         self.event_bus.subscribe(EventType.FEATURES, self.handle_features)
         self.event_bus.subscribe(EventType.VALIDATED_FEATURES, self.handle_validated_features)
@@ -139,19 +139,19 @@ class TradingOrchestrator:
         # Subscribe to feedback updates for meta-learning and drift detection
         self.event_bus.subscribe(EventType.FEEDBACK_UPDATE, self._handle_feedback_update)
 
-    async def _start_components(self):
+    async def _start_components(self) -> None:
         """Start background components."""
         await self.shadow_engine.start()
         await self.resource_monitor.start_monitoring()
         logger.info("Background components started")
 
-    async def _stop_components(self):
+    async def _stop_components(self) -> None:
         """Stop background components."""
         await self.shadow_engine.stop()
         await self.resource_monitor.stop_monitoring()
         logger.info("Background components stopped")
 
-    async def handle_market_data(self, market_data: MarketData):
+    async def handle_market_data(self, market_data: MarketData) -> None:
         trace_id = TraceManager.propagate(market_data)
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -184,7 +184,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_market_data latency: {latency*1000:.2f}ms")
 
-    async def handle_features(self, features_data: dict[str, Any]):
+    async def handle_features(self, features_data: dict[str, Any]) -> None:
         trace_id = features_data.get("trace_id", TraceManager.generate())
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -214,7 +214,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_features latency: {latency*1000:.2f}ms")
 
-    async def handle_validated_features(self, validated_features_data: dict[str, Any]):
+    async def handle_validated_features(self, validated_features_data: dict[str, Any]) -> None:
         trace_id = validated_features_data.get("trace_id", TraceManager.generate())
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -249,7 +249,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_validated_features latency: {latency*1000:.2f}ms")
 
-    async def handle_signals(self, signals_data: dict[str, Any]):
+    async def handle_signals(self, signals_data: dict[str, Any]) -> None:
         trace_id = signals_data.get("trace_id", TraceManager.generate())
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -321,7 +321,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_signals latency: {latency*1000:.2f}ms")
 
-    async def handle_orders(self, orders_data: dict[str, Any]):
+    async def handle_orders(self, orders_data: dict[str, Any]) -> None:
         trace_id = orders_data.get("trace_id", TraceManager.generate())
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -357,7 +357,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_orders latency: {latency*1000:.2f}ms")
 
-    async def handle_fills(self, fill_data: dict[str, Any]):
+    async def handle_fills(self, fill_data: dict[str, Any]) -> None:
         trace_id = fill_data.get("trace_id", TraceManager.generate())
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -417,7 +417,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_fills latency: {latency*1000:.2f}ms")
 
-    async def handle_risk_alert(self, alert_data: dict[str, Any]):
+    async def handle_risk_alert(self, alert_data: dict[str, Any]) -> None:
         trace_id = alert_data.get("trace_id", TraceManager.generate())
         log = logger.bind(trace_id=trace_id)
         start_time = time.time()
@@ -430,7 +430,7 @@ class TradingOrchestrator:
             latency = time.time() - start_time
             log.debug(f"handle_risk_alert latency: {latency*1000:.2f}ms")
 
-    async def _handle_feedback_update(self, data: dict[str, Any]):
+    async def _handle_feedback_update(self, data: dict[str, Any]) -> None:
         """Handle feedback updates from the feedback engine."""
         try:
             logger.debug("Handling feedback update")
@@ -658,7 +658,7 @@ class TradingOrchestrator:
         # Simple average of strengths
         total_strength = 0.0
         count = 0
-        for signal_name, signal_data in signals.items():
+        for _signal_name, signal_data in signals.items():
             if isinstance(signal_data, dict) and 'strength' in signal_data:
                 total_strength += float(signal_data['strength'])
                 count += 1

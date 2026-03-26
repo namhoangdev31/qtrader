@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING
 
 import polars as pl
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 
 class WalkforwardEngine:

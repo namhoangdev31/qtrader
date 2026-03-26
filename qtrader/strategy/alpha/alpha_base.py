@@ -9,7 +9,7 @@ from qtrader.core.types import AlphaOutput, MarketData
 class AlphaBase(ABC):
     """Abstract base class for alpha generators."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.logger = logger
 
