@@ -43,6 +43,8 @@ class EventType(str, Enum):
     CONFIG_CHANGED = "CONFIG_CHANGED"
     RISK_APPROVED = "RISK_APPROVED"
     RISK_REJECTED = "RISK_REJECTED"
+    SYSTEM_BOOT_COMPLETED = "SYSTEM_BOOT_COMPLETED"
+    PIPELINE_ERROR = "PIPELINE_ERROR"
 
 
 class MarketPayload(BaseModel):
@@ -220,6 +222,14 @@ class RiskRejectedPayload(BaseModel):
     reason: str
     metric_value: float
     threshold: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    module_name: str
+    error_type: str
+    details: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -428,3 +438,9 @@ class RiskRejectedEvent(BaseEvent):
     """Event representing a risk rejection for an order."""
     event_type: EventType = EventType.RISK_REJECTED
     payload: RiskRejectedPayload
+
+
+class PipelineErrorEvent(BaseEvent):
+    """Event representing a critical pipeline failure."""
+    event_type: EventType = EventType.PIPELINE_ERROR
+    payload: PipelineErrorPayload
