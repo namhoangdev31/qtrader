@@ -69,6 +69,13 @@ class QTraderSettings(BaseSettings):
     alert_webhook_enabled: bool = False
     alert_min_severity: str = "WARNING"
     alert_cooldown_seconds: float = 60.0
+    arbitrator_wt_latency: float = 1.0
+    arbitrator_wt_staleness: float = 1.0
+
+    # Clock Sync
+    clock_sync_enabled: bool = True
+    clock_sync_interval_s: int = 3600
+    clock_sync_ntp_server: str = "pool.ntp.org"
 
     # JWT Security
     jwt_secret_key: str = "changeme-for-production"
