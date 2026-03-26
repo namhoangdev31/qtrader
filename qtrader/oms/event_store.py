@@ -1,11 +1,11 @@
 import json
-import os
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import os
 from dataclasses import asdict, is_dataclass
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Any
 
 
 class EventStore:
@@ -37,7 +37,7 @@ class EventStore:
             return []
             
         trace = []
-        with open(self.log_path, "r") as f:
+        with open(self.log_path) as f:
             for line in f:
                 ev = json.loads(line)
                 # Some events have 'order_id' at root, some in nested 'order'
@@ -45,6 +45,75 @@ class EventStore:
                 if target_id == order_id:
                     trace.append(ev)
         return trace
+
+    def get_last_sequence(self, symbol: str) -> int:
+        """Get the last processed sequence ID for a symbol from the log."""
+        if not os.path.exists(self.log_path):
+            return 0
+            
+        last_seq = 0
+        with open(self.log_path) as f:
+            for line in f:
+                ev = json.loads(line)
+                if ev.get("symbol") == symbol and "seq_id" in ev:
+                    last_seq = max(last_seq, ev["seq_id"])
+        return last_seq
+
+    def get_recent_prices(self, symbol: str, window_size: int = 50) -> list[float]:
+        """Fetch the most recent prices for a symbol for statistical validation."""
+        if not os.path.exists(self.log_path):
+            return []
+            
+        prices = []
+        # In a real system, we'd use a tail-based approach or a cached index.
+        # For this implementation, we read backwards or collect all and tail.
+        with open(self.log_path) as f:
+            for line in f:
+                ev = json.loads(line)
+                if ev.get("symbol") == symbol and ev.get("type") == "MARKET_DATA":
+                    data = ev.get("data", {})
+                    price = data.get("last_price") or data.get("c") or 0.0
+                    if price > 0:
+                        prices.append(float(price))
+        
+        return prices[-window_size:]
+
+    def get_latest_price_cross_exchange(self, symbol: str, exclude_venue: str) -> float | None:
+        """Fetch the latest price for a symbol from a different venue."""
+        if not os.path.exists(self.log_path):
+            return None
+            
+        latest_price = None
+        with open(self.log_path) as f:
+            for line in f:
+                ev = json.loads(line)
+                metadata = ev.get("metadata") or {}
+                venue = metadata.get("venue") or ev.get("venue")
+                
+                if (ev.get("symbol") == symbol and 
+                    ev.get("type") == "MARKET_DATA" and 
+                    venue != exclude_venue):
+                    data = ev.get("data", {})
+                    price = data.get("last_price") or data.get("c") or 0.0
+                    if price > 0:
+                        latest_price = float(price)
+        return latest_price
+
+    def get_deltas(self, symbol: str, start_seq: int) -> list[dict[str, Any]]:
+        """Retrieve deltas for a symbol starting from a specific sequence."""
+        if not os.path.exists(self.log_path):
+            return []
+            
+        deltas = []
+        with open(self.log_path) as f:
+            for line in f:
+                ev = json.loads(line)
+                if ev.get("symbol") == symbol and ev.get("seq_id", 0) >= start_seq:
+                    deltas.append(ev)
+        
+        # Ensure deltas are sorted by sequence ID for deterministic replay
+        deltas.sort(key=lambda x: x.get("seq_id", 0))
+        return deltas
 
     def _serialize(self, obj: Any) -> dict[str, Any]:
         """Deep serialization for events with Decimals/Enums."""
@@ -57,7 +126,7 @@ class EventStore:
         if isinstance(obj, Decimal):
             return float(obj)
         if isinstance(obj, Enum):
-            return obj.value if hasattr(obj, 'value') else obj.name
+            return obj.name
         if isinstance(obj, datetime):
             return obj.isoformat()
         return obj
