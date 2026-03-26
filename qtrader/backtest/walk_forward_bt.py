@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 import polars as pl
 
@@ -56,7 +57,7 @@ class WalkForwardBacktest:
         n = df_sorted.height
 
         engine = VectorizedEngine()
-        folds: List[pl.DataFrame] = []
+        folds: list[pl.DataFrame] = []
         start = 0
         fold_id = 0
 
@@ -135,10 +136,10 @@ if __name__ == "__main__":
     _prices = 100.0 + pl.arange(0, len(_ts), eager=True).cast(pl.Float64) * 0.1
     _df = pl.DataFrame({"timestamp": _ts, "close": _prices})
 
-    def _fit(train: pl.DataFrame) -> Dict[str, float]:
+    def _fit(train: pl.DataFrame) -> dict[str, float]:
         return {"mean_ret": float(train["close"].pct_change().drop_nulls().mean())}
 
-    def _predict(model: Dict[str, float], test: pl.DataFrame) -> pl.Series:
+    def _predict(model: dict[str, float], test: pl.DataFrame) -> pl.Series:
         _ = model
         return pl.Series("signal", [1.0] * test.height)
 

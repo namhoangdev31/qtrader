@@ -1,8 +1,10 @@
 # File: qtrader/strategy/alpha/candle_patterns_alpha.py
-import polars as pl
 import numpy as np
+import polars as pl
+
+from qtrader.core.types import AlphaOutput, MarketData
 from qtrader.strategy.alpha.alpha_base import AlphaBase
-from qtrader.core.types import MarketData, AlphaOutput
+
 
 class CandleAlphaEngine(AlphaBase):
     """

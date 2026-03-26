@@ -1,13 +1,12 @@
 """Coinbase exchange adapter for QTrader execution system."""
 
-import logging
-from typing import Dict, Any, Optional, Tuple
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import Any
 
-from qtrader.core.types import OrderEvent, FillEvent
-from qtrader.execution.execution_engine import ExchangeAdapter
 from qtrader.core.logger import StructuredLogger
+from qtrader.core.types import FillEvent, OrderEvent
+from qtrader.execution.execution_engine import ExchangeAdapter
 
 logger = StructuredLogger()
 
@@ -39,7 +38,7 @@ class CoinbaseAdapter(ExchangeAdapter):
         # and REST API session here
         pass
 
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """
         Send an order to Coinbase.
 
@@ -81,7 +80,7 @@ class CoinbaseAdapter(ExchangeAdapter):
             self.logger.error(f"Error placing order on Coinbase: {e}", exc_info=True)
             return False, str(e)
 
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel an order on Coinbase.
 
@@ -124,7 +123,7 @@ class CoinbaseAdapter(ExchangeAdapter):
             return Decimal('0')
 
     # Additional Coinbase-specific methods that can be used by the smart router
-    async def get_positions(self) -> Dict[str, Decimal]:
+    async def get_positions(self) -> dict[str, Decimal]:
         """
         Get current positions from Coinbase.
 
@@ -136,7 +135,7 @@ class CoinbaseAdapter(ExchangeAdapter):
         # For now, we'll return an empty dict
         return {}
 
-    async def get_orderbook(self, symbol: str) -> Dict[str, Any]:
+    async def get_orderbook(self, symbol: str) -> dict[str, Any]:
         """
         Get orderbook for a symbol from Coinbase.
 
@@ -154,7 +153,7 @@ class CoinbaseAdapter(ExchangeAdapter):
             "asks": [["100.5", "1.2"], ["101.0", "0.8"]]
         }
 
-    async def get_fees(self, symbol: str) -> Dict[str, Decimal]:
+    async def get_fees(self, symbol: str) -> dict[str, Decimal]:
         """
         Get trading fees for a symbol from Coinbase.
 

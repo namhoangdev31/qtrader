@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from qtrader.core.event import OrderEvent, SignalEvent
 from qtrader.strategy.base import BaseStrategy
 
 __all__ = ["CrossSectionalMomentum", "TimeSeriesMomentum"]

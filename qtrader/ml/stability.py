@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import polars as pl
 
-__all__ = ["RotationHysteresis", "RegimeStabilityScore"]
+__all__ = ["RegimeStabilityScore", "RotationHysteresis"]
 
 log = logging.getLogger(__name__)
 

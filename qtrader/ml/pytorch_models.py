@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 import numpy as np
 import torch
@@ -89,7 +88,7 @@ class LSTMSignalModel:
         epochs: int = 50,
         batch_size: int = 64,
         lr: float = 1e-3,
-    ) -> Dict[str, List[float]]:
+    ) -> dict[str, list[float]]:
         """Fit the LSTM on sequence data.
 
         Args:
@@ -131,7 +130,7 @@ class LSTMSignalModel:
         optimizer = torch.optim.Adam(self._model.parameters(), lr=lr)
         criterion = nn.BCEWithLogitsLoss()
 
-        history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
+        history: dict[str, list[float]] = {"train_loss": [], "val_loss": []}
 
         for _ in range(epochs):
             self._model.train()

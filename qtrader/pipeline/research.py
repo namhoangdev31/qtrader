@@ -15,32 +15,18 @@ All I/O is async-safe, using Polars for data manipulation.
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
-import json
 import logging
-import yaml
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, List, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
+import yaml
 
-from bot.config import BotConfig
-from qtrader.data.datalake import DataLake
-from qtrader.core.event_bus import EventBus
-from qtrader.features.engine import FactorEngine
-from qtrader.ml.registry import ModelRegistry
+from qtrader.backtest.integration import BacktestResult
+from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.ml.walk_forward import WalkForwardPipeline
 from qtrader.models.xgboost_model import XGBoostPredictor
-from qtrader.models.catboost_model import CatBoostPredictor
-from qtrader.alpha.registry import AlphaEngine
-from qtrader.ml.regime import RegimeDetector
-from qtrader.backtest.engine_vectorized import VectorizedEngine
-from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
-from qtrader.analytics.drift import DriftMonitor
-from qtrader.analytics.performance import PerformanceAnalytics
-from qtrader.backtest.integration import BacktestHarness, BacktestResult
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +35,7 @@ logger = logging.getLogger(__name__)
 class DataLakeProtocol(Protocol):
     async def load(
         self,
-        symbols: List[str],
+        symbols: list[str],
         timeframe: str,
         start_date: str,
         end_date: str,
@@ -62,7 +48,7 @@ class FactorEngineProtocol(Protocol):
     def compute(self, df: pl.DataFrame) -> pl.DataFrame: ...
     def compute_multi_symbol(self, raw_dfs: dict[str, pl.DataFrame], timeframe: str) -> pl.DataFrame: ...
     store: Any  # FeatureStore
-    def get_all_feature_names(self) -> List[str]: ...
+    def get_all_feature_names(self) -> list[str]: ...
 
 
 @runtime_checkable
@@ -72,8 +58,8 @@ class AlphaEngineProtocol(Protocol):
 
 @runtime_checkable
 class RegimeDetectorProtocol(Protocol):
-    def predict_regime(self, alpha_df: pl.DataFrame, feature_cols: List[str]) -> pl.Series: ...
-    def predict_proba(self, alpha_df: pl.DataFrame, feature_cols: List[str]) -> pl.DataFrame: ...
+    def predict_regime(self, alpha_df: pl.DataFrame, feature_cols: list[str]) -> pl.Series: ...
+    def predict_proba(self, alpha_df: pl.DataFrame, feature_cols: list[str]) -> pl.DataFrame: ...
 
 
 @runtime_checkable
@@ -102,7 +88,7 @@ class DriftMonitorProtocol(Protocol):
         self,
         train_data: pl.DataFrame,
         live_data: pl.DataFrame,
-        columns: List[str],
+        columns: list[str],
     ) -> dict[str, float]: ...
 
 
@@ -165,7 +151,7 @@ class ResearchPipeline:
 
     async def run(
         self,
-        symbols: List[str],
+        symbols: list[str],
         timeframe: str,
         start_date: str,
         end_date: str,

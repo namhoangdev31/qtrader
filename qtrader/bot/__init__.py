@@ -12,9 +12,9 @@ from bot.win_rate_optimizer import WinRateOptimizer
 __all__ = [
     "BotConfig",
     "BotState",
+    "EVOptimizer",
+    "PerformanceTracker",
     "StateMachine",
     "TradingBot",
-    "PerformanceTracker",
-    "EVOptimizer",
     "WinRateOptimizer",
 ]

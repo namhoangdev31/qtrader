@@ -1,7 +1,6 @@
 """Network-level kill switch for instant risk containment."""
 import asyncio
 import logging
-from typing import Optional
 from datetime import datetime
 
 from qtrader.oms.oms_adapter import OMSAdapter
@@ -19,8 +18,8 @@ class NetworkKillSwitch:
 
     def __init__(
         self,
-        oms_adapter: Optional[OMSAdapter] = None,
-        logger_instance: Optional[logging.Logger] = None,
+        oms_adapter: OMSAdapter | None = None,
+        logger_instance: logging.Logger | None = None,
         latency_threshold_ms: float = 500.0,
         max_errors: int = 5,
     ):
@@ -39,9 +38,9 @@ class NetworkKillSwitch:
         self.max_errors = int(max_errors)
 
         self._triggered = False
-        self._trigger_reason: Optional[str] = None
-        self._triggered_at: Optional[datetime] = None
-        self._mode: Optional[str] = None  # 'hard', 'soft', or None
+        self._trigger_reason: str | None = None
+        self._triggered_at: datetime | None = None
+        self._mode: str | None = None  # 'hard', 'soft', or None
 
         self._latency_history: list[float] = []
         self._error_count = 0
@@ -188,15 +187,15 @@ class NetworkKillSwitch:
         """Check if kill switch is currently engaged."""
         return self._triggered
 
-    def get_mode(self) -> Optional[str]:
+    def get_mode(self) -> str | None:
         """Get the current mode: 'hard', 'soft', or None."""
         return self._mode
 
-    def get_reason(self) -> Optional[str]:
+    def get_reason(self) -> str | None:
         """Get the reason for triggering the kill switch."""
         return self._trigger_reason
 
-    def get_triggered_at(self) -> Optional[datetime]:
+    def get_triggered_at(self) -> datetime | None:
         """Get the timestamp when the kill switch was triggered."""
         return self._triggered_at
 

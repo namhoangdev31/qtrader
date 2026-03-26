@@ -6,13 +6,13 @@ model versioning, and production promotion/rollback.
 
 from __future__ import annotations
 
-import os
+import asyncio
 import json
 import logging
-import asyncio
+import os
 from datetime import datetime
-from typing import Dict, Any, Optional, List
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 try:
     import mlflow
     import mlflow.tracking
-    from mlflow.tracking import MlflowClient
     from mlflow.exceptions import MlflowException
+    from mlflow.tracking import MlflowClient
 
     MLFLOW_AVAILABLE = True
 except ImportError:
@@ -44,9 +44,9 @@ class MLflowManager:
 
     def __init__(
         self,
-        tracking_uri: Optional[str] = None,
+        tracking_uri: str | None = None,
         experiment_name: str = "QTrader-Strategies",
-        registry_uri: Optional[str] = None,
+        registry_uri: str | None = None,
         enable_mlflow: bool = True,
     ) -> None:
         """Initialize MLflow manager.
@@ -110,11 +110,11 @@ class MLflowManager:
     async def log_run(
         self,
         strategy_name: str,
-        parameters: Dict[str, Any],
-        metrics: Dict[str, float],
-        artifacts: Optional[Dict[str, Any]] = None,
-        run_name: Optional[str] = None,
-    ) -> Optional[str]:
+        parameters: dict[str, Any],
+        metrics: dict[str, float],
+        artifacts: dict[str, Any] | None = None,
+        run_name: str | None = None,
+    ) -> str | None:
         """Log a strategy training run to MLflow.
 
         Args:
@@ -151,10 +151,10 @@ class MLflowManager:
     def _log_run_sync(
         self,
         strategy_name: str,
-        parameters: Dict[str, Any],
-        metrics: Dict[str, float],
-        artifacts: Optional[Dict[str, Any]] = None,
-        run_name: Optional[str] = None,
+        parameters: dict[str, Any],
+        metrics: dict[str, float],
+        artifacts: dict[str, Any] | None = None,
+        run_name: str | None = None,
     ) -> str:
         """Synchronous MLflow logging (to be run in thread pool)."""
         with mlflow.start_run(
@@ -580,7 +580,7 @@ class MLflowManager:
             self.logger.error(f"Error during rollback: {e}")
             return False
 
-    async def load_production_model(self, strategy_name: str) -> Optional[Any]:
+    async def load_production_model(self, strategy_name: str) -> Any | None:
         """Load the latest production model for a strategy.
 
         Args:
@@ -605,7 +605,7 @@ class MLflowManager:
             self.logger.error(f"Failed to load production model: {e}")
             return None
 
-    def _load_production_model_sync(self, strategy_name: str) -> Optional[Any]:
+    def _load_production_model_sync(self, strategy_name: str) -> Any | None:
         """Synchronous model loading (to be run in thread pool)."""
         try:
             model_name = f"strategy_{strategy_name}"
@@ -632,7 +632,7 @@ class MLflowManager:
             self.logger.error(f"Error loading production model: {e}")
             return None
 
-    def get_model_status(self, strategy_name: str) -> Dict[str, Any]:
+    def get_model_status(self, strategy_name: str) -> dict[str, Any]:
         """Get the current status of a strategy's model in the registry.
 
         Args:

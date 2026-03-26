@@ -7,13 +7,11 @@ and writes a BotConfig file to be used by the TradingBot.
 from __future__ import annotations
 
 import logging
-import yaml
-from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from bot.config import BotConfig
+import yaml
+
 from qtrader.backtest.tearsheet import TearsheetMetrics
 from qtrader.pipeline.research import ResearchResult
 
@@ -73,9 +71,9 @@ class DeploymentBridge:
         existing_config = self._load_existing_config()
         if existing_config:
             # Keep user-defined symbols and feature_cols if present
-            if "symbols" in existing_config and existing_config["symbols"]:
+            if existing_config.get("symbols"):
                 config_dict["symbols"] = existing_config["symbols"]
-            if "feature_cols" in existing_config and existing_config["feature_cols"]:
+            if existing_config.get("feature_cols"):
                 config_dict["feature_cols"] = existing_config["feature_cols"]
 
         # Write the config

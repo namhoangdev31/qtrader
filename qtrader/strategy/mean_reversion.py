@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import combinations
-from typing import List, Tuple
 
 import numpy as np
 import polars as pl
@@ -89,7 +88,7 @@ class StatisticalArbitrage(BaseStrategy):
         if len(symbols) < 2 or prices.height < 5:
             return []
 
-        out: List[Tuple[str, str, float]] = []
+        out: list[tuple[str, str, float]] = []
         price_np = prices.to_numpy()
 
         for i, j in combinations(range(len(symbols)), 2):

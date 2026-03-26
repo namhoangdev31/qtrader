@@ -1,22 +1,15 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Protocol
-
+from typing import Any, Protocol
 
 from qtrader.core.event import (
     EventType,
-    Event,
-    MarketDataEvent,
-    FeatureEvent,
-    SignalEvent,
-    EnsembleSignalEvent,
-    OrderEvent,
     FillEvent,
-    RiskEvent,
-    SystemEvent,
+    OrderEvent,
+    SignalEvent,
 )
 
 # Aliases for compatibility
@@ -43,7 +36,8 @@ class MarketData:
     low: Decimal
     close: Decimal
     volume: Decimal
-    metadata: Optional[Dict[str, Any]] = None
+    trace_id: str
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -51,8 +45,9 @@ class AlphaOutput:
     """Output from alpha generation."""
     symbol: str
     timestamp: datetime
-    alpha_values: Dict[str, Decimal]  # alpha name -> value
-    metadata: Optional[Dict[str, Any]] = None
+    alpha_values: dict[str, Decimal]  # alpha name -> value
+    trace_id: str
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -60,17 +55,19 @@ class ValidatedFeatures:
     """Features that have passed validation."""
     symbol: str
     timestamp: datetime
-    features: Dict[str, Decimal]
-    validation_metadata: Dict[str, Any]
-    metadata: Optional[Dict[str, Any]] = None
+    features: dict[str, Decimal]
+    validation_metadata: dict[str, Any]
+    trace_id: str
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
 class AllocationWeights:
     """Portfolio allocation weights."""
     timestamp: datetime
-    weights: Dict[str, Decimal]  # symbol -> weight (should sum to 1.0 or less)
-    metadata: Optional[Dict[str, Any]] = None
+    weights: dict[str, Decimal]  # symbol -> weight (should sum to 1.0 or less)
+    trace_id: str
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -81,7 +78,8 @@ class RiskMetrics:
     portfolio_volatility: Decimal
     max_drawdown: Decimal
     leverage: Decimal
-    metadata: Optional[Dict[str, Any]] = None
+    trace_id: str
+    metadata: dict[str, Any] | None = None
 
 
 # Protocol definitions for dependency injection

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import polars as pl
 
-from qtrader.core.event import SignalEvent
 from qtrader.risk.base import RiskModule
 from qtrader.risk.volatility import VolatilityTargeting
 

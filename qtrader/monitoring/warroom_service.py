@@ -1,7 +1,9 @@
 import asyncio
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
+from loguru import logger
 
 from .metrics import MetricsAggregator
 
@@ -70,7 +72,7 @@ class WarRoomService:
                 # Handle other types like 'risk_limit_violation', etc.
             except (KeyError, TypeError, ValueError) as e:
                 # In production, use loguru to log this error
-                print(f"Error processing event {event_type}: {e}")
+                logger.info(f"Error processing event {event_type}: {e}")
             finally:
                 self._event_queue.task_done()
 
@@ -85,7 +87,7 @@ class WarRoomService:
                     subscriber(self._latest_snapshot)
                 except Exception as e:
                     # Log exception safely in production
-                    print(f"Subscriber error: {e}")
+                    logger.info(f"Subscriber error: {e}")
                     
             await asyncio.sleep(self.update_interval_s)
 

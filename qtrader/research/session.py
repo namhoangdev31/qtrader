@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 import polars as pl
+from loguru import logger
 
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
@@ -21,7 +22,6 @@ from qtrader.backtest.tearsheet import TearsheetGenerator
 from qtrader.data.datalake import DataLake
 from qtrader.data.datalake_universal import UniversalDataLake
 from qtrader.data.duckdb_client import DuckDBClient
-from scripts.generate_test_data import generate_synthetic_data
 
 
 class RoleContext(str, Enum):
@@ -97,9 +97,9 @@ class AnalystSession:
 
     def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
         """Load real Coinbase REST API data and persist it to the DataLake."""
+        from datetime import datetime, timedelta
+
         from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
-        from datetime import datetime, timedelta, timezone
-        import time
         
         self._log.info(f"Requesting {days} days of live data for {symbol}...")
         
@@ -139,8 +139,8 @@ class AnalystSession:
 
     def run_paper_simulation(self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7) -> Any:
         """Run a strategy logic function against live data to compute expected EV."""
-        from qtrader.execution.paper_engine import PaperTradingEngine
         from qtrader.analytics.ev_calculator import EVCalculator
+        from qtrader.execution.paper_engine import PaperTradingEngine
         
         df = self.load_live_ohlcv(symbol, timeframe, days)
         engine = PaperTradingEngine(starting_capital=10000.0)
@@ -165,7 +165,7 @@ class AnalystSession:
 
         Returns an empty DataFrame if no features are stored yet.
         """
-        from qtrader.features.store import FeatureStore
+        from qtrader.feature.features.store import FeatureStore
 
         store = FeatureStore()
         df = store.load_features(symbol=symbol, timeframe=timeframe)
@@ -567,7 +567,7 @@ class AnalystSession:
                 "\n  📓 Notebooks: notebooks/trader/01_Live_Monitor.ipynb, ...\n"
             ),
         }
-        print(guides.get(self.role, "QTrader AnalystSession ready."))
+        logger.info(guides.get(self.role, "QTrader AnalystSession ready."))
 
     def __repr__(self) -> str:
         return f"AnalystSession(role={self.role.value!r})"

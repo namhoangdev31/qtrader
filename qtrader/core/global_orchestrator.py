@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal
 import polars as pl
 
 from qtrader.core.logger import logger
-from qtrader.portfolio.capital_allocator import CapitalAllocator
 from qtrader.risk.factor_risk import FactorRiskEngine
+from qtrader.risk.portfolio.capital_allocator import CapitalAllocator
 
 if TYPE_CHECKING:
     from qtrader.core.orchestrator import TradingOrchestrator

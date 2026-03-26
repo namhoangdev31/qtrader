@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 import numpy as np
 
 
 def factor_exposure(
     weights: np.ndarray,
     factor_loadings: np.ndarray,
-    factor_names: Optional[List[str]] = None,
-) -> Dict[str, float]:
+    factor_names: list[str] | None = None,
+) -> dict[str, float]:
     """
     Compute factor exposure of a portfolio.
 
@@ -54,7 +52,7 @@ def factor_exposure(
 def sector_exposure(
     weights: np.ndarray,
     sector_mapping: np.ndarray,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Compute sector exposure of a portfolio.
 
@@ -80,7 +78,7 @@ def sector_exposure(
         raise ValueError("Number of assets in weights and sector_mapping must match")
 
     # Initialize dictionary for sector exposures
-    exposures: Dict[str, float] = {}
+    exposures: dict[str, float] = {}
 
     # Iterate over assets and accumulate weights by sector
     for weight, sector in zip(weights, sector_mapping):

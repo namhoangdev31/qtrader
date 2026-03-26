@@ -4,12 +4,12 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 import numpy as np
 import polars as pl
 
-__all__ = ["TearsheetMetrics", "TearsheetGenerator"]
+__all__ = ["TearsheetGenerator", "TearsheetMetrics"]
 
 _LOG = logging.getLogger("qtrader.backtest.tearsheet")
 
@@ -499,7 +499,7 @@ class TearsheetGenerator:
         path.write_text(html_str, encoding="utf-8")
         return str(path)
 
-    def to_dict(self, metrics: TearsheetMetrics) -> Dict[str, float]:
+    def to_dict(self, metrics: TearsheetMetrics) -> dict[str, float]:
         """Serialize TearsheetMetrics to a flat dict."""
         raw = asdict(metrics)
         return {k: float(v) for k, v in raw.items()}

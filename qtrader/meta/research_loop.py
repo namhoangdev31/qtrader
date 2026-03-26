@@ -38,7 +38,7 @@ class ResearchLoop:
 
     def generate_features(self, df: pl.DataFrame) -> pl.DataFrame:
         """Step 2: Apply automated feature transformations (Placeholder)."""
-        # In production, this calls qtrader.features modules
+        # In production, this calls qtrader.feature.features modules
         return df.with_columns(
             (pl.col("close").pct_change()).alias("returns"),
             (pl.col("volume").log()).alias("log_volume"),

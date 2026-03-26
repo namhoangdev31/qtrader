@@ -12,7 +12,7 @@ class MarketImpactModel:
     """Institutional market impact models for slippage estimation."""
 
     @staticmethod
-    def square_root_impact(  # noqa: PLR0913
+    def square_root_impact(
         order_size: float,
         daily_vol: float,
         daily_volume: float,

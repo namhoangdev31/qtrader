@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, Any
-
 
 class RegimeAdapter:
     """
@@ -18,7 +16,7 @@ class RegimeAdapter:
     def __init__(self) -> None:
         """Initialize the regime adapter with predefined scaling factors."""
         # Regime -> {var_threshold_scale, max_leverage_scale, max_position_size_scale}
-        self._regime_scales: Dict[int, Dict[str, float]] = {
+        self._regime_scales: dict[int, dict[str, float]] = {
             0: {  # Low volatility regime
                 "var_threshold_scale": 1.0,
                 "max_leverage_scale": 1.0,
@@ -42,7 +40,7 @@ class RegimeAdapter:
         base_var_threshold: float,
         base_max_leverage: float,
         base_max_position_size: float,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Adjust risk limits based on the current market regime.
 

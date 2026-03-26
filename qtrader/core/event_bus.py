@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
 import time
+from collections.abc import Callable
+from typing import Any
 
-from .types import EventType, EventBusProtocol, LoggerProtocol
+from .types import EventType, LoggerProtocol
 
 
 class EventBus:
@@ -11,7 +12,7 @@ class EventBus:
 
     def __init__(
         self,
-        logger: Optional[LoggerProtocol] = None,
+        logger: LoggerProtocol | None = None,
         *,
         maxsize: int = 0,
         max_retries: int = 3,
@@ -30,12 +31,12 @@ class EventBus:
             handler_timeout: Timeout in seconds for each handler execution
             dead_letter_queue_maxsize: Maximum size of the dead letter queue
         """
-        self._subscribers: Dict[EventType, List[Callable]] = {et: [] for et in EventType}
+        self._subscribers: dict[EventType, list[Callable]] = {et: [] for et in EventType}
         self._logger = logger or logging.getLogger(__name__)
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
         self._dead_letter_queue: asyncio.Queue = asyncio.Queue(maxsize=dead_letter_queue_maxsize)
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._max_retries = max_retries
         self._base_retry_delay = base_retry_delay
         self._handler_timeout = handler_timeout
@@ -98,7 +99,7 @@ class EventBus:
         self, callback: Callable, event_type: EventType, data: Any
     ) -> None:
         """Execute a handler with retries, timeout, and exponential backoff."""
-        last_exception: Optional[BaseException] = None
+        last_exception: BaseException | None = None
         for attempt in range(self._max_retries + 1):
             try:
                 if asyncio.iscoroutinefunction(callback):
@@ -197,7 +198,7 @@ class EventBus:
             self._subscribers[event_type].remove(callback)
 
     # Monitoring and inspection methods
-    def get_metrics(self) -> Dict[str, Union[int, float]]:
+    def get_metrics(self) -> dict[str, int | float]:
         """Get current event bus metrics."""
         return {
             "events_processed": self._events_processed,
@@ -208,7 +209,7 @@ class EventBus:
             "dead_letter_queue_size": self._dead_letter_queue.qsize(),
         }
 
-    async def get_dead_letters(self, max_count: int = 100) -> List[Dict[str, Any]]:
+    async def get_dead_letters(self, max_count: int = 100) -> list[dict[str, Any]]:
         """
         Retrieve dead letter events for inspection (non-destructive peek).
 

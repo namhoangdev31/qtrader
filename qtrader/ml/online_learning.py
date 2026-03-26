@@ -4,7 +4,6 @@ from typing import Any, cast
 
 import numpy as np
 import polars as pl
-from sklearn.linear_model import SGDRegressor
 
 
 class OnlineLearner:

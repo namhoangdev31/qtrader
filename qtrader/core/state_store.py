@@ -2,10 +2,10 @@
 import asyncio
 import copy
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class Order:
     side: str  # 'BUY' or 'SELL'
     order_type: str  # 'MARKET', 'LIMIT', etc.
     quantity: Decimal
-    price: Optional[Decimal] = None
+    price: Decimal | None = None
     timestamp: datetime = field(default_factory=datetime.utcnow)
     status: str = 'PENDING'  # PENDING, PARTIAL, FILLED, CANCELLED, REJECTED
 
@@ -50,10 +50,10 @@ class RiskState:
 class SystemState:
     """Complete system state."""
     version: int = 0
-    positions: Dict[str, Position] = field(default_factory=dict)
+    positions: dict[str, Position] = field(default_factory=dict)
     portfolio_value: Decimal = Decimal('0')
-    equity_curve: List[tuple[datetime, Decimal]] = field(default_factory=list)
-    active_orders: Dict[str, Order] = field(default_factory=dict)
+    equity_curve: list[tuple[datetime, Decimal]] = field(default_factory=list)
+    active_orders: dict[str, Order] = field(default_factory=dict)
     risk_state: RiskState = field(default_factory=RiskState)
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
@@ -66,12 +66,12 @@ class StateStore:
         self._lock = asyncio.Lock()
         self._logger = logger
 
-    async def get_positions(self) -> Dict[str, Position]:
+    async def get_positions(self) -> dict[str, Position]:
         """Get a copy of all positions."""
         async with self._lock:
             return copy.deepcopy(self._state.positions)
 
-    async def get_position(self, symbol: str) -> Optional[Position]:
+    async def get_position(self, symbol: str) -> Position | None:
         """Get a copy of a position for a symbol."""
         async with self._lock:
             position = self._state.positions.get(symbol)
@@ -109,12 +109,12 @@ class StateStore:
             self._state.timestamp = datetime.utcnow()
             self._logger.debug(f"Updated portfolio value to {value}")
 
-    async def get_equity_curve(self) -> List[tuple[datetime, Decimal]]:
+    async def get_equity_curve(self) -> list[tuple[datetime, Decimal]]:
         """Get a copy of the equity curve."""
         async with self._lock:
             return copy.deepcopy(self._state.equity_curve)
 
-    async def set_equity_curve(self, equity_curve: List[tuple[datetime, Decimal]]) -> None:
+    async def set_equity_curve(self, equity_curve: list[tuple[datetime, Decimal]]) -> None:
         """Set the equity curve."""
         async with self._lock:
             self._state.equity_curve = copy.deepcopy(equity_curve)
@@ -130,12 +130,12 @@ class StateStore:
             self._state.timestamp = datetime.utcnow()
             self._logger.debug(f"Appended to equity curve: {timestamp}, {value}")
 
-    async def get_active_orders(self) -> Dict[str, Order]:
+    async def get_active_orders(self) -> dict[str, Order]:
         """Get a copy of all active orders."""
         async with self._lock:
             return copy.deepcopy(self._state.active_orders)
 
-    async def get_order(self, order_id: str) -> Optional[Order]:
+    async def get_order(self, order_id: str) -> Order | None:
         """Get a copy of an order by ID."""
         async with self._lock:
             order = self._state.active_orders.get(order_id)

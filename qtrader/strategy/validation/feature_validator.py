@@ -1,12 +1,9 @@
 """Feature validation for alpha factors."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-from decimal import Decimal
-from datetime import datetime
 
-from qtrader.core.types import AlphaOutput, ValidatedFeatures
 from qtrader.core.logger import logger
+from qtrader.core.types import AlphaOutput, ValidatedFeatures
 
 
 class FeatureValidator(ABC):

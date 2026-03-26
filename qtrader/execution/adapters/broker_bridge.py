@@ -1,12 +1,12 @@
 """Bridge adapter to convert BrokerAdapter to ExchangeAdapter interface."""
 
-from typing import Dict, Any, Optional, Tuple
-from decimal import Decimal
 import logging
+from decimal import Decimal
+from typing import Any
 
 from qtrader.core.types import OrderEvent
-from qtrader.execution.execution_engine import ExchangeAdapter
 from qtrader.execution.brokers.base import BrokerAdapter
+from qtrader.execution.execution_engine import ExchangeAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class BrokerAdapterBridge(ExchangeAdapter):
         self.broker = broker
         self.logger = logger.getChild(f"BrokerAdapterBridge.{name}")
 
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """
         Send order via the underlying broker adapter.
 
@@ -47,7 +47,7 @@ class BrokerAdapterBridge(ExchangeAdapter):
             self.logger.error(f"Error sending order via broker {self.name}: {e}")
             return False, str(e)
 
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel order via the underlying broker adapter.
 
@@ -80,7 +80,7 @@ class BrokerAdapterBridge(ExchangeAdapter):
         self.logger.warning(f"get_position not implemented for broker {self.name}, returning 0")
         return Decimal('0')
 
-    async def get_positions(self) -> Dict[str, Decimal]:
+    async def get_positions(self) -> dict[str, Decimal]:
         """
         Get all positions via broker adapter.
         Placeholder implementation.
@@ -88,7 +88,7 @@ class BrokerAdapterBridge(ExchangeAdapter):
         self.logger.warning(f"get_positions not implemented for broker {self.name}, returning empty")
         return {}
 
-    async def get_orderbook(self, symbol: str) -> Dict[str, Any]:
+    async def get_orderbook(self, symbol: str) -> dict[str, Any]:
         """
         Get orderbook via broker adapter if supported.
         Placeholder implementation.
@@ -96,7 +96,7 @@ class BrokerAdapterBridge(ExchangeAdapter):
         self.logger.warning(f"get_orderbook not implemented for broker {self.name}, returning empty")
         return {"bids": [], "asks": []}
 
-    async def get_fees(self, symbol: str) -> Dict[str, Decimal]:
+    async def get_fees(self, symbol: str) -> dict[str, Decimal]:
         """
         Get fees via broker adapter if supported.
         Placeholder implementation.

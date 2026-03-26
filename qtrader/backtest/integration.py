@@ -8,16 +8,17 @@ portfolio optimization and risk engines.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 import polars as pl
 
-from qtrader.backtest.engine_vectorized import VectorizedEngine
-from qtrader.backtest.broker_sim import SimulatedBroker
-from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
 from qtrader.analytics.performance import PerformanceAnalytics
-from qtrader.portfolio.optimization import PortfolioOptimizer
+from qtrader.backtest.broker_sim import SimulatedBroker
+from qtrader.backtest.engine_vectorized import VectorizedEngine
+from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
+from qtrader.risk.portfolio.optimization import PortfolioOptimizer
 from qtrader.risk.realtime import RealTimeRiskEngine
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class BacktestResult:
     strategy_name: str
     tearsheet: TearsheetMetrics
     backtest_df: pl.DataFrame
-    html_report_path: Optional[str]
+    html_report_path: str | None
     analytics_metrics: dict[str, float]
 
 
@@ -79,8 +80,8 @@ class BacktestHarness:
         engine: VectorizedEngine,
         tearsheet_gen: TearsheetGenerator,
         broker: SimulatedBroker,
-        portfolio_optimizer: Optional[PortfolioOptimizer] = None,
-        risk_engine: Optional[RealTimeRiskEngine] = None,
+        portfolio_optimizer: PortfolioOptimizer | None = None,
+        risk_engine: RealTimeRiskEngine | None = None,
     ) -> None:
         """Initialize the BacktestHarness.
 
@@ -105,7 +106,7 @@ class BacktestHarness:
         transaction_cost_bps: float = 10.0,
         slippage_bps: float = 5.0,
         initial_capital: float = 100_000.0,
-        benchmark: Optional[pl.Series] = None,
+        benchmark: pl.Series | None = None,
         output_html: bool = True,
     ) -> BacktestResult:
         """Orchestrate a single backtest run.
@@ -181,7 +182,7 @@ class BacktestHarness:
         )
 
         # 5. Generate HTML report if requested
-        html_report_path: Optional[str] = None
+        html_report_path: str | None = None
         if output_html:
             html_report_path = self.tearsheet_gen.to_html(
                 tearsheet=tearsheet,
@@ -369,8 +370,7 @@ class BacktestHarness:
 
         # We'll compute weights for each bar (using a lookback window)
         lookback = kwargs.get("lookback", 60)
-        if len(returns) < lookback:
-            lookback = len(returns)
+        lookback = min(lookback, len(returns))
 
         weights_list = []
         for i in range(lookback, len(returns)):

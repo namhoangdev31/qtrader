@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Tuple
 
 import numpy as np
 import polars as pl
@@ -26,7 +25,7 @@ class RegimeDetector(Model):
     def __init__(
         self,
         n_regimes: int = 3,
-        features: List[str] | None = None,
+        features: list[str] | None = None,
         update_frequency: int = 20,
         min_samples: int = 50,
         random_state: int = 42
@@ -55,12 +54,12 @@ class RegimeDetector(Model):
         self._is_fitted = False
         self._sample_count = 0
         self._last_regime: int | None = None
-        self._regime_history: List[int] = []
-        self._feature_means: Dict[str, float] = {}
-        self._feature_stds: Dict[str, float] = {}
+        self._regime_history: list[int] = []
+        self._feature_means: dict[str, float] = {}
+        self._feature_stds: dict[str, float] = {}
         
         # Regime characteristics (will be learned)
-        self._regime_characteristics: Dict[int, Dict[str, float]] = {}
+        self._regime_characteristics: dict[int, dict[str, float]] = {}
         
     def train(self, X: pl.DataFrame, y: pl.Series | None = None, params: dict | None = None) -> None:
         """
@@ -234,7 +233,7 @@ class RegimeDetector(Model):
             return
             
         try:
-            with open(path, 'r') as f:
+            with open(path) as f:
                 model_data = json.load(f)
                 
             # Restore basic parameters
@@ -351,7 +350,7 @@ class RegimeDetector(Model):
                     
             self._regime_characteristics[regime_id] = characteristics
 
-    def get_regime_characteristics(self, regime_id: int) -> Dict[str, float]:
+    def get_regime_characteristics(self, regime_id: int) -> dict[str, float]:
         """Get learned characteristics for a specific regime."""
         return self._regime_characteristics.get(regime_id, {})
 
@@ -359,7 +358,7 @@ class RegimeDetector(Model):
         """Get the most recently detected regime."""
         return self._last_regime
 
-    def get_regime_history(self) -> List[int]:
+    def get_regime_history(self) -> list[int]:
         """Get history of regime assignments."""
         return self._regime_history.copy()
 
@@ -419,11 +418,10 @@ class RegimeDetector(Model):
             
             _LOG.info(f"Regime change detected: {self._last_regime} -> {latest_regime} (confidence: {confidence:.3f})")
             return event
-        else:
-            # Update history even if no change
-            if latest_regime >= 0:
-                self._regime_history.append(latest_regime)
-                self._last_regime = latest_regime
+        # Update history even if no change
+        elif latest_regime >= 0:
+            self._regime_history.append(latest_regime)
+            self._last_regime = latest_regime
                 
         return None
 

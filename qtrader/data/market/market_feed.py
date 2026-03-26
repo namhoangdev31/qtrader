@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 from qtrader.core.event import MarketDataEvent
+from qtrader.core.trace import TraceManager
 from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
 from qtrader.execution.market_state import MarketStateUpdater
 
@@ -45,8 +46,10 @@ class MarketFeedService:
                 # Using Coinbase REST API for polling quotes.
                 bba = self.client.get_best_bid_ask(self.symbols)
                 for sym, quotes in bba.items():
+                    trace_id = TraceManager.generate()
                     event = MarketDataEvent(
                         symbol=sym,
+                        trace_id=trace_id,
                         data={
                             "bid": quotes["bid"],
                             "ask": quotes["ask"],

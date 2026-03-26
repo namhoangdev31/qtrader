@@ -20,17 +20,17 @@ except (ImportError, RuntimeError):
 
 __all__ = [
     "AutonomousLoop",
+    "HMMRegimeSmoother",
+    "ModelEvaluator",
+    "ModelRotator",
+    "NestedCrossValidation",
+    "PurgedKFoldCV",
     "RayCompute",
     "RayHyperparamTuner",
-    "ModelEvaluator",
-    "NestedCrossValidation",
-    "HMMRegimeSmoother",
     "RegimeDetector",
-    "VolatilityRegimeDetector",
-    "ModelRotator",
     "RegimeStabilityScore",
     "RotationHysteresis",
-    "PurgedKFoldCV",
+    "VolatilityRegimeDetector",
     "WalkForwardPipeline",
 ]
 

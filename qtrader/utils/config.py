@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -12,7 +13,7 @@ class Config:
     """Configuration management for the QTrader system."""
 
     def __init__(self):
-        self._config: Dict[str, Any] = {}
+        self._config: dict[str, Any] = {}
         self._load_from_env()
 
     def _load_from_env(self) -> None:
@@ -52,7 +53,7 @@ class Config:
         """
         self._config[key] = value
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Get a copy of the entire configuration as a dictionary.
 

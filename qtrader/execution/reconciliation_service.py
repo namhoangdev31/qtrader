@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from typing import Any, Dict, Optional
 from datetime import datetime
+from typing import Any
 
 from loguru import logger
 
 from qtrader.core.types import FillEvent
-from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.execution.reconciliation_engine import ReconciliationEngine
+from qtrader.oms.order_management_system import UnifiedOMS
 
 
 class ReconciliationService:
@@ -47,12 +46,12 @@ class ReconciliationService:
         self.engine = ReconciliationEngine(tolerance=tolerance)
 
         # State
-        self._reconciliation_task: Optional[asyncio.Task] = None
+        self._reconciliation_task: asyncio.Task | None = None
         self._is_running = False
-        self._last_reconciliation: Optional[datetime] = None
-        self._last_exchange_positions: Dict[str, float] = {}
+        self._last_reconciliation: datetime | None = None
+        self._last_exchange_positions: dict[str, float] = {}
         self._consecutive_mismatches = 0
-        self._last_known_good_exchange_positions: Dict[str, float] = {}
+        self._last_known_good_exchange_positions: dict[str, float] = {}
 
         logger.info(
             f"ReconciliationService initialized (interval: {reconciliation_interval}s, tolerance: {tolerance})"
@@ -136,7 +135,7 @@ class ReconciliationService:
             # On error, we keep the last known good exchange positions for fallback
             # but we don't update consecutive mismatches
 
-    async def _get_local_positions(self) -> Dict[str, float]:
+    async def _get_local_positions(self) -> dict[str, float]:
         """Get positions from local OMS as symbol -> quantity dict."""
         try:
             # Get positions DataFrame from OMS
@@ -149,7 +148,7 @@ class ReconciliationService:
             logger.error(f"Failed to get local positions: {e}")
             return {}
 
-    async def _get_exchange_positions(self) -> Dict[str, float]:
+    async def _get_exchange_positions(self) -> dict[str, float]:
         """Get positions from exchange with fallback to last known snapshot."""
         try:
             # This would depend on the exchange client implementation
@@ -189,14 +188,13 @@ class ReconciliationService:
             logger.critical(
                 "[KILL SWITCH] Position mismatch detected - halting all trading activities"
             )
-            # TODO: Implement actual kill switch triggering via:
             # - Publishing KILL_SWITCH event to event bus
             # - Calling risk.engine.trigger_kill_switch(reason="position_mismatch")
             # For now, we rely on logging and external monitoring to detect this
         except Exception as e:
             logger.error(f"Failed to trigger kill switch: {e}")
 
-    async def reconcile_after_fill(self, fill_event: FillEvent) -> Dict[str, Any]:
+    async def reconcile_after_fill(self, fill_event: FillEvent) -> dict[str, Any]:
         """Reconcile positions after a FillEvent for real-time consistency.
 
         Args:
@@ -242,7 +240,7 @@ class ReconciliationService:
                 "total_abs_diff": float("inf"),
             }
 
-    def get_reconciliation_status(self) -> Dict[str, Any]:
+    def get_reconciliation_status(self) -> dict[str, Any]:
         """Get current reconciliation status for monitoring."""
         return {
             "is_running": self._is_running,

@@ -4,7 +4,6 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 import polars as pl
 
@@ -45,7 +44,7 @@ class AutonomousLoop:
     registry: ModelRegistry
     bus: EventBus
     interval_s: int = 3600
-    _last_regime: Optional[int] = field(init=False, default=None)
+    _last_regime: int | None = field(init=False, default=None)
 
     async def run_step(self, recent_data: pl.DataFrame, feature_cols: list[str]) -> None:
         """Execute one autonomous step.
@@ -58,7 +57,7 @@ class AutonomousLoop:
             regime_id, confidence = self.detector.current_regime_confidence(
                 recent_data, feature_cols
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.error("Regime detection failed", exc_info=exc)
             return
 
@@ -97,7 +96,7 @@ class AutonomousLoop:
                     metrics={"confidence": confidence},
                     tags={"rotation_event": "true", "target_model_id": str(target_model_id)},
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.error("Failed to log rotation to MLflow", exc_info=exc)
 
     async def start(self, get_data_func: DataProvider, feature_cols: list[str]) -> None:
@@ -117,15 +116,15 @@ class AutonomousLoop:
                 await self.run_step(recent_data, feature_cols)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.error("AutonomousLoop iteration failed", exc_info=exc)
             await asyncio.sleep(self.interval_s)
 
 
 if __name__ == "__main__":
     # Smoke test: construct with dummy components (no EventBus loop).
-    from qtrader.ml.rotation import ModelRotator  # type: ignore[reimported]
     from qtrader.ml.registry import ModelRegistry  # type: ignore[reimported]
+    from qtrader.ml.rotation import ModelRotator  # type: ignore[reimported]
 
     _detector = RegimeDetector()
     _rotator = ModelRotator()

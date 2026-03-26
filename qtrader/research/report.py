@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 import io
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -65,13 +65,13 @@ class ReportBuilder:
     # Public API
     # ------------------------------------------------------------------
 
-    def add_text(self, heading: str, body: str) -> "ReportBuilder":
+    def add_text(self, heading: str, body: str) -> ReportBuilder:
         """Add a free-text section (markdown-lite: heading is rendered as-is in an <h2>)."""
         html = f"<h2>{heading}</h2><p>{body}</p>"
         self._sections.append(_Section(heading, html))
         return self
 
-    def add_table(self, heading: str, df: pl.DataFrame | dict[str, Any]) -> "ReportBuilder":
+    def add_table(self, heading: str, df: pl.DataFrame | dict[str, Any]) -> ReportBuilder:
         """Add a table section from a Polars DataFrame or a flat dict of metrics."""
         if isinstance(df, dict):
             # Convert flat metrics dict → 2-col Polars DataFrame
@@ -80,7 +80,7 @@ class ReportBuilder:
         self._sections.append(_Section(heading, f"<h2>{heading}</h2>{html}"))
         return self
 
-    def add_figure(self, heading: str, fig: Any) -> "ReportBuilder":
+    def add_figure(self, heading: str, fig: Any) -> ReportBuilder:
         """Add a matplotlib figure (embedded as base64 PNG)."""
         try:
             import matplotlib.pyplot as plt  # noqa: F401
@@ -95,7 +95,7 @@ class ReportBuilder:
         self._sections.append(_Section(heading, html))
         return self
 
-    def add_polars_plot(self, heading: str, series: pl.Series) -> "ReportBuilder":
+    def add_polars_plot(self, heading: str, series: pl.Series) -> ReportBuilder:
         """Quick helper – plots a Polars Series as a line chart and adds it."""
         try:
             import matplotlib.pyplot as plt

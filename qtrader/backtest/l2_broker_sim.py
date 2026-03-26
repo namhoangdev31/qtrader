@@ -1,4 +1,5 @@
 import asyncio
+from loguru import logger
 import uuid
 from dataclasses import dataclass
 
@@ -53,7 +54,7 @@ class L2BrokerSim:
         trade_qty = data.get("trade_qty")
         trade_side = data.get("trade_side")
         if trade_price is not None and trade_qty is not None and trade_side is not None:
-            await self._apply_trade_print(
+            await self._apply_trade_logger.info(
                 trade_price=float(trade_price),
                 trade_qty=float(trade_qty),
                 trade_side=str(trade_side).upper(),
@@ -215,7 +216,7 @@ class L2BrokerSim:
                     await self._execute_fill(qo, self.best_bid, qo.remaining_qty)
                     self.ask_queue.remove(qo)
 
-    async def _apply_trade_print(
+    async def _apply_trade_logger.info(
         self,
         *,
         trade_price: float,

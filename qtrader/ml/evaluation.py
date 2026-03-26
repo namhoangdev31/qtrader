@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -97,7 +97,7 @@ class ModelEvaluator:
     def feature_importance_report(
         self,
         model: Any,
-        feature_names: List[str],
+        feature_names: list[str],
     ) -> pl.DataFrame:
         """Extract feature importance from tree/linear models.
 
@@ -113,9 +113,9 @@ class ModelEvaluator:
         """
         importances: np.ndarray | None = None
         if hasattr(model, "feature_importances_"):
-            importances = np.asarray(getattr(model, "feature_importances_"), dtype=float)
+            importances = np.asarray(model.feature_importances_, dtype=float)
         elif hasattr(model, "coef_"):
-            coef = np.asarray(getattr(model, "coef_"), dtype=float)
+            coef = np.asarray(model.coef_, dtype=float)
             importances = np.abs(coef).ravel()
 
         if importances is None:
@@ -139,7 +139,7 @@ class ModelEvaluator:
         self,
         df: pl.DataFrame,
         transaction_cost_bps: float = 10.0,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Run a quick vectorized backtest over predictions.
 
         Args:
@@ -224,11 +224,11 @@ class NestedCrossValidation:
     def evaluate(
         self,
         df: pl.DataFrame,
-        train_func: Callable[[pl.DataFrame, Dict[str, Any]], Any],
-        param_grid: List[Dict[str, Any]],
+        train_func: Callable[[pl.DataFrame, dict[str, Any]], Any],
+        param_grid: list[dict[str, Any]],
         target_col: str = "forward_return",
-        feature_cols: List[str] | None = None,
-    ) -> List[Dict[str, Any]]:
+        feature_cols: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Run nested cross-validation with IC-based scoring.
 
         Args:
@@ -250,7 +250,7 @@ class NestedCrossValidation:
         outer_splits = self.outer.get_splits(df)
 
         for i, (outer_train, outer_test) in enumerate(outer_splits):
-            best_params: Dict[str, Any] | None = None
+            best_params: dict[str, Any] | None = None
             best_inner_score = float("-inf")
 
             inner_splits = self.inner.get_splits(outer_train)
@@ -288,7 +288,7 @@ class NestedCrossValidation:
         model: Any,
         df: pl.DataFrame,
         target_col: str,
-        feature_cols: List[str] | None,
+        feature_cols: list[str] | None,
     ) -> float:
         """Compute IC between model predictions and forward returns."""
         if target_col not in df.columns:
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     _outer = WalkForwardPipeline(train_size=3, test_size=1, embargo=0)
     _inner = WalkForwardPipeline(train_size=3, test_size=1, embargo=0)
 
-    def _train(train_df: pl.DataFrame, params: Dict[str, Any]) -> Any:
+    def _train(train_df: pl.DataFrame, params: dict[str, Any]) -> Any:
         x_train = train_df.select(["x"]).to_numpy()
         y_train = train_df["forward_return"].to_numpy()
         model = LinearRegression(**params)

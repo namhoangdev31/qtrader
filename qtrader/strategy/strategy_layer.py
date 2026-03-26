@@ -6,8 +6,7 @@ from typing import ClassVar
 
 import polars as pl
 
-from qtrader.core.event import SignalEvent, EventType
-from qtrader.strategy.alpha_base import Alpha
+from qtrader.core.event import SignalEvent
 
 
 @dataclass

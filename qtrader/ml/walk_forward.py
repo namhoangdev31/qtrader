@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import polars as pl
 
-__all__ = ["WalkForwardPipeline", "PurgedKFoldCV"]
+__all__ = ["PurgedKFoldCV", "WalkForwardPipeline"]
 
 
 @dataclass(slots=True)
@@ -23,7 +22,7 @@ class WalkForwardPipeline:
     test_size: int
     embargo: int = 0
 
-    def get_splits(self, df: pl.DataFrame) -> List[Tuple[pl.DataFrame, pl.DataFrame]]:
+    def get_splits(self, df: pl.DataFrame) -> list[tuple[pl.DataFrame, pl.DataFrame]]:
         """Generate (train, test) splits using rolling windows.
 
         Args:
@@ -71,7 +70,7 @@ class PurgedKFoldCV:
         self,
         df: pl.DataFrame,
         events_col: str = "timestamp",
-    ) -> List[Tuple[pl.DataFrame, pl.DataFrame]]:
+    ) -> list[tuple[pl.DataFrame, pl.DataFrame]]:
         """Generate purged (train, test) splits.
 
         Args:

@@ -1,6 +1,7 @@
 """Percentage of Volume (POV) execution algorithm."""
 
 from __future__ import annotations
+from loguru import logger
 
 import logging
 from dataclasses import dataclass
@@ -22,7 +23,7 @@ class POVAlgo:
 
     participation_rate: float = 0.05
 
-    async def on_trade_print(
+    async def on_trade_logger.info(
         self,
         trade_qty: float,
         trade_price: float,

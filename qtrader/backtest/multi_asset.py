@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import polars as pl
@@ -25,7 +24,7 @@ class PortfolioBacktest:
         self,
         prices: pl.DataFrame,
         signals: pl.DataFrame,
-        weights: Optional[pl.DataFrame] = None,
+        weights: pl.DataFrame | None = None,
     ) -> pl.DataFrame:
         """Run a portfolio backtest over wide price and signal matrices.
 

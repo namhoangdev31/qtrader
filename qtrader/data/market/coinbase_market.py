@@ -4,8 +4,13 @@ from typing import Any
 
 import httpx
 import polars as pl
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
-from pydantic import BaseModel
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from qtrader.core.config import Config
 
@@ -25,8 +30,9 @@ class CoinbaseMarketDataClient:
         self.timeout = 10.0
 
     def _auth_headers(self, method: str, path: str) -> dict[str, str]:
-        from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
         from urllib.parse import urlparse
+
+        from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
         
         parsed = urlparse(self.rest_base)
         full_path = f"{parsed.path.rstrip('/')}{path}"
@@ -70,9 +76,10 @@ class CoinbaseMarketDataClient:
         Fetch OHLCV candles for a product with pagination.
         Coinbase returns max 300 candles per request.
         """
-        from qtrader.core.config import Config
-        from datetime import datetime
         import time
+        from datetime import datetime
+
+        from qtrader.core.config import Config
         
         start_ts = int(start.timestamp()) if isinstance(start, datetime) else int(start or 0)
         end_ts = int(end.timestamp()) if isinstance(end, datetime) else int(end or datetime.now(Config.tz).timestamp())

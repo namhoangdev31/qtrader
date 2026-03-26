@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -71,12 +71,12 @@ class RayHyperparamTuner:
     def tune(
         self,
         model_cls: type,
-        param_space: Dict[str, Any],
+        param_space: dict[str, Any],
         df: pl.DataFrame,
         wf_pipeline: WalkForwardPipeline,
         target_col: str = "forward_return",
         feature_cols: list[str] | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Run Ray Tune to optimize hyperparameters.
 
         Args:
@@ -98,7 +98,7 @@ class RayHyperparamTuner:
 
         dataset_serialized = df.to_pandas()  # external boundary; small-ish by design
 
-        def trainable(config: Dict[str, Any]) -> None:
+        def trainable(config: dict[str, Any]) -> None:
             import pandas as pd  # local import for Ray workers
 
             pdf: pd.DataFrame = dataset_serialized.copy()
