@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from qtrader.core.bus import EventBus
 from qtrader.core.event import RiskEvent
@@ -45,7 +45,7 @@ class RuntimeRiskEngine:
     )
     
     # Position tracking for turnover calculation
-    _position_history: Dict[str, float] = field(default_factory=dict)
+    _position_history: dict[str, float] = field(default_factory=dict)
     # Leverage tracking
     current_leverage: float = 0.0
     # Portfolio value for leverage calculation (would come from position keeper in reality)
@@ -187,7 +187,7 @@ def create_runtime_risk_engine(
     max_daily_loss: float = 5_000.0,
     max_leverage: float = 5.0,
     max_turnover: float = 0.3,
-    event_bus: Optional[EventBus] = None,
+    event_bus: EventBus | None = None,
 ) -> RuntimeRiskEngine:
     """Factory function to create a RuntimeRiskEngine with custom limits.
     

@@ -1,16 +1,16 @@
 """Orderbook simulator with liquidity depletion modeling and realistic execution."""
 import asyncio
-import logging
-from typing import Dict, List, Optional, Tuple, Any
-from decimal import Decimal
-import random
 import copy
+import logging
+import random
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
+from typing import Any
 
 from qtrader.core.types import FillEvent, OrderEvent
-from qtrader.execution.slippage_model import SlippageModel
 from qtrader.execution.latency_model import LatencyModel
+from qtrader.execution.slippage_model import SlippageModel
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class OrderbookEnhanced:
     
     def __init__(
         self,
-        symbols: List[str],
+        symbols: list[str],
         base_spread_bps: float = 5.0,
         depth_levels: int = 10,
         volume_per_level: float = 1000.0,
@@ -44,8 +44,8 @@ class OrderbookEnhanced:
         self.depth_levels = depth_levels
         self.volume_per_level = volume_per_level
         self.liquidity_decay_factor = liquidity_decay_factor
-        self._orderbooks: Dict[str, Dict] = {}
-        self._last_update: Dict[str, float] = {}
+        self._orderbooks: dict[str, dict] = {}
+        self._last_update: dict[str, float] = {}
         
         # Initialize orderbooks for all symbols
         for symbol in symbols:
@@ -115,14 +115,14 @@ class OrderbookEnhanced:
         except Exception as e:
             logger.error(f"Error updating orderbook for {symbol}: {e}", exc_info=True)
             
-    async def get_orderbook(self, symbol: str) -> Optional[Dict[str, Any]]:
+    async def get_orderbook(self, symbol: str) -> dict[str, Any] | None:
         """Get current orderbook for symbol."""
         if symbol not in self._orderbooks:
             logger.warning(f"No orderbook data for {symbol}, generating initial")
             self._orderbooks[symbol] = self._generate_initial_orderbook(symbol)
         return copy.deepcopy(self._orderbooks[symbol])
         
-    def _generate_initial_orderbook(self, symbol: str) -> Dict[str, Any]:
+    def _generate_initial_orderbook(self, symbol: str) -> dict[str, Any]:
         """Generate initial orderbook for a symbol."""
         # Start with a reasonable price (would come from actual market data in practice)
         base_price = Decimal('100.0')  # Placeholder - would be set from first market data
@@ -158,7 +158,7 @@ class OrderbookEnhanced:
             'timestamp': asyncio.get_event_loop().time()
         }
         
-    def _get_mid_price(self, orderbook: Dict[str, List]) -> Decimal:
+    def _get_mid_price(self, orderbook: dict[str, list]) -> Decimal:
         """Calculate mid price from orderbook."""
         bids = orderbook.get('bids', [])
         asks = orderbook.get('asks', [])
@@ -177,8 +177,8 @@ class OrderbookEnhanced:
         self,
         symbol: str,
         order: OrderEvent,
-        slippage_model: Optional[SlippageModel] = None,
-        latency_model: Optional[LatencyModel] = None,
+        slippage_model: SlippageModel | None = None,
+        latency_model: LatencyModel | None = None,
         maker_fee: Decimal = Decimal('0.001'),  # 0.1% maker fee
         taker_fee: Decimal = Decimal('0.002'),  # 0.2% taker fee
         deterministic: bool = False
@@ -224,8 +224,8 @@ class OrderbookEnhanced:
         self,
         symbol: str,
         order: OrderEvent,
-        orderbook: Dict[str, List],
-        slippage_model: Optional[SlippageModel],
+        orderbook: dict[str, list],
+        slippage_model: SlippageModel | None,
         latency_ms: float,
         taker_fee: Decimal,
         deterministic: bool
@@ -315,8 +315,8 @@ class OrderbookEnhanced:
         self,
         symbol: str,
         order: OrderEvent,
-        orderbook: Dict[str, List],
-        slippage_model: Optional[SlippageModel],
+        orderbook: dict[str, list],
+        slippage_model: SlippageModel | None,
         latency_ms: float,
         maker_fee: Decimal,
         taker_fee: Decimal,
@@ -381,7 +381,7 @@ class OrderbookEnhanced:
             
             return fill_event
 
-    def get_liquidity_profile(self, symbol: str) -> Dict[str, Any]:
+    def get_liquidity_profile(self, symbol: str) -> dict[str, Any]:
         """
         Get liquidity profile for a symbol.
         

@@ -6,13 +6,13 @@ to trigger pipeline runs and inspect results.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import polars as pl
+from loguru import logger
 
+from qtrader.backtest.integration import BacktestHarness
 from qtrader.pipeline.research import ResearchPipeline, ResearchResult
-from qtrader.backtest.integration import BacktestHarness, BacktestResult
 
 
 class SessionBridge:
@@ -74,7 +74,7 @@ class SessionBridge:
         if show_html and result.config_path:
             # In a real system, we might open the HTML report in a browser.
             # We'll just log the path.
-            print(f"HTML report available at: {result.config_path}")
+            logger.info(f"HTML report available at: {result.config_path}")
 
         return result
 

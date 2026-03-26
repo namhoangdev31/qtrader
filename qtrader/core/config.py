@@ -54,11 +54,15 @@ class QTraderSettings(BaseSettings):  # type: ignore[misc]
     monthly_cloud_budget: float = 1000.0
     db_path: str = "qtrader.db"
     timezone: str = "Asia/Ho_Chi_Minh"
+    trading_symbols: List[str] = ["BTC/USDT", "ETH/USDT"]
+
+    @property
+    def TRADING_SYMBOLS(self) -> List[str]:
+        return self.trading_symbols
 
     @model_validator(mode="after")
     def resolve_paths(self) -> QTraderSettings:
         """Ensure paths are absolute relative to project root."""
-        import os
         from pathlib import Path
 
         # Find project root (where .env or .git exists, or just parent of qtrader/)

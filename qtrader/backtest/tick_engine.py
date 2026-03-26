@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import polars as pl
 import numpy as np
+import polars as pl
 
 # Import the compiled Rust extension
 try:

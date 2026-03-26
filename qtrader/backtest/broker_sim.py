@@ -4,11 +4,10 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Literal
 
+from qtrader.backtest.impact import MarketImpactModel
 from qtrader.core.bus import EventBus
 from qtrader.core.event import FillEvent, MarketDataEvent, OrderEvent
-from qtrader.backtest.impact import MarketImpactModel
 
 __all__ = ["FillModel", "SimulatedBroker"]
 
@@ -24,7 +23,7 @@ class FillModel(str, Enum):
     IMPACT = "impact"
 
 
-BarDict = Dict[str, float]
+BarDict = dict[str, float]
 
 
 @dataclass(slots=True)
@@ -44,8 +43,8 @@ class SimulatedBroker:
     fill_model: FillModel = FillModel.NEXT_OPEN
     slippage_bps: float = 5.0
     market_impact: bool = True
-    _latest_bar: Dict[str, BarDict] = field(init=False, default_factory=dict)
-    _pending_orders: Dict[str, OrderEvent] = field(init=False, default_factory=dict)
+    _latest_bar: dict[str, BarDict] = field(init=False, default_factory=dict)
+    _pending_orders: dict[str, OrderEvent] = field(init=False, default_factory=dict)
 
     async def on_market_data(self, event: MarketDataEvent) -> None:
         """Handle incoming market data and attempt to fill queued orders."""
@@ -163,9 +162,11 @@ class SimulatedBroker:
 
 
 if __name__ == "__main__":
-    from qtrader.core.bus import EventBus as _Bus  # type: ignore[reimported]
-    from qtrader.core.event import MarketDataEvent as _Mkt, OrderEvent as _Ord  # type: ignore[reimported]
     import asyncio as _asyncio
+
+    from qtrader.core.bus import EventBus as _Bus  # type: ignore[reimported]
+    from qtrader.core.event import MarketDataEvent as _Mkt  # type: ignore[reimported]
+    from qtrader.core.event import OrderEvent as _Ord
 
     async def _smoke() -> None:
         _bus = _Bus()

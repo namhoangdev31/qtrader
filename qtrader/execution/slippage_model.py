@@ -1,14 +1,14 @@
 """Slippage model for realistic trade simulation."""
 import logging
-from decimal import Decimal
 import math
 import random
-from typing import Dict, List, Tuple, Any
+from decimal import Decimal
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Type alias for orderbook: {'bids': [[price, volume], ...], 'asks': [[price, volume], ...]}
-Orderbook = Dict[str, List[List[Any]]]
+Orderbook = dict[str, list[list[Any]]]
 
 class SlippageModel:
     """

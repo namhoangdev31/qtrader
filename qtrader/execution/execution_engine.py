@@ -1,16 +1,17 @@
 # File: qtrader/execution/execution_engine.py
 import asyncio
 import time
-import uuid
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Dict, Any, Optional, Tuple, List
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
+from typing import Any
 
-from qtrader.core.types import OrderEvent, FillEvent, LoggerProtocol
 from qtrader.core.logger import logger
+from qtrader.core.types import FillEvent, LoggerProtocol, OrderEvent
+
 from .orderbook_simulator import OrderbookSimulator
+
 
 class OrderType(Enum):
     MARKET = "MARKET"
@@ -32,7 +33,7 @@ class ExchangeAdapter(ABC):
         self.logger = logger
     
     @abstractmethod
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """
         Send an order to the exchange.
         
@@ -45,7 +46,7 @@ class ExchangeAdapter(ABC):
         pass
     
     @abstractmethod
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel an order on the exchange.
         
@@ -70,15 +71,15 @@ class ExchangeAdapter(ABC):
         """
         pass
 
-    async def get_positions(self) -> Dict[str, Decimal]:
+    async def get_positions(self) -> dict[str, Decimal]:
         """Get current positions from the exchange."""
         return {}
 
-    async def get_orderbook(self, symbol: str) -> Dict[str, Any]:
+    async def get_orderbook(self, symbol: str) -> dict[str, Any]:
         """Get orderbook for a symbol."""
         return {}
 
-    async def get_fees(self, symbol: str) -> Dict[str, Decimal]:
+    async def get_fees(self, symbol: str) -> dict[str, Decimal]:
         """Get trading fees for a symbol."""
         return {}
 
@@ -88,15 +89,15 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
     def __init__(self, name: str = "SimulatedExchange", logger: LoggerProtocol = logger):
         super().__init__(name, logger)
         # Simulated market data: symbol -> price
-        self.prices: Dict[str, Decimal] = {}
+        self.prices: dict[str, Decimal] = {}
         # Simulated positions: symbol -> quantity
-        self.positions: Dict[str, Decimal] = {}
+        self.positions: dict[str, Decimal] = {}
         # Simulated orders: order_id -> order details
-        self.orders: Dict[str, Dict[str, Any]] = {}
+        self.orders: dict[str, dict[str, Any]] = {}
         # Order ID counter
         self.order_counter = 0
         # Orderbook simulator for realistic execution simulation
-        self.orderbook: Optional[Dict[str, List[Tuple[float, float]]]] = None
+        self.orderbook: dict[str, list[tuple[float, float]]] | None = None
         self.orderbook_simulator = OrderbookSimulator(
             latency_ms=0.0,
             market_impact_k=0.1,
@@ -117,7 +118,7 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
         if self._fill_callback:
             self._fill_callback(order_id, fill_event)
     
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """Simulate sending an order to the exchange."""
         try:
             # Generate a unique order ID
@@ -187,7 +188,7 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
             self.logger.error(f"Error sending order to simulated exchange: {e}", exc_info=True)
             return False, str(e)
     
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """Simulate cancelling an order on the exchange."""
         if order_id not in self.orders:
             return False, f"Order ID {order_id} not found"
@@ -204,7 +205,7 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
         """Get simulated position for a symbol."""
         return self.positions.get(symbol, Decimal('0'))
     
-    def check_and_fill_limit_orders(self, current_prices: Dict[str, Decimal]) -> list:
+    def check_and_fill_limit_orders(self, current_prices: dict[str, Decimal]) -> list:
         """
         Check limit orders against current prices and fill them if conditions are met.
         This is a helper method for simulation to generate fill events.
@@ -291,15 +292,15 @@ class ExecutionEngine:
         self.logger = logger
         
         # State
-        self.failover_queue: Optional[asyncio.Queue] = asyncio.Queue() if enable_failover_queue else None
-        self.pending_orders: Dict[str, OrderEvent] = {}  # order_id -> order
-        self.order_futures: Dict[str, asyncio.Future] = {}  # order_id -> future for result
-        self.position_tracker: Dict[str, Decimal] = {}  # symbol -> position size
-        self.avg_price_tracker: Dict[str, Tuple[Decimal, Decimal]] = {}  # symbol -> (total_cost, total_quantity)
+        self.failover_queue: asyncio.Queue | None = asyncio.Queue() if enable_failover_queue else None
+        self.pending_orders: dict[str, OrderEvent] = {}  # order_id -> order
+        self.order_futures: dict[str, asyncio.Future] = {}  # order_id -> future for result
+        self.position_tracker: dict[str, Decimal] = {}  # symbol -> position size
+        self.avg_price_tracker: dict[str, tuple[Decimal, Decimal]] = {}  # symbol -> (total_cost, total_quantity)
         
         # Background tasks
-        self._processing_task: Optional[asyncio.Task] = None
-        self._failover_processor_task: Optional[asyncio.Task] = None
+        self._processing_task: asyncio.Task | None = None
+        self._failover_processor_task: asyncio.Task | None = None
         self._is_running = False
     
     async def start(self) -> None:
@@ -330,7 +331,7 @@ class ExecutionEngine:
                 pass
         self.logger.info("ExecutionEngine stopped")
     
-    async def execute_order(self, order: OrderEvent) -> Tuple[bool, Optional[FillEvent]]:
+    async def execute_order(self, order: OrderEvent) -> tuple[bool, FillEvent | None]:
         """
         Execute an order with validation, retry logic, and failover.
         
@@ -375,19 +376,18 @@ class ExecutionEngine:
                         # Return the order ID as pending? We'll treat timeout as failure for now
                         # In a real system, we'd have a separate mechanism to check order status
                         return False, None
+                # Send failed
+                elif attempt < self.max_retry_attempts:
+                    delay = self.retry_delay_base * (2 ** attempt)  # Exponential backoff
+                    self.logger.warning(f"Order send failed (attempt {attempt+1}), retrying in {delay}s: {result}")
+                    await asyncio.sleep(delay)
                 else:
-                    # Send failed
-                    if attempt < self.max_retry_attempts:
-                        delay = self.retry_delay_base * (2 ** attempt)  # Exponential backoff
-                        self.logger.warning(f"Order send failed (attempt {attempt+1}), retrying in {delay}s: {result}")
-                        await asyncio.sleep(delay)
-                    else:
-                        self.logger.error(f"Order send failed after {self.max_retry_attempts+1} attempts: {result}")
-                        # If failover queue is enabled, add to queue
-                        if self.enable_failover_queue and self.failover_queue is not None:
-                            await self.failover_queue.put((order, datetime.utcnow()))
-                            return False, None
+                    self.logger.error(f"Order send failed after {self.max_retry_attempts+1} attempts: {result}")
+                    # If failover queue is enabled, add to queue
+                    if self.enable_failover_queue and self.failover_queue is not None:
+                        await self.failover_queue.put((order, datetime.utcnow()))
                         return False, None
+                    return False, None
             except Exception as e:
                 self.logger.error(f"Unexpected error executing order (attempt {attempt+1}): {e}", exc_info=True)
                 if attempt < self.max_retry_attempts:
@@ -401,7 +401,7 @@ class ExecutionEngine:
         
         return False, None
     
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel an order.
         
@@ -428,7 +428,7 @@ class ExecutionEngine:
             # Try to cancel on exchange anyway (might be a stale ID)
             return await self.exchange_adapter.cancel_order(order_id)
     
-    def _validate_order(self, order: OrderEvent) -> Optional[str]:
+    def _validate_order(self, order: OrderEvent) -> str | None:
         """
         Validate an order before sending.
         
@@ -548,7 +548,17 @@ class ExecutionEngine:
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
         
-        self.logger.info(f"Order filled: {order_id} - {fill_event.symbol} {fill_event.side} {fill_event.quantity} @ {fill_event.price}")
+        # Standardized institutional trade log
+        from qtrader.execution.trade_logger import TradeLogger
+        trace_id = getattr(fill_event, 'trace_id', 'no_trace')
+        TradeLogger.log_trade(
+            symbol=fill_event.symbol,
+            side=fill_event.side,
+            quantity=float(fill_event.quantity),
+            price=float(fill_event.price),
+            trace_id=trace_id,
+            timestamp=fill_event.timestamp
+        )
     
     def _on_order_cancelled(self, order_id: str) -> None:
         """
@@ -592,7 +602,7 @@ class ExecutionEngine:
         """Get current tracked position for a symbol."""
         return self.position_tracker.get(symbol, Decimal('0'))
     
-    def get_average_price(self, symbol: str) -> Optional[Decimal]:
+    def get_average_price(self, symbol: str) -> Decimal | None:
         """Get average price for a position."""
         if symbol in self.avg_price_tracker:
             total_cost, total_qty = self.avg_price_tracker[symbol]

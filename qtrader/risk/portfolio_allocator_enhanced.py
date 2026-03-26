@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
 
-import polars as pl
 import numpy as np
+import polars as pl
 
 from qtrader.risk.base import RiskModule
 
-_LOG = logging.getLogger("qtrader.portfolio.allocator")
+_LOG = logging.getLogger("qtrader.risk.portfolio.allocator")
 
 
 class EnhancedPortfolioAllocator(RiskModule):
@@ -69,7 +68,7 @@ class EnhancedPortfolioAllocator(RiskModule):
         self.risk_parity_tolerance = risk_parity_tolerance
         
         # Store previous weights for turnover calculation
-        self._prev_weights: Dict[str, float] = {}
+        self._prev_weights: dict[str, float] = {}
 
     def compute(self, data: pl.DataFrame, **kwargs) -> pl.Series:
         """
@@ -108,9 +107,9 @@ class EnhancedPortfolioAllocator(RiskModule):
 
     def allocate(
         self, 
-        strategy_returns: Dict[str, pl.Series],
-        current_weights: Dict[str, float] | None = None
-    ) -> Dict[str, float]:
+        strategy_returns: dict[str, pl.Series],
+        current_weights: dict[str, float] | None = None
+    ) -> dict[str, float]:
         """
         Allocate capital to strategies using enhanced risk parity.
         
@@ -180,7 +179,7 @@ class EnhancedPortfolioAllocator(RiskModule):
         
         return weights_dict
 
-    def _enhanced_risk_parity(self, returns_df: pl.DataFrame) -> Dict[str, float]:
+    def _enhanced_risk_parity(self, returns_df: pl.DataFrame) -> dict[str, float]:
         """
         Compute true risk parity weights using optimization.
         
@@ -293,7 +292,7 @@ class EnhancedPortfolioAllocator(RiskModule):
         
         return weights
 
-    def _inverse_volatility(self, returns_df: pl.DataFrame) -> Dict[str, float]:
+    def _inverse_volatility(self, returns_df: pl.DataFrame) -> dict[str, float]:
         """Inverse volatility weighting (fallback method)."""
         # Compute volatility (std) of each strategy
         inv_vol_list = []
@@ -316,9 +315,9 @@ class EnhancedPortfolioAllocator(RiskModule):
 
     def _apply_constraints(
         self, 
-        weights: Dict[str, float], 
-        current_weights: Dict[str, float]
-    ) -> Dict[str, float]:
+        weights: dict[str, float], 
+        current_weights: dict[str, float]
+    ) -> dict[str, float]:
         """Apply min/max weight, turnover, and concentration constraints."""
         # Start with min/max constraints
         constrained = {}
@@ -341,9 +340,9 @@ class EnhancedPortfolioAllocator(RiskModule):
 
     def _apply_turnover_constraint(
         self, 
-        new_weights: Dict[str, float], 
-        current_weights: Dict[str, float]
-    ) -> Dict[str, float]:
+        new_weights: dict[str, float], 
+        current_weights: dict[str, float]
+    ) -> dict[str, float]:
         """Apply maximum turnover constraint."""
         # Calculate desired weight changes
         weight_changes = {}
@@ -372,7 +371,7 @@ class EnhancedPortfolioAllocator(RiskModule):
         
         return new_weights
 
-    def _apply_concentration_constraint(self, weights: Dict[str, float]) -> Dict[str, float]:
+    def _apply_concentration_constraint(self, weights: dict[str, float]) -> dict[str, float]:
         """Apply maximum concentration constraint."""
         # Check if any weight exceeds concentration limit
         max_weight = max(weights.values()) if weights else 0.0
@@ -416,9 +415,9 @@ class EnhancedPortfolioAllocator(RiskModule):
 
     def _scale_to_target_volatility(
         self, 
-        weights: Dict[str, float], 
+        weights: dict[str, float], 
         returns_df: pl.DataFrame
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Scale weights to achieve target volatility."""
         if not weights:
             return weights

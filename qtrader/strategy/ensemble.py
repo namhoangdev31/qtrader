@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Dict
 
 import polars as pl
 
@@ -14,7 +13,7 @@ class EnsembleStrategy(ABC):
     Base class for ensemble strategies that combine multiple strategies.
     """
 
-    def __init__(self, strategies: List[BaseStrategy]):
+    def __init__(self, strategies: list[BaseStrategy]):
         """
         Initialize the ensemble strategy.
 
@@ -24,7 +23,7 @@ class EnsembleStrategy(ABC):
         self.strategies = strategies
 
     @abstractmethod
-    def compute_signals(self, features: Dict[str, pl.Series]) -> SignalEvent:
+    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
         """
         Compute signals by combining outputs from all sub-strategies.
 
@@ -37,7 +36,7 @@ class EnsembleStrategy(ABC):
         pass
 
     @abstractmethod
-    def update_weights(self, performance_metrics: Dict[str, float]) -> None:
+    def update_weights(self, performance_metrics: dict[str, float]) -> None:
         """
         Update strategy weights based on performance.
 

@@ -1,8 +1,7 @@
-from pathlib import Path
 import logging
-from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Optional, List, Tuple, Dict
+from functools import lru_cache
+from pathlib import Path
 
 # import duckdb
 import polars as pl
@@ -17,12 +16,12 @@ class DuckDBClient:
     
     def __init__(
         self, 
-        datalake_path: Optional[str] = None, 
-        db_path: Optional[str] = None,
+        datalake_path: str | None = None, 
+        db_path: str | None = None,
         enable_cache: bool = True,
         max_cache_size: int = 128,
         max_workers: int = 8,
-        memory_limit_mb: Optional[int] = None
+        memory_limit_mb: int | None = None
     ) -> None:
         self.datalake_path = Path(datalake_path or Config.DATALAKE_URI)
         self.con = duckdb.connect(database=db_path or Config.DB_PATH)
@@ -37,10 +36,10 @@ class DuckDBClient:
         self.max_workers = min(max_workers, (duckdb.default_thread_amount() or 8))
         
         # Pre-compile common query patterns
-        self._query_patterns: Dict[str, str] = {}
-        self._compiled_queries: Dict[str, duckdb.Result] = {}
+        self._query_patterns: dict[str, str] = {}
+        self._compiled_queries: dict[str, duckdb.Result] = {}
     
-    def _configure_duckdb(self, memory_limit_mb: Optional[int] = None) -> None:
+    def _configure_duckdb(self, memory_limit_mb: int | None = None) -> None:
         """Configure DuckDB for maximum performance with adaptive settings."""
         # Disable progress bar for faster execution
         self.con.execute("SET enable_progress_bar = FALSE")
@@ -120,8 +119,8 @@ class DuckDBClient:
         self, 
         symbol: str, 
         timeframe: str, 
-        filter_sql: Optional[str] = None,
-        columns: Optional[list[str]] = None,
+        filter_sql: str | None = None,
+        columns: list[str] | None = None,
         use_cache: bool = True,
         parallel: bool = True
     ) -> pl.DataFrame:
@@ -170,7 +169,7 @@ class DuckDBClient:
         symbol: str,
         timeframe: str,
         columns: list[str],
-        filter_sql: Optional[str] = None
+        filter_sql: str | None = None
     ) -> pl.DataFrame:
         """
         Query with explicit column projection for minimal I/O (aggressive optimization).
@@ -196,9 +195,9 @@ class DuckDBClient:
     
     def query_batch(
         self,
-        queries: List[Tuple[str, List[str], Optional[str]]],
+        queries: list[tuple[str, list[str], str | None]],
         parallel: bool = True
-    ) -> List[pl.DataFrame]:
+    ) -> list[pl.DataFrame]:
         """
         Execute multiple queries in parallel for batch data loading using ThreadPoolExecutor.
         
@@ -215,7 +214,7 @@ class DuckDBClient:
         # Parallel execution using ThreadPoolExecutor for better I/O parallelism
         results = [None] * len(queries)
         
-        def query_single(idx: int, args: Tuple[str, List[str], Optional[str]]) -> None:
+        def query_single(idx: int, args: tuple[str, list[str], str | None]) -> None:
             symbol, timeframe, columns, filter_sql = args
             results[idx] = self.query_datalake(symbol, timeframe, filter_sql, columns)
         
@@ -232,10 +231,10 @@ class DuckDBClient:
     
     def query_multi_symbol(
         self,
-        symbols: List[str],
+        symbols: list[str],
         timeframe: str,
-        columns: Optional[List[str]] = None,
-        filter_sql: Optional[str] = None,
+        columns: list[str] | None = None,
+        filter_sql: str | None = None,
         parallel: bool = True
     ) -> pl.DataFrame:
         """

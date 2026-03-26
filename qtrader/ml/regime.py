@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import polars as pl
@@ -48,10 +48,10 @@ class RegimeDetector:
     n_regimes: int = 3
     method: RegimeMethod = "gmm"
     random_state: int = 42
-    _gmm: Optional[GaussianMixture] = field(init=False, default=None)
-    _hmm: Optional["GaussianHMM"] = field(init=False, default=None)  # type: ignore[name-defined]
-    _means: Optional[np.ndarray] = field(init=False, default=None)
-    _stds: Optional[np.ndarray] = field(init=False, default=None)
+    _gmm: GaussianMixture | None = field(init=False, default=None)
+    _hmm: GaussianHMM | None = field(init=False, default=None)  # type: ignore[name-defined]
+    _means: np.ndarray | None = field(init=False, default=None)
+    _stds: np.ndarray | None = field(init=False, default=None)
     _is_fitted: bool = field(init=False, default=False)
 
     def _standardize(self, data: np.ndarray) -> np.ndarray:

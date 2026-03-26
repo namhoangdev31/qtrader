@@ -1,13 +1,11 @@
 """Binance exchange adapter for QTrader execution system."""
 
 import logging
-from typing import Dict, Any, Optional, Tuple
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
 
 from qtrader.core.types import OrderEvent
-from qtrader.execution.execution_engine import OrderType
-from qtrader.execution.execution_engine import ExchangeAdapter
+from qtrader.execution.execution_engine import ExchangeAdapter, OrderType
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +31,7 @@ class BinanceAdapter(ExchangeAdapter):
         # For now, we'll just store the credentials
         self.logger.info(f"BinanceAdapter initialized (testnet={testnet})")
 
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """
         Send an order to Binance.
 
@@ -69,7 +67,7 @@ class BinanceAdapter(ExchangeAdapter):
             self.logger.error(f"Error sending order to Binance: {e}")
             return False, str(e)
 
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel an order on Binance.
 

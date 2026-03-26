@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Dict, List
 from dataclasses import dataclass, field
+from enum import Enum
 
-from qtrader.core.types import OrderEvent, FillEvent
+from qtrader.core.types import FillEvent
 
 
 class OrderState(Enum):
@@ -32,7 +31,7 @@ class OrderFSM:
 
     order_id: str
     # Define valid transitions: from_state -> [list of valid to_states]
-    _VALID_TRANSITIONS: Dict[OrderState, List[OrderState]] = field(
+    _VALID_TRANSITIONS: dict[OrderState, list[OrderState]] = field(
         init=False,
         default_factory=lambda: {
             OrderState.NEW: [OrderState.ACK, OrderState.CANCELLED, OrderState.REJECTED],
@@ -49,8 +48,8 @@ class OrderFSM:
         },
     )
     _state: OrderState = field(init=False, default=OrderState.NEW)
-    _order_history: List[OrderState] = field(init=False, default_factory=list)
-    _fill_history: List[FillEvent] = field(init=False, default_factory=list)
+    _order_history: list[OrderState] = field(init=False, default_factory=list)
+    _fill_history: list[FillEvent] = field(init=False, default_factory=list)
 
     def __post_init__(self) -> None:
         """Initialize the order history with the starting state."""
@@ -62,12 +61,12 @@ class OrderFSM:
         return self._state
 
     @property
-    def order_history(self) -> List[OrderState]:
+    def order_history(self) -> list[OrderState]:
         """Get copy of order state history."""
         return self._order_history.copy()
 
     @property
-    def fill_history(self) -> List[FillEvent]:
+    def fill_history(self) -> list[FillEvent]:
         """Get copy of fill history."""
         return self._fill_history.copy()
 

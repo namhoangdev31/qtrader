@@ -1,4 +1,5 @@
 from typing import Literal, TypedDict
+
 import polars as pl
 
 from qtrader.backtest.impact import MarketImpactModel

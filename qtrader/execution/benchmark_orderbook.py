@@ -1,11 +1,15 @@
 """
 Benchmark test for the orderbook simulator.
 """
+import random
 import sys
 import time
-import random
+
+from loguru import logger
+
 sys.path.insert(0, '/home/lkct-lee-park/var/www/qtrader')
 from qtrader.execution.orderbook_simulator import OrderbookSimulator
+
 
 def create_test_orderbook(depth=10, base_price=100.0, spread=0.5):
     """Create a test orderbook with specified depth."""
@@ -93,40 +97,40 @@ def benchmark_simulator(simulator, orderbook, n_orders=1000):
 
 def run_benchmarks():
     """Run various benchmark scenarios."""
-    print("Orderbook Simulator Benchmark")
-    print("=" * 50)
+    logger.info("Orderbook Simulator Benchmark")
+    logger.info("=" * 50)
     
     # Test 1: Default simulator
-    print("\n1. Default Simulator (latency=0ms)")
+    logger.info("\n1. Default Simulator (latency=0ms)")
     sim = OrderbookSimulator(latency_ms=0.0)
     orderbook = create_test_orderbook(depth=5, base_price=100.0, spread=0.2)
     results = benchmark_simulator(sim, orderbook, n_orders=1000)
-    print(f"   Avg time per order: {results['avg_time_per_order_ms']:.3f} ms")
-    print(f"   Orders per second: {results['orders_per_second']:.0f}")
-    print(f"   Fill rate: {results['fill_rate']:.1%}")
-    print(f"   Avg slippage: {results['avg_slippage']:.4f}")
-    print(f"   Meets <1ms requirement: {results['avg_time_per_order_ms'] < 1.0}")
+    logger.info(f"   Avg time per order: {results['avg_time_per_order_ms']:.3f} ms")
+    logger.info(f"   Orders per second: {results['orders_per_second']:.0f}")
+    logger.info(f"   Fill rate: {results['fill_rate']:.1%}")
+    logger.info(f"   Avg slippage: {results['avg_slippage']:.4f}")
+    logger.info(f"   Meets <1ms requirement: {results['avg_time_per_order_ms'] < 1.0}")
     
     # Test 2: With latency
-    print("\n2. Simulator with Latency (latency=1ms)")
+    logger.info("\n2. Simulator with Latency (latency=1ms)")
     sim = OrderbookSimulator(latency_ms=1.0)
     results = benchmark_simulator(sim, orderbook, n_orders=1000)
-    print(f"   Avg time per order: {results['avg_time_per_order_ms']:.3f} ms")
-    print(f"   Orders per second: {results['orders_per_second']:.0f}")
-    print(f"   Fill rate: {results['fill_rate']:.1%}")
+    logger.info(f"   Avg time per order: {results['avg_time_per_order_ms']:.3f} ms")
+    logger.info(f"   Orders per second: {results['orders_per_second']:.0f}")
+    logger.info(f"   Fill rate: {results['fill_rate']:.1%}")
     
     # Test 3: High frequency trading scenario
-    print("\n3. High Frequency Scenario (latency=0.1ms)")
+    logger.info("\n3. High Frequency Scenario (latency=0.1ms)")
     sim = OrderbookSimulator(latency_ms=0.1, market_impact_k=0.05, max_slippage_pct=0.005)
     results = benchmark_simulator(sim, orderbook, n_orders=1000)
-    print(f"   Avg time per order: {results['avg_time_per_order_ms']:.3f} ms")
-    print(f"   Orders per second: {results['orders_per_second']:.0f}")
-    print(f"   Fill rate: {results['fill_rate']:.1%}")
-    print(f"   Avg slippage: {results['avg_slippage']:.4f}")
-    print(f"   Meets <1ms requirement: {results['avg_time_per_order_ms'] < 1.0}")
+    logger.info(f"   Avg time per order: {results['avg_time_per_order_ms']:.3f} ms")
+    logger.info(f"   Orders per second: {results['orders_per_second']:.0f}")
+    logger.info(f"   Fill rate: {results['fill_rate']:.1%}")
+    logger.info(f"   Avg slippage: {results['avg_slippage']:.4f}")
+    logger.info(f"   Meets <1ms requirement: {results['avg_time_per_order_ms'] < 1.0}")
     
     # Test 4: Stress test with large orders
-    print("\n4. Stress Test (Large Orders)")
+    logger.info("\n4. Stress Test (Large Orders)")
     sim = OrderbookSimulator(latency_ms=0.0)
     # Create thin orderbook
     thin_orderbook = create_test_orderbook(depth=3, base_price=100.0, spread=0.5)
@@ -152,13 +156,13 @@ def run_benchmarks():
     avg_slippage = sum(abs(f['slippage']) for f in filled_orders) / len(filled_orders) if filled_orders else 0
     avg_fill_ratio = sum(f['fill_ratio'] for f in filled_orders) / len(filled_orders) if filled_orders else 0
     
-    print(f"   Avg time per order: {avg_time_ms:.3f} ms")
-    print(f"   Fill rate: {fill_rate:.1%}")
-    print(f"   Avg slippage: {avg_slippage:.4f}")
-    print(f"   Avg fill ratio: {avg_fill_ratio:.1%}")
+    logger.info(f"   Avg time per order: {avg_time_ms:.3f} ms")
+    logger.info(f"   Fill rate: {fill_rate:.1%}")
+    logger.info(f"   Avg slippage: {avg_slippage:.4f}")
+    logger.info(f"   Avg fill ratio: {avg_fill_ratio:.1%}")
     
     # Test 5: Partial fills
-    print("\n5. Partial Fill Scenario")
+    logger.info("\n5. Partial Fill Scenario")
     sim = OrderbookSimulator(latency_ms=0.0)
     # Very thin orderbook
     thin_orderbook = {
@@ -168,12 +172,12 @@ def run_benchmarks():
     # Large order that will only partially fill
     large_order = create_test_order(side='buy', size=float(50), order_type='market')
     fill = sim.simulate_order(large_order, thin_orderbook)
-    print(f"   Order size: {large_order['size']}")
-    print(f"   Filled size: {fill['filled_size']}")
-    print(f"   Fill ratio: {fill['fill_ratio']:.1%}")
-    print(f"   Avg price: {fill['avg_price']:.2f}")
-    print(f"   Expected price (ask): 100.1")
-    print(f"   Slippage: {fill['slippage']:.4f}")
+    logger.info(f"   Order size: {large_order['size']}")
+    logger.info(f"   Filled size: {fill['filled_size']}")
+    logger.info(f"   Fill ratio: {fill['fill_ratio']:.1%}")
+    logger.info(f"   Avg price: {fill['avg_price']:.2f}")
+    logger.info("   Expected price (ask): 100.1")
+    logger.info(f"   Slippage: {fill['slippage']:.4f}")
 
 if __name__ == "__main__":
     # Set seed for reproducible results

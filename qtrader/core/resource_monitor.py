@@ -3,8 +3,9 @@ import asyncio
 import logging
 import time
 from collections import deque
-from typing import Optional, Callable, List, Dict, Any
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 try:
     import psutil
@@ -23,7 +24,7 @@ class ResourceMonitor:
     """Monitors system resources and provides adaptive throttling."""
     
     def __init__(self, 
-                 thresholds: Optional[ResourceThresholds] = None,
+                 thresholds: ResourceThresholds | None = None,
                  window_size: int = 300):  # 5 minutes of 1-second samples
         self.thresholds = thresholds or ResourceThresholds()
         self.window_size = window_size
@@ -34,16 +35,16 @@ class ResourceMonitor:
         self._latency_window: deque = deque(maxlen=window_size)
         
         # Monitoring task
-        self._monitoring_task: Optional[asyncio.Task] = None
+        self._monitoring_task: asyncio.Task | None = None
         self._is_monitoring = False
         
         # Callback lists for different actions
-        self._throttle_callbacks: List[Callable] = []
-        self._drop_signal_callbacks: List[Callable] = []
-        self._warning_callbacks: List[Callable] = []
+        self._throttle_callbacks: list[Callable] = []
+        self._drop_signal_callbacks: list[Callable] = []
+        self._warning_callbacks: list[Callable] = []
         
         # Last loop time for latency calculation
-        self._last_loop_time: Optional[float] = None
+        self._last_loop_time: float | None = None
 
     async def start_monitoring(self):
         """Start background resource monitoring task."""
@@ -135,19 +136,19 @@ class ResourceMonitor:
                 logger.error(f"Error in resource monitoring: {e}")
                 await asyncio.sleep(5.0)  # Back off on error
     
-    def register_throttle_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
+    def register_throttle_callback(self, callback: Callable[[str, dict[str, Any]], None]):
         """Register a callback to be executed when throttling is triggered (for processing throttling)."""
         self._throttle_callbacks.append(callback)
         
-    def register_drop_signal_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
+    def register_drop_signal_callback(self, callback: Callable[[str, dict[str, Any]], None]):
         """Register a callback to be executed when throttling is triggered (for dropping low-priority signals)."""
         self._drop_signal_callbacks.append(callback)
         
-    def register_warning_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
+    def register_warning_callback(self, callback: Callable[[str, dict[str, Any]], None]):
         """Register a callback to be executed when throttling is triggered (for warnings/alerts)."""
         self._warning_callbacks.append(callback)
         
-    async def _trigger_actions(self, reason: str, metrics: Dict[str, float]):
+    async def _trigger_actions(self, reason: str, metrics: dict[str, float]):
         """Execute all registered callback groups."""
         logger.info(f"Triggering resource actions due to: {reason}")
         
@@ -181,7 +182,7 @@ class ResourceMonitor:
             except Exception as e:
                 logger.error(f"Error in warning callback: {e}")
 
-    def get_current_metrics(self) -> Dict[str, Any]:
+    def get_current_metrics(self) -> dict[str, Any]:
         """Get current rolling window metrics."""
         return {
             "cpu": {

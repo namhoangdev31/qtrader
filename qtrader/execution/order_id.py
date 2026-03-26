@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from typing import Dict, Set
 
 
 class OrderIDGenerator:
@@ -14,7 +13,7 @@ class OrderIDGenerator:
     def __init__(self) -> None:
         """Initialize the generator with an in-memory registry."""
         self._lock = threading.Lock()
-        self._seen_ids: Set[str] = set()
+        self._seen_ids: set[str] = set()
 
     def generate_order_id(self, exchange: str, symbol: str) -> str:
         """

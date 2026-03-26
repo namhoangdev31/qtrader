@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Dict
 
 import polars as pl
 from loguru import logger
@@ -75,8 +74,8 @@ class DataQualityGate:
 
         if max_abs_z > threshold:
             logger.error(
-                "Outlier detected in data series: max |z| = {:.4f}, "
-                "threshold = {}, series length = {}".format(max_abs_z, threshold, len(series))
+                f"Outlier detected in data series: max |z| = {max_abs_z:.4f}, "
+                f"threshold = {threshold}, series length = {len(series)}"
             )
             raise DataQualityError(
                 f"Outlier detected: max |z| = {max_abs_z:.4f} > threshold {threshold}"
@@ -104,7 +103,7 @@ class DataQualityGate:
             )
 
     @staticmethod
-    def check_cross_exchange_sanity(prices: Dict[str, float], max_spread_pct: float = 0.01) -> None:
+    def check_cross_exchange_sanity(prices: dict[str, float], max_spread_pct: float = 0.01) -> None:
         """
         Check sanity of prices across different exchanges.
 

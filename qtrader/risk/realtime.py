@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Sequence
 
 import polars as pl
 
@@ -111,8 +111,7 @@ class RealTimeRiskEngine:
 
         self.positions = df
         self.equity = float(self.positions.get_column("market_value").sum())
-        if self.equity > self.hwm:
-            self.hwm = self.equity
+        self.hwm = max(self.hwm, self.equity)
         self.current_drawdown = self._compute_drawdown()
 
     def update_pnl(self, pnl_delta: float) -> None:

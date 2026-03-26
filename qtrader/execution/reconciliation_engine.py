@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any
 
 
 class ReconciliationEngine:
@@ -17,8 +17,8 @@ class ReconciliationEngine:
         self.tolerance = tolerance
 
     def reconcile(
-        self, local_positions: Dict[str, float], exchange_positions: Dict[str, float]
-    ) -> Dict[str, Any]:
+        self, local_positions: dict[str, float], exchange_positions: dict[str, float]
+    ) -> dict[str, Any]:
         """Reconcile positions between local OMS and exchange.
 
         Args:
@@ -35,7 +35,7 @@ class ReconciliationEngine:
         """
         # Compute differences for all symbols in union of keys
         all_symbols = set(local_positions.keys()) | set(exchange_positions.keys())
-        symbol_diff: Dict[str, float] = {}
+        symbol_diff: dict[str, float] = {}
         total_abs_diff = 0.0
 
         for symbol in all_symbols:

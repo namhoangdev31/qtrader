@@ -2,8 +2,8 @@
 Meta-learning engine for dynamic strategy and feature weight adjustment.
 """
 from collections import deque
+
 import numpy as np
-from typing import Dict, Tuple, List, Optional, TypedDict
 
 
 class MetaLearningEngine:
@@ -19,7 +19,7 @@ class MetaLearningEngine:
         window_size: int = 50,
         min_trades: int = 10,
         temperature: float = 1.0,
-        strategy_weights: Tuple[float, float, float, float] = (0.4, 0.3, 0.2, 0.1),
+        strategy_weights: tuple[float, float, float, float] = (0.4, 0.3, 0.2, 0.1),
         decay_penalty: float = 0.5,
         min_weight: float = 0.01,
         max_weight: float = 0.50,
@@ -45,22 +45,22 @@ class MetaLearningEngine:
         self.max_weight = max_weight
 
         # Performance memory: global and per-regime
-        self.global_strategy_history: Dict[str, deque] = {}
-        self.global_feature_history: Dict[str, deque] = {}
-        self.regime_strategy_history: Dict[str, Dict[str, deque]] = {}
-        self.regime_feature_history: Dict[str, Dict[str, deque]] = {}
+        self.global_strategy_history: dict[str, deque] = {}
+        self.global_feature_history: dict[str, deque] = {}
+        self.regime_strategy_history: dict[str, dict[str, deque]] = {}
+        self.regime_feature_history: dict[str, dict[str, deque]] = {}
 
         # Current regime info
-        self.current_regime: Optional[str] = None
+        self.current_regime: str | None = None
         self.regime_probability: float = 0.0
 
     def update(
         self,
-        strategy_performance: Dict[str, Dict[str, float]],
-        feature_performance: Dict[str, Tuple[float, float]],
+        strategy_performance: dict[str, dict[str, float]],
+        feature_performance: dict[str, tuple[float, float]],
         regime: str,
         regime_prob: float,
-        current_allocations: Optional[Dict[str, float]] = None,
+        current_allocations: dict[str, float] | None = None,
     ) -> None:
         """
         Update performance memory with latest metrics.
@@ -112,7 +112,7 @@ class MetaLearningEngine:
         self.current_regime = regime
         self.regime_probability = regime_prob
 
-    def _compute_strategy_scores(self, history: Dict[str, deque]) -> Dict[str, float]:
+    def _compute_strategy_scores(self, history: dict[str, deque]) -> dict[str, float]:
         """Compute strategy scores from history."""
         scores = {}
         for strategy, deque in history.items():
@@ -136,7 +136,7 @@ class MetaLearningEngine:
             scores[strategy] = score
         return scores
 
-    def _compute_feature_scores(self, history: Dict[str, deque]) -> Dict[str, float]:
+    def _compute_feature_scores(self, history: dict[str, deque]) -> dict[str, float]:
         """Compute feature scores from history."""
         scores = {}
         for feature, deque in history.items():
@@ -150,7 +150,7 @@ class MetaLearningEngine:
             scores[feature] = score
         return scores
 
-    def _softmax(self, scores: Dict[str, float]) -> Dict[str, float]:
+    def _softmax(self, scores: dict[str, float]) -> dict[str, float]:
         """Apply softmax to scores."""
         if not scores:
             return {}
@@ -168,7 +168,7 @@ class MetaLearningEngine:
         sum_exp = sum(exp_scores.values())
         return {k: v / sum_exp for k, v in exp_scores.items()}
 
-    def _clip_and_normalize(self, weights: Dict[str, float]) -> Dict[str, float]:
+    def _clip_and_normalize(self, weights: dict[str, float]) -> dict[str, float]:
         """Clip weights to bounds and renormalize."""
         clipped = {
             k: max(self.min_weight, min(self.max_weight, v)) for k, v in weights.items()
@@ -179,7 +179,7 @@ class MetaLearningEngine:
             return {k: 1.0 / n for k in clipped}
         return {k: v / total for k, v in clipped.items()}
 
-    def _average_sharpe(self, history: Dict[str, deque]) -> float:
+    def _average_sharpe(self, history: dict[str, deque]) -> float:
         """Calculate average Sharpe across all strategies."""
         sharpes = []
         for deque in history.values():
@@ -191,7 +191,7 @@ class MetaLearningEngine:
         """Sigmoid function."""
         return 1.0 / (1.0 + np.exp(-x))
 
-    def get_weights(self) -> Dict[str, Dict[str, float] | float]:
+    def get_weights(self) -> dict[str, dict[str, float] | float]:
         """
         Get updated weights and confidence multiplier.
 

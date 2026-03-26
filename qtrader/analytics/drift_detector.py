@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
+
 import numpy as np
 import polars as pl
-from typing import Dict, List, Tuple, Any
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class DriftDetector:
         psi = np.sum((actual_counts - expected_counts) * np.log(actual_counts / expected_counts))
         return psi
 
-    def _ks_2samp(self, data1: np.ndarray, data2: np.ndarray) -> Tuple[float, float]:
+    def _ks_2samp(self, data1: np.ndarray, data2: np.ndarray) -> tuple[float, float]:
         """
         Computes the Kolmogorov-Smirnov statistic and p-value for two samples.
         Implementation without scipy.
@@ -140,7 +141,7 @@ class DriftDetector:
         
         return d, p
 
-    def detect_drift(self, train_data: pl.DataFrame, live_data: pl.DataFrame, columns: List[str]) -> Dict[str, Any]:
+    def detect_drift(self, train_data: pl.DataFrame, live_data: pl.DataFrame, columns: list[str]) -> dict[str, Any]:
         """
         Detects drift between training and live data for specified columns.
 

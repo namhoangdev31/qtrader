@@ -10,7 +10,7 @@ from qtrader.execution.algos.vwap import VWAPAlgo
 __all__ = [
     "ChildOrder",
     "ExecutionAlgo",
+    "POVAlgo",
     "TWAPAlgo",
     "VWAPAlgo",
-    "POVAlgo",
 ]

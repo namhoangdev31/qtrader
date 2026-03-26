@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 import polars as pl
 
@@ -27,9 +26,9 @@ class RegimeAwareMetaStrategy(MetaStrategy):
     def __init__(
         self,
         regime_detector: RegimeDetector,
-        regime_feature_cols: List[str],
-        regime_strategy_weights: Optional[Dict[int, Dict[str, float]]] = None,
-        default_weights: Optional[Dict[str, float]] = None,
+        regime_feature_cols: list[str],
+        regime_strategy_weights: dict[int, dict[str, float]] | None = None,
+        default_weights: dict[str, float] | None = None,
     ) -> None:
         """
         Initialize the regime-aware meta strategy.
@@ -48,7 +47,7 @@ class RegimeAwareMetaStrategy(MetaStrategy):
         self.default_weights = default_weights
 
     def combine_signals(
-        self, strategy_signals: Dict[str, SignalEvent], market_data: pl.DataFrame
+        self, strategy_signals: dict[str, SignalEvent], market_data: pl.DataFrame
     ) -> SignalEvent:
         """
         Combine strategy signals with regime-based weighting.
@@ -73,7 +72,7 @@ class RegimeAwareMetaStrategy(MetaStrategy):
             regime_id, confidence = self.regime_detector.current_regime_confidence(
                 market_data, self.regime_feature_cols
             )
-        except Exception as e:
+        except Exception:
             # Fallback to default weights if regime detection fails
             regime_id = -1  # Indicates fallback
             confidence = 0.0

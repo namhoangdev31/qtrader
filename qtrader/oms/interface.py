@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
-from qtrader.core.event import OrderEvent, FillEvent
+from qtrader.core.event import FillEvent, OrderEvent
 
 
 class OMSInterface(ABC):
@@ -36,7 +35,7 @@ class OMSInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_fills(self) -> List[FillEvent]:
+    async def get_fills(self) -> list[FillEvent]:
         """
         Get a list of fills since the last call.
 

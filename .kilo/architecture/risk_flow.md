@@ -109,4 +109,4 @@ async def send_order(self, order: OrderEvent):
 
 ---
 
-###### Documented by Antigravity — Senior Quant Engineer
+#### Documented by Antigravity — Senior Quant Engineer

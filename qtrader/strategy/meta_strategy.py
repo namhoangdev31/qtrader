@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional
-
-import polars as pl
 
 from qtrader.core.event import SignalEvent
-from qtrader.strategy.strategy_layer import Strategy
 
 
 @dataclass
@@ -26,7 +22,7 @@ class MetaStrategy(ABC):
 
     @abstractmethod
     def combine_signals(
-        self, strategy_signals: Dict[str, SignalEvent]
+        self, strategy_signals: dict[str, SignalEvent]
     ) -> SignalEvent:
         """
         Combine signals from multiple strategies into a final signal.
@@ -40,7 +36,7 @@ class MetaStrategy(ABC):
         """
         pass
 
-    def _validate_signals(self, strategy_signals: Dict[str, SignalEvent]) -> None:
+    def _validate_signals(self, strategy_signals: dict[str, SignalEvent]) -> None:
         """
         Validate that all signals are for the same symbol and have valid types.
 
@@ -84,7 +80,7 @@ class WeightedMetaStrategy(MetaStrategy):
 
     def __init__(
         self,
-        strategy_weights: Optional[Dict[str, float]] = None,
+        strategy_weights: dict[str, float] | None = None,
         buy_threshold: float = 0.5,
         sell_threshold: float = -0.5,
     ) -> None:
@@ -102,7 +98,7 @@ class WeightedMetaStrategy(MetaStrategy):
         self.sell_threshold = sell_threshold
 
     def combine_signals(
-        self, strategy_signals: Dict[str, SignalEvent]
+        self, strategy_signals: dict[str, SignalEvent]
     ) -> SignalEvent:
         """
         Combine strategy signals using weighted voting.

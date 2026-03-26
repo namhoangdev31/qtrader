@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from qtrader.core.event import OrderEvent
-
 from qtrader.execution.algos.base import ChildOrder
 
 __all__ = ["TWAPAlgo"]

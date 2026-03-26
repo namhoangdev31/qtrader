@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import polars as pl
-
 
 def sharpe_ratio(returns, risk_free=0.0, periods_per_year=252):
     """

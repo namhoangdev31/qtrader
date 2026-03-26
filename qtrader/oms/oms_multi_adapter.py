@@ -5,14 +5,12 @@ while maintaining the existing OMSAdapter interface.
 """
 
 import logging
-from typing import Dict, Any, Optional, Tuple
 from decimal import Decimal
-from datetime import datetime
 
-from qtrader.core.types import AllocationWeights, RiskMetrics, OrderEvent
+from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
-from qtrader.execution.smart_router import SmartOrderRouter
 from qtrader.execution.multi_exchange_adapter import MultiExchangeAdapter
+from qtrader.execution.smart_router import SmartOrderRouter
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +25,10 @@ class MultiExchangeOMSAdapter:
 
     def __init__(
         self,
-        exchange_adapters: Dict[str, ExchangeAdapter],
+        exchange_adapters: dict[str, ExchangeAdapter],
         routing_mode: str = "smart",
-        max_order_size: Optional[Decimal] = None,
-        split_size: Optional[Decimal] = None,
+        max_order_size: Decimal | None = None,
+        split_size: Decimal | None = None,
         name: str = "MultiExchangeOMSAdapter",
     ):
         """

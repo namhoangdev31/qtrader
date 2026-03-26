@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 import polars as pl
@@ -43,8 +42,8 @@ class HMMRegimeSmoother:
     stay_prob: float = 0.90
     use_hmmlearn: bool = True
     _transition_matrix: np.ndarray = field(init=False, repr=False)
-    _current_state: Optional[int] = field(init=False, default=None)
-    _hmm: Optional["GaussianHMM"] = field(init=False, default=None)  # type: ignore[name-defined]
+    _current_state: int | None = field(init=False, default=None)
+    _hmm: GaussianHMM | None = field(init=False, default=None)  # type: ignore[name-defined]
     _is_fitted: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:

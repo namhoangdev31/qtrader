@@ -3,9 +3,9 @@
 import asyncio
 import logging
 import time
-from typing import Dict, Any, Optional, Tuple
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import Any
 
 from qtrader.core.types import OrderEvent
 from qtrader.execution.execution_engine import ExchangeAdapter
@@ -61,7 +61,7 @@ class BinanceAdapter(ExchangeAdapter):
             await asyncio.sleep(self._min_request_interval - elapsed)
         self._last_request_time = time.time()
 
-    async def _request(self, method: str, endpoint: str, params: Optional[Dict[str, Any]] = None, signed: bool = False):
+    async def _request(self, method: str, endpoint: str, params: dict[str, Any] | None = None, signed: bool = False):
         """
         Make a request to Binance API.
 
@@ -87,8 +87,8 @@ class BinanceAdapter(ExchangeAdapter):
             
             # Create signature
             query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
-            import hmac
             import hashlib
+            import hmac
             signature = hmac.new(
                 self.api_secret.encode('utf-8'),
                 query_string.encode('utf-8'),
@@ -111,7 +111,7 @@ class BinanceAdapter(ExchangeAdapter):
             self.logger.error(f"Error making request to Binance: {e}")
             raise
 
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """
         Send an order to Binance.
 
@@ -147,7 +147,7 @@ class BinanceAdapter(ExchangeAdapter):
             self.logger.error(f"Error sending order to Binance: {e}")
             return False, str(e)
 
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel an order on Binance.
 
@@ -186,7 +186,7 @@ class BinanceAdapter(ExchangeAdapter):
         return Decimal('0')
 
     # Additional Binance-specific methods that can be used by the smart router
-    async def get_positions(self) -> Dict[str, Decimal]:
+    async def get_positions(self) -> dict[str, Decimal]:
         """
         Get current positions from Binance.
 
@@ -198,7 +198,7 @@ class BinanceAdapter(ExchangeAdapter):
         # In a real implementation, we would call the account endpoint
         return {}
 
-    async def get_orderbook(self, symbol: str) -> Dict[str, Any]:
+    async def get_orderbook(self, symbol: str) -> dict[str, Any]:
         """
         Get orderbook for a symbol from Binance.
 
@@ -216,7 +216,7 @@ class BinanceAdapter(ExchangeAdapter):
             "asks": [["100.5", "1.2"], ["101.0", "0.8"]]
         }
 
-    async def get_fees(self, symbol: str) -> Dict[str, Decimal]:
+    async def get_fees(self, symbol: str) -> dict[str, Decimal]:
         """
         Get trading fees for a symbol from Binance.
 

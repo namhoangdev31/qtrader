@@ -1,8 +1,8 @@
 """Multi-exchange adapter that routes orders to the best exchange using a smart router."""
 
 import logging
-from typing import Dict, Any, Optional, Tuple
 from decimal import Decimal
+from typing import Any
 
 from qtrader.core.types import OrderEvent
 from qtrader.execution.execution_engine import ExchangeAdapter
@@ -20,7 +20,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
 
     def __init__(
         self,
-        exchanges: Dict[str, ExchangeAdapter],
+        exchanges: dict[str, ExchangeAdapter],
         router: SmartOrderRouter,
         name: str = "MultiExchangeAdapter",
     ):
@@ -38,7 +38,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
         self.logger = logger.getChild("MultiExchangeAdapter")
         self.logger.info(f"MultiExchangeAdapter initialized with {len(exchanges)} exchanges")
 
-    async def _gather_market_data(self, symbol: str) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Decimal]], Dict[str, float]]:
+    async def _gather_market_data(self, symbol: str) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Decimal]], dict[str, float]]:
         """Gather market data, fees, and latency from all exchanges for a symbol."""
         market_data = {}
         fees_data = {}
@@ -60,7 +60,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
             latency_data[exchange_name] = 0.0
         return market_data, fees_data, latency_data
 
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """
         Send an order to the best exchange as determined by the router.
 
@@ -101,11 +101,11 @@ class MultiExchangeAdapter(ExchangeAdapter):
             else:
                 self.logger.warning(f"Failed to send order to {exch_name}: {result}")
         # All exchanges failed
-        error_msg = f"All exchanges failed to send order"
+        error_msg = "All exchanges failed to send order"
         self.logger.error(error_msg)
         return False, error_msg
 
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
         Cancel an order. We need to know which exchange the order was sent to.
         In a real system, we would store the exchange associated with each order ID.
@@ -152,9 +152,9 @@ class MultiExchangeAdapter(ExchangeAdapter):
         return total_position
 
     # Additional methods for the smart router to get market data, etc.
-    async def get_positions(self) -> Dict[str, Decimal]:
+    async def get_positions(self) -> dict[str, Decimal]:
         """Get current positions from all exchanges."""
-        all_positions: Dict[str, Decimal] = {}
+        all_positions: dict[str, Decimal] = {}
         for exchange_name, exchange_adapter in self.exchanges.items():
             try:
                 positions = await exchange_adapter.get_positions()
@@ -166,7 +166,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
                 )
         return all_positions
 
-    async def get_orderbook(self, symbol: str) -> Dict[str, Any]:
+    async def get_orderbook(self, symbol: str) -> dict[str, Any]:
         """
         Get orderbook for a symbol. We'll return the orderbook from the first exchange
         that has data. In a real system, we might merge orderbooks.
@@ -182,7 +182,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
                 )
         return {}
 
-    async def get_fees(self, symbol: str) -> Dict[str, Decimal]:
+    async def get_fees(self, symbol: str) -> dict[str, Decimal]:
         """
         Get trading fees for a symbol. We'll return the fees from the first exchange.
         In a real system, we might need to specify which exchange we are trading on.

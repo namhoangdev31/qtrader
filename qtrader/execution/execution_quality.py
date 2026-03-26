@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-__all__ = ["ExecutionReport", "ExecutionQualityAnalyzer"]
+__all__ = ["ExecutionQualityAnalyzer", "ExecutionReport"]
 
 
 @dataclass(slots=True)

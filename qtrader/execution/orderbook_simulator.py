@@ -4,7 +4,8 @@ Orderbook simulator for modeling execution slippage and market impact.
 from __future__ import annotations
 
 import random
-from typing import Dict, List, Tuple, Optional
+
+from loguru import logger
 
 
 class OrderbookSimulator:
@@ -26,7 +27,7 @@ class OrderbookSimulator:
         latency_ms: float = 0.0,
         market_impact_k: float = 0.1,
         max_slippage_pct: float = 0.01,
-        random_seed: Optional[int] = None
+        random_seed: int | None = None
     ):
         """
         Initialize the orderbook simulator.
@@ -46,9 +47,9 @@ class OrderbookSimulator:
     
     def simulate_order(
         self, 
-        order: Dict, 
-        orderbook: Dict[str, List[Tuple[float, float]]]
-    ) -> Dict:
+        order: dict, 
+        orderbook: dict[str, list[tuple[float, float]]]
+    ) -> dict:
         """
         Simulate order execution against an orderbook snapshot.
         
@@ -122,9 +123,8 @@ class OrderbookSimulator:
             if side == 'buy':
                 if price > effective_limit:
                     break  # price too high, stop walking
-            else:  # sell
-                if price < effective_limit:
-                    break  # price too low, stop walking
+            elif price < effective_limit:
+                break  # price too low, stop walking
             
             # Calculate how much we can fill at this price level
             remaining = size - filled_size
@@ -160,7 +160,7 @@ class OrderbookSimulator:
         fill_ratio: float, 
         side: str, 
         order_size: float
-    ) -> Dict:
+    ) -> dict:
         """Helper to create a fill event dictionary."""
         return {
             'filled_size': filled_size,
@@ -203,15 +203,15 @@ if __name__ == "__main__":
     buy_fill = sim.simulate_order(market_buy_order, orderbook)
     sell_fill = sim.simulate_order(limit_sell_order, orderbook)
     
-    print("Market Buy Order Fill:")
-    print(f"  Filled: {buy_fill['filled_size']}/{buy_fill['order_size']} ({buy_fill['fill_ratio']:.1%})")
-    print(f"  Avg Price: {buy_fill['avg_price']:.2f}")
-    print(f"  Slippage: {buy_fill['slippage']:.4f} ({(buy_fill['slippage']/((orderbook['bids'][0][0]+orderbook['asks'][0][0])/2))*100:.2f}% of mid)")
+    logger.info("Market Buy Order Fill:")
+    logger.info(f"  Filled: {buy_fill['filled_size']}/{buy_fill['order_size']} ({buy_fill['fill_ratio']:.1%})")
+    logger.info(f"  Avg Price: {buy_fill['avg_price']:.2f}")
+    logger.info(f"  Slippage: {buy_fill['slippage']:.4f} ({(buy_fill['slippage']/((orderbook['bids'][0][0]+orderbook['asks'][0][0])/2))*100:.2f}% of mid)")
     
-    print("\nLimit Sell Order Fill:")
-    print(f"  Filled: {sell_fill['filled_size']}/{sell_fill['order_size']} ({sell_fill['fill_ratio']:.1%})")
-    print(f"  Avg Price: {sell_fill['avg_price']:.2f}")
-    print(f"  Slippage: {sell_fill['slippage']:.4f} ({(sell_fill['slippage']/((orderbook['bids'][0][0]+orderbook['asks'][0][0])/2))*100:.2f}% of mid)")
+    logger.info("\nLimit Sell Order Fill:")
+    logger.info(f"  Filled: {sell_fill['filled_size']}/{sell_fill['order_size']} ({sell_fill['fill_ratio']:.1%})")
+    logger.info(f"  Avg Price: {sell_fill['avg_price']:.2f}")
+    logger.info(f"  Slippage: {sell_fill['slippage']:.4f} ({(sell_fill['slippage']/((orderbook['bids'][0][0]+orderbook['asks'][0][0])/2))*100:.2f}% of mid)")
     
     # Simple benchmark: time 1000 orders
     import time
@@ -221,6 +221,6 @@ if __name__ == "__main__":
         sim.simulate_order(market_buy_order, orderbook)
     end = time.perf_counter()
     avg_time_ms = (end - start) * 1000 / n_orders
-    print(f"\nBenchmark: {n_orders} orders in {(end-start)*1000:.2f}ms")
-    print(f"Average time per order: {avg_time_ms:.3f}ms")
-    print(f"Meets <1ms requirement: {avg_time_ms < 1.0}")
+    logger.info(f"\nBenchmark: {n_orders} orders in {(end-start)*1000:.2f}ms")
+    logger.info(f"Average time per order: {avg_time_ms:.3f}ms")
+    logger.info(f"Meets <1ms requirement: {avg_time_ms < 1.0}")

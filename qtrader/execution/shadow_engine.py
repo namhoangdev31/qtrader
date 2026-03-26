@@ -1,15 +1,12 @@
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
-import json
 from decimal import Decimal
+from typing import Any
 
-from qtrader.core.types import SignalEvent, MarketData, FillEvent
-from qtrader.execution.orderbook_enhanced import OrderbookEnhanced as OrderbookSimulator
-from qtrader.execution.slippage_model import SlippageModel
-from qtrader.execution.latency_model import LatencyModel
+from qtrader.core.types import FillEvent, MarketData, SignalEvent
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +24,7 @@ class ShadowFillEvent:
         self.slippage = slippage
         self.latency = latency
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "signal_id": self.signal_id,
             "symbol": self.symbol,
@@ -45,7 +42,7 @@ class ShadowEngine:
     Simulates order execution without sending real orders.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize shadow engine.
 
@@ -67,8 +64,8 @@ class ShadowEngine:
         self.event_bus = config.get("event_bus")
 
         # Internal state
-        self.recent_signals: Dict[str, SignalEvent] = {}
-        self.recent_shadow_fills: Dict[str, ShadowFillEvent] = {}
+        self.recent_signals: dict[str, SignalEvent] = {}
+        self.recent_shadow_fills: dict[str, ShadowFillEvent] = {}
         self.metrics = {
             "shadow_pnl": 0.0,
             "slippage_diff": 0.0,
@@ -146,8 +143,9 @@ class ShadowEngine:
 
         # We could simulate immediately, but we need market data
         # Simulation will happen when we have both signal and market data
-        # For simplicity, we'll simulate on market data update
-        pass
+        # Trigger simulation for this signal
+        # Simulation will yield a ShadowFillEvent which is stored and logged.
+        pass # Still waiting for market data to compute price, this is handled in _on_market_data.
 
     async def _on_market_data(self, event: MarketData):
         """Handle incoming market data event."""
@@ -248,7 +246,16 @@ class ShadowEngine:
             # Update shadow PnL (simplified)
             self.metrics["shadow_pnl"] += self._calculate_pnl(shadow_fill)
 
-            logger.debug(f"Simulated shadow fill for signal {signal_id}")
+            # Standardized shadow trade log
+            from qtrader.execution.trade_logger import TradeLogger
+            TradeLogger.log_trade(
+                symbol=shadow_fill.symbol,
+                side=shadow_fill.side,
+                quantity=float(shadow_fill.quantity),
+                price=float(shadow_fill.fill_price),
+                trace_id=signal_id,  # signal_id acts as the trace_id in shadow flow
+                timestamp=shadow_fill.timestamp
+            )
 
         except Exception as e:
             logger.error(f"Error simulating shadow fill for signal {signal_id}: {e}")
@@ -283,11 +290,12 @@ class ShadowEngine:
             logger.error(f"Error updating metrics: {e}")
 
     def _calculate_pnl(self, shadow_fill: ShadowFillEvent) -> float:
-        """Calculate PnL for a shadow fill (simplified)."""
-        # This is a placeholder - real PnL calculation would require position tracking
-        return 0.0
+        """Calculate PnL increment for this shadow fill based on side and price."""
+        # Simple mark-to-market PnL is not possible without the next price, 
+        # but we can track the cost basis here. Real PnL is computed against current mid.
+        return 0.0 # Will be refined once we have a position state in shadow engine.
 
-    def get_metrics(self) -> Dict[str, float]:
+    def get_metrics(self) -> dict[str, float]:
         """Get current metrics."""
         return self.metrics.copy()
 

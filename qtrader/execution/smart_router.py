@@ -1,9 +1,9 @@
 """Smart order router for multi-exchange execution."""
 
 import logging
-from typing import Dict, List, Any, Optional
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import Any
 
 from qtrader.core.types import OrderEvent
 
@@ -22,10 +22,10 @@ class SmartOrderRouter:
 
     def __init__(
         self,
-        exchanges: Dict[str, Any],  # exchange_name -> exchange adapter instance
+        exchanges: dict[str, Any],  # exchange_name -> exchange adapter instance
         routing_mode: str = "smart",  # "best_price", "smart", "manual"
-        max_order_size: Optional[Decimal] = None,  # maximum order size before splitting
-        split_size: Optional[Decimal] = None,  # size of each split if max_order_size is set
+        max_order_size: Decimal | None = None,  # maximum order size before splitting
+        split_size: Decimal | None = None,  # size of each split if max_order_size is set
     ):
         """
         Initialize smart order router.
@@ -46,10 +46,10 @@ class SmartOrderRouter:
     async def route_order(
         self,
         order: OrderEvent,
-        market_data: Dict[str, Dict[str, Any]],  # exchange_name -> orderbook (with bids and asks)
-        fees_data: Optional[Dict[str, Dict[str, Decimal]]] = None,  # exchange_name -> {'maker': Decimal, 'taker': Decimal}
-        latency_data: Optional[Dict[str, float]] = None,  # exchange_name -> latency in seconds
-    ) -> List[OrderEvent]:
+        market_data: dict[str, dict[str, Any]],  # exchange_name -> orderbook (with bids and asks)
+        fees_data: dict[str, dict[str, Decimal]] | None = None,  # exchange_name -> {'maker': Decimal, 'taker': Decimal}
+        latency_data: dict[str, float] | None = None,  # exchange_name -> latency in seconds
+    ) -> list[OrderEvent]:
         """
         Route an order to the best exchange(es).
 
@@ -75,10 +75,10 @@ class SmartOrderRouter:
     async def _route_single_order(
         self,
         order: OrderEvent,
-        market_data: Dict[str, Dict[str, Any]],
-        fees_data: Optional[Dict[str, Dict[str, Decimal]]],
-        latency_data: Optional[Dict[str, float]],
-    ) -> List[OrderEvent]:
+        market_data: dict[str, dict[str, Any]],
+        fees_data: dict[str, dict[str, Decimal]] | None,
+        latency_data: dict[str, float] | None,
+    ) -> list[OrderEvent]:
         """Route a single order (no splitting) to the best exchange."""
         if self.routing_mode == "manual":
             # In manual mode, we rely on the order's metadata to specify the exchange
@@ -87,7 +87,7 @@ class SmartOrderRouter:
                 self.logger.info(f"Manual routing to {exchange_name}")
                 return [self._create_routed_order(order, exchange_name)]
             else:
-                self.logger.warning(f"No valid exchange specified for manual routing, defaulting to first exchange")
+                self.logger.warning("No valid exchange specified for manual routing, defaulting to first exchange")
                 # Default to first exchange
                 exchange_name = list(self.exchanges.keys())[0]
                 return [self._create_routed_order(order, exchange_name)]
@@ -107,10 +107,10 @@ class SmartOrderRouter:
     async def _split_and_route_order(
         self,
         order: OrderEvent,
-        market_data: Dict[str, Dict[str, Any]],
-        fees_data: Optional[Dict[str, Dict[str, Decimal]]],
-        latency_data: Optional[Dict[str, float]],
-    ) -> List[OrderEvent]:
+        market_data: dict[str, dict[str, Any]],
+        fees_data: dict[str, dict[str, Decimal]] | None,
+        latency_data: dict[str, float] | None,
+    ) -> list[OrderEvent]:
         """Split a large order and route each slice to the best exchange."""
         self.logger.info(f"Splitting order {order.quantity} into slices of {self.split_size}")
         
@@ -170,7 +170,7 @@ class SmartOrderRouter:
     def _select_best_price_exchange(
         self,
         order: OrderEvent,
-        market_data: Dict[str, Dict[str, Any]]
+        market_data: dict[str, dict[str, Any]]
     ) -> str:
         """Select the exchange with the best price for the order."""
         best_exchange = None
@@ -191,14 +191,13 @@ class SmartOrderRouter:
                     if best_price is None or ask_price < best_price:
                         best_price = ask_price
                         best_exchange = exchange_name
-            else:  # 'SELL'
-                # For selling, we want the highest bid (best bid)
-                if bids:
-                    # bids are sorted by price descending (best bid first)
-                    bid_price = Decimal(bids[0][0])  # [price, quantity]
-                    if best_price is None or bid_price > best_price:
-                        best_price = bid_price
-                        best_exchange = exchange_name
+            # For selling, we want the highest bid (best bid)
+            elif bids:
+                # bids are sorted by price descending (best bid first)
+                bid_price = Decimal(bids[0][0])  # [price, quantity]
+                if best_price is None or bid_price > best_price:
+                    best_price = bid_price
+                    best_exchange = exchange_name
 
         # If we couldn't find a valid exchange, default to the first one
         if best_exchange is None:
@@ -210,9 +209,9 @@ class SmartOrderRouter:
     def _select_smart_exchange(
         self,
         order: OrderEvent,
-        market_data: Dict[str, Dict[str, Any]],
-        fees_data: Optional[Dict[str, Dict[str, Decimal]]],
-        latency_data: Optional[Dict[str, float]],
+        market_data: dict[str, dict[str, Any]],
+        fees_data: dict[str, dict[str, Decimal]] | None,
+        latency_data: dict[str, float] | None,
     ) -> str:
         """
         Select the best exchange using a smart score that considers:

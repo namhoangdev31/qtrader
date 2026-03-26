@@ -5,13 +5,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict
 
 import polars as pl
 
-from qtrader.core.event import SignalEvent as CoreSignalEvent  # Keep for compatibility? Actually we'll use our own
+from qtrader.core.types import SignalEvent, ValidatedFeatures
 from qtrader.strategy.base import BaseStrategy
-from qtrader.core.types import SignalEvent, ValidatedFeatures, OrderEvent
 
 _LOG = logging.getLogger("qtrader.strategy.probabilistic")
 
@@ -28,7 +26,7 @@ class ProbabilisticStrategy(BaseStrategy):
     def __init__(
         self,
         symbol: str,
-        alpha_weights: Dict[str, float] | None = None,
+        alpha_weights: dict[str, float] | None = None,
         model_confidence: float = 0.7,
         **kwargs
     ) -> None:

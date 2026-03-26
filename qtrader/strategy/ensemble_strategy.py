@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
-
-import polars as pl
 from decimal import Decimal
 
-from qtrader.core.event import SignalEvent as CoreSignalEvent  # For compatibility with existing code
+import polars as pl
+
 from qtrader.core.types import SignalEvent, ValidatedFeatures
 
 # Try to import MetaLearningEngine, create a fallback if not available
@@ -35,7 +33,7 @@ class EnsembleStrategy:
 
     def __init__(
         self,
-        strategies: List,
+        strategies: list,
         performance_window: int = 20,
         min_weight: float = 0.05,
         max_weight: float = 0.5,
@@ -79,16 +77,16 @@ class EnsembleStrategy:
             self.meta_learning_engine = None
 
         # Legacy performance tracking (kept for backward compatibility)
-        self._strategy_performance: Dict[int, List[float]] = {
+        self._strategy_performance: dict[int, list[float]] = {
             i: [] for i in range(len(strategies))
         }
-        self._strategy_weights: Dict[int, float] = {
+        self._strategy_weights: dict[int, float] = {
             i: 1.0 / len(strategies) for i in range(len(strategies))
         }
         self._signal_count = 0
         
         # Current regime information (to be updated externally)
-        self._current_regime: Optional[str] = None
+        self._current_regime: str | None = None
         self._regime_probability: float = 0.0
 
     def update_regime_info(self, regime: str, regime_prob: float) -> None:
@@ -282,7 +280,7 @@ class EnsembleStrategy:
         
         _LOG.debug(f"Rebalanced ensemble weights: {self._strategy_weights}")
 
-    def _combine_signals(self, strategy_signals: dict, weights: Dict[int, float]) -> dict:
+    def _combine_signals(self, strategy_signals: dict, weights: dict[int, float]) -> dict:
         """Combine signals from all strategies using current weights."""
         # Initialize combined signal components
         buy_prob = 0.0

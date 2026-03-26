@@ -3,8 +3,6 @@ import asyncio
 import logging
 import math
 import random
-from decimal import Decimal
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +47,7 @@ class LatencyModel:
         await asyncio.sleep(total_latency_ms / 1000.0)
         return total_latency_ms
 
-    def get_latency_statistics(self) -> Dict[str, float]:
+    def get_latency_statistics(self) -> dict[str, float]:
         """Get statistical properties of the latency model."""
         return {
             'mean_network_latency_ms': self.base_network_latency_ms,

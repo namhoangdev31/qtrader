@@ -1,10 +1,8 @@
 """Online meta-learning engine for dynamic strategy and feature weighting."""
 import math
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
-import numpy as np
-
-from qtrader.core.types import EventBusProtocol
+from loguru import logger
 
 
 class OnlineMetaLearner:
@@ -44,7 +42,7 @@ class OnlineMetaLearner:
             ic_threshold: Minimum information coefficient for a feature to be considered.
             temperature: Temperature for softmax scaling of strategy scores.
         """
-        self.regime_states: Dict[Any, Dict[str, Any]] = {}
+        self.regime_states: dict[Any, dict[str, Any]] = {}
         self.alpha = 2.0 / (n_memory + 1)  # Exponential decay factor
         self.strategy_min_weight = strategy_min_weight
         self.strategy_max_weight = strategy_max_weight
@@ -53,7 +51,7 @@ class OnlineMetaLearner:
         self.ic_threshold = ic_threshold
         self.temperature = temperature
 
-    def _get_initial_state(self) -> Dict[str, Any]:
+    def _get_initial_state(self) -> dict[str, Any]:
         """Return the initial state for a new regime."""
         return {
             'strategy_weights': {},
@@ -61,7 +59,7 @@ class OnlineMetaLearner:
             'risk_multiplier': 1.0
         }
 
-    def _compute_suggested_strategy_weights(self, feedback: Dict[str, Any]) -> Dict[str, float]:
+    def _compute_suggested_strategy_weights(self, feedback: dict[str, Any]) -> dict[str, float]:
         """
         Compute suggested strategy weights from feedback using softmax of information ratios.
 
@@ -86,7 +84,7 @@ class OnlineMetaLearner:
             return {s: 1.0 / len(strategy_scores) for s in strategy_scores}
         return {s: exp_score / total for s, exp_score in exp_scores.items()}
 
-    def _compute_suggested_feature_weights(self, feedback: Dict[str, Any]) -> Dict[str, float]:
+    def _compute_suggested_feature_weights(self, feedback: dict[str, Any]) -> dict[str, float]:
         """
         Compute suggested feature weights from feedback based on IC scores.
 
@@ -111,7 +109,7 @@ class OnlineMetaLearner:
                 return {f: uniform for f in feature_scores}
             return {}
 
-    def _compute_suggested_risk_multiplier(self, feedback: Dict[str, Any]) -> float:
+    def _compute_suggested_risk_multiplier(self, feedback: dict[str, Any]) -> float:
         """
         Compute suggested risk multiplier from feedback based on drawdown.
 
@@ -129,11 +127,11 @@ class OnlineMetaLearner:
 
     def _update_weights(
         self,
-        current_weights: Dict[str, float],
-        suggested_weights: Dict[str, float],
+        current_weights: dict[str, float],
+        suggested_weights: dict[str, float],
         min_weight: float,
         max_weight: float,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Update weights using exponential moving average, safety jump limits, and renormalization.
 
@@ -173,18 +171,17 @@ class OnlineMetaLearner:
         if total > 0:
             for key in new_weights:
                 new_weights[key] /= total
+        # If total is zero, assign uniform weight across all keys
+        elif all_keys:
+            uniform = 1.0 / len(all_keys)
+            for key in new_weights:
+                new_weights[key] = uniform
         else:
-            # If total is zero, assign uniform weight across all keys
-            if all_keys:
-                uniform = 1.0 / len(all_keys)
-                for key in new_weights:
-                    new_weights[key] = uniform
-            else:
-                # No keys, return empty dict
-                pass
+            # No keys, return empty dict
+            pass
         return new_weights
 
-    def _update_strategy_weights(self, state: Dict[str, Any], feedback: Dict[str, Any]) -> None:
+    def _update_strategy_weights(self, state: dict[str, Any], feedback: dict[str, Any]) -> None:
         """Update strategy weights in the given state based on feedback."""
         suggested = self._compute_suggested_strategy_weights(feedback)
         state['strategy_weights'] = self._update_weights(
@@ -194,7 +191,7 @@ class OnlineMetaLearner:
             self.strategy_max_weight
         )
 
-    def _update_feature_weights(self, state: Dict[str, Any], feedback: Dict[str, Any]) -> None:
+    def _update_feature_weights(self, state: dict[str, Any], feedback: dict[str, Any]) -> None:
         """Update feature weights in the given state based on feedback."""
         suggested = self._compute_suggested_feature_weights(feedback)
         state['feature_weights'] = self._update_weights(
@@ -204,7 +201,7 @@ class OnlineMetaLearner:
             self.feature_max_weight
         )
 
-    def _update_risk_multiplier(self, state: Dict[str, Any], feedback: Dict[str, Any]) -> None:
+    def _update_risk_multiplier(self, state: dict[str, Any], feedback: dict[str, Any]) -> None:
         """Update risk multiplier in the given state based on feedback."""
         current = state['risk_multiplier']
         suggested = self._compute_suggested_risk_multiplier(feedback)
@@ -225,7 +222,7 @@ class OnlineMetaLearner:
         new_risk = max(0.5, min(2.0, new_risk))
         state['risk_multiplier'] = new_risk
 
-    def update(self, feedback: Dict[str, Any], regime: Any) -> Dict[str, Any]:
+    def update(self, feedback: dict[str, Any], regime: Any) -> dict[str, Any]:
         """
         Update the meta-learner state for a given regime and return the current weights.
 
@@ -257,7 +254,7 @@ class OnlineMetaLearner:
         except Exception as e:
             # Log the error and return the current state for the regime to avoid crashing
             # In a real system, we would use a proper logger; here we use print for simplicity.
-            print(f"Error in OnlineMetaLearner.update: {e}")
+            logger.info(f"Error in OnlineMetaLearner.update: {e}")
             if regime in self.regime_states:
                 state = self.regime_states[regime]
                 return {

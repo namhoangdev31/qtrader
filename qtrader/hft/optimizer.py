@@ -1,14 +1,14 @@
 """High-Frequency Trading Optimizer for sub-second latency."""
 
-import time
 import functools
 import json
-from typing import Any, Optional, TypeVar
-from collections.abc import Callable, Awaitable
-from collections import deque
 import logging
+import time
+from collections import deque
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from typing import Any, TypeVar
 
 try:
     import uvloop
@@ -151,7 +151,7 @@ class HFTOptimizer:
         self.latency_target_ms = latency_target_ms
         self.latency_profiler = LatencyProfiler()
         self._uvloop_set = False
-        self._thread_pool: Optional[ThreadPoolExecutor] = None
+        self._thread_pool: ThreadPoolExecutor | None = None
         self._rolling_windows: dict[str, deque] = {}
         self._window_size = 1000  # Max ticks to keep in memory
 

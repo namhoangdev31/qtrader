@@ -1,16 +1,17 @@
 """Configuration loader for execution system."""
 
 import os
-import yaml
-from typing import Dict, Any, Optional
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 
 class ExecutionConfig:
     """Configuration for execution system."""
 
-    def __init__(self, config_data: Dict[str, Any]):
+    def __init__(self, config_data: dict[str, Any]):
         self._data = config_data
         self.exchanges = config_data.get("exchanges", {})
         self.routing = config_data.get("routing", {})
@@ -24,7 +25,7 @@ class ExecutionConfig:
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {yaml_path}")
         
-        with open(path, "r") as f:
+        with open(path) as f:
             raw = f.read()
         
         # Replace environment variables ${VAR}
@@ -41,7 +42,7 @@ class ExecutionConfig:
             return os.getenv(var_name, match.group(0))
         return re.sub(r'\$\{([^}]+)\}', replace, text)
 
-    def get_exchange_config(self, exchange_name: str) -> Optional[Dict[str, Any]]:
+    def get_exchange_config(self, exchange_name: str) -> dict[str, Any] | None:
         """Get configuration for a specific exchange."""
         return self.exchanges.get(exchange_name)
 
@@ -58,12 +59,12 @@ class ExecutionConfig:
         """Get max order size as Decimal."""
         return Decimal(str(self.routing.get("max_order_size", 10000.0)))
 
-    def get_split_size(self) -> Optional[Decimal]:
+    def get_split_size(self) -> Decimal | None:
         """Get split size as Decimal, if configured."""
         size = self.routing.get("split_size")
         return Decimal(str(size)) if size else None
 
-    def get_retry_config(self) -> Dict[str, Any]:
+    def get_retry_config(self) -> dict[str, Any]:
         """Get retry configuration."""
         return {
             "max_attempts": self.retry.get("max_attempts", 3),

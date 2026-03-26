@@ -25,7 +25,6 @@ from typing import Any
 
 from qtrader.execution.paper_engine import TradeRecord
 
-
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
@@ -377,11 +376,9 @@ class EVCalculator:
         max_dd = 0.0
         for p in net_profits:
             equity += p
-            if equity > peak:
-                peak = equity
+            peak = max(peak, equity)
             dd = (peak - equity) / peak if peak > 0 else 0.0
-            if dd > max_dd:
-                max_dd = dd
+            max_dd = max(max_dd, dd)
         return max_dd
 
     def _empty_stats(self) -> dict[str, Any]:
