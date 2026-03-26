@@ -45,6 +45,8 @@ class EventType(str, Enum):
     RISK_REJECTED = "RISK_REJECTED"
     SYSTEM_BOOT_COMPLETED = "SYSTEM_BOOT_COMPLETED"
     PIPELINE_ERROR = "PIPELINE_ERROR"
+    DECISION_TRACE = "DECISION_TRACE"
+    DECISION_ERROR = "DECISION_ERROR"
 
 
 class MarketPayload(BaseModel):
@@ -226,6 +228,23 @@ class RiskRejectedPayload(BaseModel):
 
 
 class PipelineErrorPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    module_name: str
+    error_type: str
+    details: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DecisionTracePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    model_id: str
+    features: dict[str, float]
+    signal: float
+    decision: str
+    config_version: int
+
+
+class DecisionErrorPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     module_name: str
     error_type: str
@@ -444,3 +463,15 @@ class PipelineErrorEvent(BaseEvent):
     """Event representing a critical pipeline failure."""
     event_type: EventType = EventType.PIPELINE_ERROR
     payload: PipelineErrorPayload
+
+
+class DecisionTraceEvent(BaseEvent):
+    """Event representing a strategy decision audit trail."""
+    event_type: EventType = EventType.DECISION_TRACE
+    payload: DecisionTracePayload
+
+
+class DecisionErrorEvent(BaseEvent):
+    """Event representing a strategy decision failure."""
+    event_type: EventType = EventType.DECISION_ERROR
+    payload: DecisionErrorPayload
