@@ -20,6 +20,7 @@ from qtrader.core.events import (
     NAVEvent,
     LedgerEntryEvent,
     OrderEvent,
+    PipelineErrorEvent,
     RecoveryCompletedEvent,
     RiskApprovedEvent,
     RiskEvent,
@@ -60,6 +61,7 @@ class EventFactory:
         EventType.CONFIG_CHANGED: ConfigChangeEvent,
         EventType.RISK_APPROVED: RiskApprovedEvent,
         EventType.RISK_REJECTED: RiskRejectedEvent,
+        EventType.PIPELINE_ERROR: PipelineErrorEvent,
     }
 
     @classmethod
