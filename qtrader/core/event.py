@@ -19,6 +19,10 @@ class EventType(Enum):
     RISK = auto()
     SYSTEM = auto()
     FEEDBACK_UPDATE = auto()
+    RETRY_ORDER = auto()
+    DRIFT = auto()
+    MODEL_RETRAIN = auto()
+    ERROR = auto()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -31,7 +35,7 @@ class Event:
 @dataclass(frozen=True, kw_only=True)
 class MarketDataEvent(Event):
     symbol: str
-    data: pl.DataFrame  # Expected to have OHLCV columns
+    data: pl.DataFrame | dict[str, Any]  # Can be OHLCV DataFrame or Tick dict
     metadata: dict[str, Any] | None = None
     type: EventType = EventType.MARKET_DATA
 
@@ -100,3 +104,40 @@ class SystemEvent(Event):
     reason: str = ""
     metadata: dict[str, Any] | None = None
     type: EventType = EventType.SYSTEM
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetryOrderEvent(Event):
+    order: OrderEvent
+    attempt: int
+    metadata: dict[str, Any] = field(default_factory=dict)
+    type: EventType = EventType.RETRY_ORDER
+
+
+@dataclass(frozen=True, kw_only=True)
+class DriftEvent(Event):
+    symbol: str
+    drift_score: float
+    features: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    type: EventType = EventType.DRIFT
+
+
+@dataclass(frozen=True, kw_only=True)
+class ModelRetrainEvent(Event):
+    symbol: str
+    model_id: str
+    reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    type: EventType = EventType.MODEL_RETRAIN
+
+
+@dataclass(frozen=True, kw_only=True)
+class ErrorEvent(Event):
+    source: str
+    message: str
+    exception_type: str | None = None
+    stack_trace: str | None = None
+    severity: str = "ERROR" # INFO, WARNING, ERROR, CRITICAL
+    metadata: dict[str, Any] = field(default_factory=dict)
+    type: EventType = EventType.ERROR

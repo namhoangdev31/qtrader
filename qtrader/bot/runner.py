@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 import uuid
 from pathlib import Path
@@ -21,6 +20,7 @@ from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.analytics.telemetry import Telemetry
 from qtrader.core.bus import EventBus
 from qtrader.core.event import EventType, FillEvent, OrderEvent, RiskEvent, SystemEvent
+from qtrader.core.logger import log
 from qtrader.data.datalake import DataLake
 from qtrader.execution.brokers.binance import BinanceBrokerAdapter
 from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
@@ -39,7 +39,7 @@ from qtrader.strategy.alpha_combiner import AlphaCombiner
 
 __all__ = ["TradingBot"]
 
-_LOG = logging.getLogger("bot.runner")
+_logger = log.bind(module="bot.runner")
 
 
 def _load_baseline_metrics(path: str | None = None) -> object | None:
@@ -131,26 +131,34 @@ class TradingBot:
         self._last_risk_ts: float = 0.0
         self._last_rebalance_ts: float = 0.0
 
-        self.bus.subscribe(EventType.FILL, self._on_fill)
+        self.bus.subscribe(EventType.SIGNAL, self._on_signal)
+        self.bus.subscribe(EventType.MARKET_DATA, self._on_market_tick)
         self.bus.subscribe(EventType.ORDER, self._on_order)
+        self.bus.subscribe(EventType.FILL, self._on_fill)
         self.bus.subscribe(EventType.RISK, self._on_risk_event)
         self.bus.subscribe(EventType.SYSTEM, self._on_system_event)
-        self.bus.subscribe(EventType.MARKET_DATA, self._on_market_tick)
+        self._last_signals: dict[str, float] = {}
 
     async def _on_fill(self, event: FillEvent) -> None:
         """Handle fill: update OMS and performance."""
         await self.oms.on_fill(event)
         self.performance.record_fill(event, 0.0)
-        _LOG.debug("Recorded fill %s %s @ %s", event.symbol, event.quantity, event.price)
+        _logger.debug(
+            "Recorded fill",
+            symbol=event.symbol,
+            qty=event.quantity,
+            price=event.price,
+            trace_id=event.trace_id
+        )
 
     async def _on_risk_event(self, event: RiskEvent) -> None:
         """Handle risk breach: optionally transition to RISK_HALTED."""
-        _LOG.warning("Risk event: %s %s", event.action, event.reason)
+        _logger.warning("Risk event", action=event.action, reason=event.reason)
 
     async def _on_system_event(self, event: SystemEvent) -> None:
         """Handle system event (e.g. EMERGENCY_HALT from LiveMonitor)."""
         if event.action == "EMERGENCY_HALT":
-            _LOG.critical("System EMERGENCY_HALT: %s", event.reason)
+            _logger.critical("System EMERGENCY_HALT", reason=event.reason)
             await self.emergency_shutdown(event.reason)
 
     def _init_execution_venues(self) -> None:
@@ -162,7 +170,7 @@ class TradingBot:
             elif venue == "binance":
                 self.oms.add_venue("binance", BinanceBrokerAdapter())
             else:
-                _LOG.warning("Unsupported venue '%s' in config; skipping", venue)
+                _logger.warning("Unsupported venue in config; skipping", venue=venue)
 
         if not self.oms.adapters:
             raise ValueError(
@@ -240,7 +248,7 @@ class TradingBot:
                     )
                 await self.bus.publish(fill)
         except Exception as e:
-            _LOG.error("Order handling failed", exc_info=e)
+            _logger.bind(order_id=event.order_id, symbol=event.symbol).error("Order handling failed", exc_info=e)
 
     async def _fetch_latest_bars(self, symbol: str, n_bars: int = 500) -> pl.DataFrame:
         """Load last n_bars for symbol from datalake (run off-thread to avoid blocking)."""
@@ -278,7 +286,7 @@ class TradingBot:
                 return None
             return pl.concat(out, how="horizontal")
         except Exception as e:
-            _LOG.debug("Fetch returns matrix failed: %s", e)
+            _logger.debug("Fetch returns matrix failed", error=str(e))
             return None
 
     def _create_order(
@@ -366,7 +374,7 @@ class TradingBot:
                     if self.regime_detector.is_transitioning(alpha_df, feature_cols):
                         return
                 except Exception as e:
-                    _LOG.debug("Regime check failed: %s", e)
+                    _logger.debug("Regime check failed", error=str(e))
                     regime_id, confidence = 0, 0.5
                     
                 for name in self.alpha_engine.alpha_names:
@@ -396,14 +404,51 @@ class TradingBot:
                 )
                 
                 if ev_ok and wr_ok:
-                    price = float(df["close"][-1]) if "close" in df.columns else 0.0
-                    with self.hft_optimizer.latency_context("signal_to_order"):
-                        order = self._create_order(symbol, composite, regime_id, price)
-                        if order is not None:
-                            await self.bus.publish(order)
+                    # Signal(t) = f(Market(t)) - Publish detached signal
+                    signal_event = SignalEvent(
+                        symbol=symbol,
+                        signal_type="BUY" if composite > 0 else "SELL",
+                        strength=abs(composite),
+                        metadata={
+                            "composite": composite,
+                            "regime_id": regime_id,
+                            "confidence": confidence,
+                            "ev": ev
+                        }
+                    )
+                    await self.bus.publish(signal_event)
         except Exception as e:
-            _LOG.error("Alpha model execution error", exc_info=e)
+            _logger.error("Alpha generation failed", exc_info=e)
         self._last_heartbeat = time.time()
+
+    async def _on_signal(self, event: SignalEvent) -> None:
+        """Handle signal: execute only on delta change or direction flip."""
+        if not self._running or not self.state.can_trade():
+            return
+            
+        composite = event.metadata.get("composite", 0.0)
+        prev_composite = self._last_signals.get(event.symbol, 0.0)
+        
+        # Execution triggered only on delta (significant change) or direction flip
+        side_changed = (composite > 0) != (prev_composite > 0) and (composite != 0 or prev_composite != 0)
+        delta_met = abs(composite - prev_composite) >= self.config.min_signal_delta
+        
+        if not (side_changed or delta_met):
+            return
+            
+        self._last_signals[event.symbol] = composite
+        
+        # Get latest price from OMS for order creation
+        venue = self._primary_venue or next(iter(self.oms.adapters.keys()))
+        market_state = self.oms.get_market_state(venue, event.symbol)
+        price = market_state.last_price if market_state and market_state.last_price > 0 else 0.0
+        
+        regime_id = event.metadata.get("regime_id", 0)
+        
+        with self.hft_optimizer.latency_context("signal_to_order"):
+            order = self._create_order(event.symbol, composite, regime_id, price)
+            if order:
+                await self.bus.publish(order)
 
     async def _run_rebalance(self) -> None:
         """Core rebalancing logic (refactored from rebalance loop)."""
@@ -458,7 +503,7 @@ class TradingBot:
                 )
                 await self.bus.publish(order)
         except Exception as e:
-            _LOG.error("Rebalance execution error", exc_info=e)
+            _logger.error("Rebalance execution error", exc_info=e)
         self._last_heartbeat = time.time()
 
     async def start(self) -> None:
@@ -472,13 +517,13 @@ class TradingBot:
         self._tasks = [
             asyncio.create_task(self.bus.start()),
         ]
-        _LOG.info("TradingBot started; state=%s", self.state.state.value)
+        _logger.info("TradingBot started", state=self.state.state.name)
 
     async def _check_risk(self) -> None:
         """Check all risk limits (refactored from risk loop)."""
         breaches = self.risk_engine.check_all_limits()
         if breaches:
-            _LOG.warning("Risk breach: %s", [b.reason for b in breaches])
+            _logger.warning("Risk breach detected", reasons=[b.reason for b in breaches])
             try:
                 self.state.transition(BotState.RISK_HALTED, breaches[0].reason)
             except ValueError:
@@ -487,7 +532,7 @@ class TradingBot:
 
     async def emergency_shutdown(self, reason: str) -> None:
         """Cancel all orders, flatten positions, persist state, exit."""
-        _LOG.critical("Emergency shutdown: %s", reason)
+        _logger.critical("Emergency shutdown initiated", reason=reason)
         self._running = False
         try:
             self.state.transition(BotState.EMERGENCY, reason)
@@ -499,7 +544,7 @@ class TradingBot:
         try:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         except Exception as e:
-            _LOG.error(f"Error during task cleanup: {e}")
+            _logger.error("Error during task cleanup", exc_info=e)
         for adapter in self.oms.adapters.values():
             close = getattr(adapter, "close", None)
             if callable(close):
@@ -507,7 +552,7 @@ class TradingBot:
                     await close()
                 except Exception:
                     pass
-        _LOG.info("Emergency shutdown complete")
+        _logger.info("Emergency shutdown complete")
 
     @property
     def last_heartbeat(self) -> float:

@@ -4,18 +4,19 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import polars as pl
 
 from qtrader.core.bus import EventBus
-from qtrader.core.event import EventType, SignalEvent
+from qtrader.core.event import EventType, SignalEvent, DriftEvent, ModelRetrainEvent, MarketDataEvent
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.registry import ModelRegistry
 from qtrader.ml.rotation import ModelRotator
 
 __all__ = ["AutonomousLoop"]
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("qtrader.ml.autonomous")
 
 
 DataProvider = Callable[[], Awaitable[pl.DataFrame]]
@@ -23,20 +24,9 @@ DataProvider = Callable[[], Awaitable[pl.DataFrame]]
 
 @dataclass(slots=True)
 class AutonomousLoop:
-    """Production auto-retraining loop that publishes regime changes.
-
-    On each step:
-      1. Predict current regime and posterior probabilities.
-      2. Detect regime changes and publish a ``SignalEvent`` to the EventBus.
-      3. Delegate to ``ModelRotator`` to select a target model.
-      4. Log rotations to MLflow via ``ModelRegistry``.
-
-    Args:
-        detector: Regime detector instance.
-        rotator: Model rotator managing active model IDs.
-        registry: MLflow-backed model registry.
-        bus: EventBus used to publish regime-change signals.
-        interval_s: Interval between iterations in seconds.
+    """Production auto-retraining orchestrator that reacts to regime changes and data drift.
+    
+    Eliminates all polling by subscribing to DRIFT and MARKET_DATA events.
     """
 
     detector: RegimeDetector
@@ -44,15 +34,12 @@ class AutonomousLoop:
     registry: ModelRegistry
     bus: EventBus
     interval_s: int = 3600
+    drift_threshold: float = 0.25  # Threshold for triggering retraining
     _last_regime: int | None = field(init=False, default=None)
+    _last_run_ts: float = field(init=False, default=0.0)
 
     async def run_step(self, recent_data: pl.DataFrame, feature_cols: list[str]) -> None:
-        """Execute one autonomous step.
-
-        Args:
-            recent_data: Recent market data as a Polars DataFrame.
-            feature_cols: Columns to use as regime features.
-        """
+        """Execute one autonomous step for regime detection."""
         try:
             regime_id, confidence = self.detector.current_regime_confidence(
                 recent_data, feature_cols
@@ -66,7 +53,6 @@ class AutonomousLoop:
 
         if regime_changed:
             event = SignalEvent(
-                type=EventType.SIGNAL,
                 symbol="__regime__",
                 signal_type="REGIME_CHANGE",
                 strength=confidence,
@@ -77,46 +63,55 @@ class AutonomousLoop:
                 },
             )
             await self.bus.publish(event)
-            log.info(
-                "Regime change detected: regime=%s confidence=%.3f",
-                regime_id,
-                confidence,
-            )
+            log.info("Regime change: %s (conf: %.3f)", regime_id, confidence)
 
         target_model_id = self.rotator.on_regime_change(regime_id)
         if target_model_id is not None:
-            log.info("Rotated to model_id=%s for regime=%s", target_model_id, regime_id)
-            # Best-effort metadata logging; model artifact logging happens in training.
-            try:
-                self.registry.log_model_iteration(
-                    model_name="regime_rotation",
-                    model={"model_id": target_model_id},
-                    features=feature_cols,
-                    params={"regime_id": regime_id},
-                    metrics={"confidence": confidence},
-                    tags={"rotation_event": "true", "target_model_id": str(target_model_id)},
-                )
-            except Exception as exc:
-                log.error("Failed to log rotation to MLflow", exc_info=exc)
+             self.registry.log_model_iteration(
+                model_name="regime_rotation",
+                model={"model_id": target_model_id},
+                features=feature_cols,
+                params={"regime_id": regime_id},
+                metrics={"confidence": confidence},
+                tags={"rotation_event": "true"},
+            )
 
     async def on_market_data(self, event: MarketDataEvent, get_data_func: DataProvider, feature_cols: list[str]) -> None:
-        """Trigger one autonomous step based on market data event (zero latency)."""
-        current_ts = event.timestamp.timestamp()
+        """Triggered on new market ticks to check regimes (zero latency)."""
+        current_ts = asyncio.get_event_loop().time()
         
-        # Check throttling if interval_s is set
-        if hasattr(self, "_last_run_ts") and current_ts - self._last_run_ts < self.interval_s:
+        if current_ts - self._last_run_ts < self.interval_s:
             return
             
         try:
             recent_data = await get_data_func()
-            if not isinstance(recent_data, pl.DataFrame):
-                raise TypeError("get_data_func must return a Polars DataFrame.")
             await self.run_step(recent_data, feature_cols)
             self._last_run_ts = current_ts
         except Exception as exc:
-            log.error("Autonomous step failed", exc_info=exc)
+            log.error("Autonomous market data handler failed", exc_info=exc)
 
-    # loop/sleep start method removed in favor of event-driven on_market_data
+    async def on_drift(self, event: DriftEvent) -> None:
+        """Event-driven retraining trigger: Drift > threshold -> retrain."""
+        if event.drift_score > self.drift_threshold:
+            log.warning("[ML] Significant drift detected (%.3f > %.3f). Triggering retrain...", 
+                        event.drift_score, self.drift_threshold)
+            
+            # Emit ModelRetrainEvent to downstream trainer consumers
+            retrain_event = ModelRetrainEvent(
+                symbol=event.symbol,
+                model_id=str(self._last_regime or "active"),
+                reason=f"Drift score {event.drift_score:.3f} exceeded threshold",
+                metadata={"drift_event": event.__dict__}
+            )
+            await self.bus.publish(retrain_event)
+            
+            # Log to registry for auditing
+            self.registry.log_model_iteration(
+                model_name="auto_retrain_trigger",
+                model={"status": "pending"},
+                metrics={"drift_score": event.drift_score},
+                tags={"reason": "drift"}
+            )
 
 
 if __name__ == "__main__":
@@ -136,4 +131,3 @@ if __name__ == "__main__":
         interval_s=1,
     )
     assert isinstance(_loop, AutonomousLoop)
-

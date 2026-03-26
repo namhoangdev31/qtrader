@@ -278,6 +278,7 @@ class ExecutionEngine:
         max_retry_attempts: int = 3,
         retry_delay_base: float = 0.1,      # Base delay in seconds for exponential backoff
         enable_failover_queue: bool = True,
+        event_bus: Any | None = None,
         logger: LoggerProtocol = logger
     ) -> None:
         self.exchange_adapter = exchange_adapter
@@ -290,6 +291,7 @@ class ExecutionEngine:
         self.retry_delay_base = retry_delay_base
         self.enable_failover_queue = enable_failover_queue
         self.logger = logger
+        self._event_bus = event_bus
         
         # State
         self.failover_queue: asyncio.Queue | None = asyncio.Queue() if enable_failover_queue else None
@@ -298,10 +300,14 @@ class ExecutionEngine:
         self.position_tracker: dict[str, Decimal] = {}  # symbol -> position size
         self.avg_price_tracker: dict[str, tuple[Decimal, Decimal]] = {}  # symbol -> (total_cost, total_quantity)
         
+        # Subscribe to retries if event bus is available
+        if self._event_bus:
+            from qtrader.core.event import EventType
+            self._event_bus.subscribe(EventType.RETRY_ORDER, self._on_retry_order)
+            
         # Background tasks
         self._is_running = False
         self._failover_processor_task: asyncio.Task | None = None
-        self._event_bus: Any | None = None
     
     async def start(self) -> None:
         """Start the execution engine background tasks."""
@@ -324,63 +330,72 @@ class ExecutionEngine:
                 pass
         self.logger.info("ExecutionEngine stopped")
     
-    async def execute_order(self, order: OrderEvent) -> tuple[bool, FillEvent | None]:
+    from qtrader.core.latency import enforce_latency
+    @enforce_latency(threshold_ms=50.0)
+    async def execute_order(self, order: OrderEvent, attempt: int = 1) -> tuple[bool, FillEvent | None]:
         """
-        Execute an order with validation, retry logic, and failover.
+        Execute an order with validation and event-based retry logic.
         
         Args:
             order: OrderEvent to execute
+            attempt: Current attempt number
             
         Returns:
-            Tuple (success, fill_event or None if failed)
+            Tuple (success, fill_event or None if failed/retrying)
         """
-        # Validate order
-        validation_error = self._validate_order(order)
-        if validation_error:
-            self.logger.warning(f"Order validation failed: {validation_error}")
+        # Validate order on first attempt
+        if attempt == 1:
+            validation_error = self._validate_order(order)
+            if validation_error:
+                self.logger.warning(f"Order validation failed: {validation_error}")
+                return False, None
+        
+        try:
+            success, result = await self.exchange_adapter.send_order(order)
+            if success:
+                assert isinstance(result, str), "send_order must return order_id as string on success"
+                order_id = result
+                self.pending_orders[order_id] = order
+                future = asyncio.Future()
+                self.order_futures[order_id] = future
+                
+                try:
+                    timeout = 5.0 if order.order_type == OrderType.MARKET.value else 30.0
+                    fill_event = await asyncio.wait_for(future, timeout=timeout)
+                    return True, fill_event
+                except asyncio.TimeoutError:
+                    self.logger.warning(f"Order {order_id} timed out waiting for fill")
+                    return False, None
+            
+            # Send failed: use event-driven retry
+            if attempt <= self.max_retry_attempts:
+                self.logger.warning(f"Order send failed (attempt {attempt}), scheduling retry via event: {result}")
+                if self._event_bus:
+                    from qtrader.core.event import RetryOrderEvent
+                    retry_event = RetryOrderEvent(order=order, attempt=attempt + 1)
+                    await self._event_bus.publish(retry_event)
+                return False, None
+            else:
+                self.logger.error(f"Order send failed after {attempt} attempts: {result}")
+                if self.enable_failover_queue and self.failover_queue is not None:
+                    await self.failover_queue.put((order, datetime.utcnow()))
+                return False, None
+                
+        except Exception as e:
+            self.logger.error(f"Unexpected error executing order (attempt {attempt}): {e}", exc_info=True)
+            if attempt <= self.max_retry_attempts:
+                if self._event_bus:
+                    from qtrader.core.event import RetryOrderEvent
+                    await self._event_bus.publish(RetryOrderEvent(order=order, attempt=attempt + 1))
+            elif self.enable_failover_queue and self.failover_queue is not None:
+                await self.failover_queue.put((order, datetime.utcnow()))
             return False, None
-        
-        # Attempt to send order with retries (Immediate retry for zero-latency)
-        for attempt in range(self.max_retry_attempts + 1):
-            try:
-                success, result = await self.exchange_adapter.send_order(order)
-                if success:
-                    assert isinstance(result, str), "send_order must return order_id as string on success"
-                    order_id = result
-                    # Store pending order for tracking
-                    self.pending_orders[order_id] = order
-                    # Create a future to wait for fill
-                    future = asyncio.Future()
-                    self.order_futures[order_id] = future
-                    
-                    # Wait for fill (with timeout based on order type)
-                    try:
-                        # For market orders, we expect immediate fill; for limit, we wait longer
-                        timeout = 5.0 if order.order_type == OrderType.MARKET.value else 30.0
-                        fill_event = await asyncio.wait_for(future, timeout=timeout)
-                        return True, fill_event
-                    except asyncio.TimeoutError:
-                        # If timeout, we treat as failure for now
-                        return False, None
-                # Send failed
-                elif attempt < self.max_retry_attempts:
-                    self.logger.warning(f"Order send failed (attempt {attempt+1}), retrying immediately: {result}")
-                else:
-                    self.logger.error(f"Order send failed after {self.max_retry_attempts+1} attempts: {result}")
-                    # If failover queue is enabled, add to queue
-                    if self.enable_failover_queue and self.failover_queue is not None:
-                        await self.failover_queue.put((order, datetime.utcnow()))
-                    return False, None
-            except Exception as e:
-                self.logger.error(f"Unexpected error executing order (attempt {attempt+1}): {e}", exc_info=True)
-                if attempt < self.max_retry_attempts:
-                    pass # Retry immediately
-                else:
-                    if self.enable_failover_queue and self.failover_queue is not None:
-                        await self.failover_queue.put((order, datetime.utcnow()))
-                    return False, None
-        
-        return False, None
+    
+    async def _on_retry_order(self, event: Any) -> None:
+        """Handler for RetryOrderEvent."""
+        from qtrader.core.event import RetryOrderEvent
+        if isinstance(event, RetryOrderEvent):
+            await self.execute_order(event.order, attempt=event.attempt)
     
     async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """
