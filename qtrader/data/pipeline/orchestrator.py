@@ -1,28 +1,25 @@
 from __future__ import annotations
 
-import time
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from qtrader.core.event import (
     DataErrorEvent,
-    EventType,
-    GapFreeMarketEvent,
-    MarketDataEvent,
-    RecoveryCompletedEvent,
     DataRejectedEvent,
+    EventType,
+    MarketDataEvent,
 )
-from qtrader.core.event_bus import EventBus
-from qtrader.data.pipeline.arbitrator import Arbitrator
-from qtrader.data.pipeline.base import DataNormalizer
-from qtrader.data.pipeline.gap_detector import GapDetector
-from qtrader.data.pipeline.recovery import RecoveryService
 from qtrader.data.market.clock_sync import ClockSync
 from qtrader.data.market.snapshot_recovery import RecoveryEngine
-from qtrader.data.quality_gate import DataQualityError, DataQualityGate
+from qtrader.data.pipeline.arbitrator import Arbitrator
+from qtrader.data.pipeline.gap_detector import GapDetector
+from qtrader.data.pipeline.recovery import RecoveryService
+from qtrader.data.quality_gate import DataQualityGate
 
 if TYPE_CHECKING:
+    from qtrader.core.event_bus import EventBus
+    from qtrader.data.pipeline.base import DataNormalizer
     from qtrader.oms.event_store import EventStore
 
 LATENCY_THRESHOLD_MS = 50.0
@@ -35,7 +32,7 @@ class MarketPipelineOrchestrator:
     Eliminates data races and provides a single control point for error recovery.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         event_bus: EventBus,
         event_store: EventStore,
@@ -59,157 +56,111 @@ class MarketPipelineOrchestrator:
         self.gap_detector = gap_detector or GapDetector(event_store, event_bus)
         
         # Recovery Service requires the RecoveryEngine
-        if recovery_service:
-            self.recovery_service = recovery_service
-        else:
+        if not recovery_service:
             engine = RecoveryEngine(event_store, event_bus)
             self.recovery_service = RecoveryService(engine, event_bus)
+        else:
+            self.recovery_service = recovery_service
             
         self.quality_gate = quality_gate or DataQualityGate(event_bus)
 
     async def start(self) -> None:
-        """Start the pipeline and its internal stages."""
+        """Lifecycle start for the pipeline orchestrator."""
+        logger.info("MarketPipelineOrchestrator: Starting stages...")
         await self.clock_sync.start()
-        logger.info("MarketPipeline: Started all stages.")
-
+        
     async def stop(self) -> None:
-        """Stop the pipeline and its internal stages."""
+        """Lifecycle stop for the pipeline orchestrator."""
+        logger.info("MarketPipelineOrchestrator: Stopping stages...")
         await self.clock_sync.stop()
-        logger.info("MarketPipeline: Stopped all stages.")
 
-    async def process(self, raw_event: dict[str, Any]) -> None:
-        """Sequential processing of a raw market feed event.
+    async def process(self, raw_data: dict[str, Any]) -> MarketDataEvent | None:
+        """Route raw exchange data through the full sequential pipeline.
         
-        Args:
-            raw_event: The dictionary from the raw market source (e.g. WebSocket).
+        Order:
+        1. Clock Sync (Normalize timestamps)
+        2. Feed Arbitration (Best source selection)
+        3. Gap Detection (Sequence continuity check)
+        4. Recovery (Snapshot reconstruction)
+        5. Normalization (To canonical format)
+        6. Quality Gate (Statistical/Cross-exchange verification)
+        7. Audit Log (Record validated event)
+        8. Emit (Publish to EventBus)
         """
-        start_time = time.perf_counter()
-        trace_id = raw_event.get("trace_id", "pending")
-        symbol = raw_event.get("symbol", "unknown")
-        
-        metrics: dict[str, float] = {}
-
         try:
-            # Stage 1: Clock Synchronization (Normalize timestamps)
-            s_clock_start = time.perf_counter()
-            event = await self.clock_sync.handle(raw_event)
-            metrics["clock_sync_ms"] = (time.perf_counter() - s_clock_start) * 1000
-
+            # Stage 1: Clock Sync & Timestamp Normalization
+            synced_data = await self.clock_sync.handle(raw_data)
+            
             # Stage 2: Feed Arbitration (A/B Feed selection)
-            s1_start = time.perf_counter()
-            event = self.arbitrator.handle(event)
-            metrics["arbitration_ms"] = (time.perf_counter() - s1_start) * 1000
-            if event is None:
-                return  # Arbitration dropped the event (duplicate/inferior)
-
+            selected_data = self.arbitrator.handle(synced_data)
+            if not selected_data:
+                return None
+                
             # Stage 3: Gap Detection
-            s2_start = time.perf_counter()
-            event = await self.gap_detector.handle(event)
-            metrics["gap_detection_ms"] = (time.perf_counter() - s2_start) * 1000
-
-            # Stage 4: Recovery (if gap detected)
-            s3_start = time.perf_counter()
-            event = await self.recovery_service.handle(event)
-            metrics["recovery_ms"] = (time.perf_counter() - s3_start) * 1000
-            if event is None:
-                return  # Recovery failed or dropped
+            gapped_data = await self.gap_detector.handle(selected_data)
             
-            # Stage 5: Normalization (if not recovered)
-            s4_start = time.perf_counter()
-            if event.get("metadata", {}).get("gap_free_event"):
-                # Use reconstructed event directly
-                market_event = event["metadata"]["gap_free_event"]
-            else:
-                market_event = self.normalizer.normalize(event)
-            metrics["normalization_ms"] = (time.perf_counter() - s4_start) * 1000
-            
-            # Stage 6: Data Quality Gate (Statistical MAD + Cross-Exchange)
-            s6_start = time.perf_counter()
-            is_valid = await self._run_quality_checks(market_event)
-            metrics["quality_gate_ms"] = (time.perf_counter() - s6_start) * 1000
-            
+            # Stage 4: Recovery (Triggered only if metadata["gap_detected"] is True)
+            recovered = await self.recovery_service.handle(gapped_data)
+            if not recovered:
+                return None
+                
+            # Stage 5: Normalization
+            event = self.normalizer.normalize(recovered)
+            if not event:
+                return None
+                
+            # Stage 6: Data Quality Gate (MAD Filter + Cross-Exchange Sanity)
+            is_valid = await self._run_quality_checks(event)
             if not is_valid:
-                return # Block invalid data from entering the system
+                return None
             
-            # Stage 7: Persistent Logging (Stateless Anchor)
-            await self.event_store.record_event(market_event)
+            # Stage 7: Audit Log (Record Validated Event)
+            await self.event_store.record_event(event)
+            
+            # Stage 8: System Emit
+            await self.event_bus.publish(EventType.MARKET_DATA, event)
+            
+            return event
 
-            # Total Latency Calculation
-            total_duration_ms = (time.perf_counter() - start_time) * 1000
-            
-            # Publish to EventBus
-            if isinstance(market_event, GapFreeMarketEvent):
-                publish_type = EventType.GAP_FREE_MARKET
-            else:
-                publish_type = EventType.MARKET_DATA
-
-            await self.event_bus.publish(publish_type, market_event)
-            
-            # Monitoring
-            if total_duration_ms > LATENCY_THRESHOLD_MS:
-                logger.warning(
-                    "Pipeline High Latency Alert: {:.2f}ms for {} - trace={}",
-                    total_duration_ms, symbol, trace_id
-                )
-            logger.debug(
-                "MarketPipeline: Processed {} in {:.2f}ms. Trace: {}",
-                symbol, total_duration_ms, trace_id
+        except Exception as e:
+            logger.exception(f"Orchestrator: Critical pipeline failure: {e}")
+            error_ev = DataErrorEvent(
+                symbol=raw_data.get("symbol", "unknown"),
+                reason=str(e),
+                trace_id=raw_data.get("trace_id", "pending")
             )
-
-        except DataQualityError as exc:
-            logger.error(f"Pipeline: Quality check failed for {symbol}: {exc}. Breaking pipeline.")
-            await self._emit_error("quality_gate", str(exc), symbol, trace_id)
-            
-        except Exception as exc:
-            logger.exception(f"Pipeline: Unknown failure during processing for {symbol}: {exc}")
-            await self._emit_error("orchestrator", str(exc), symbol, trace_id)
+            await self.event_bus.publish(EventType.DATA_ERROR, error_ev)
+            return None
 
     async def _run_quality_checks(self, event: MarketDataEvent) -> bool:
-        """Run statistical MAD and cross-exchange consistency checks.
-        
-        Fetches necessary state (rolling window, ref price) from EventStore
-        to maintain stateless pipeline execution.
-        """
-        import uuid
+        """Run statistical MAD and cross-exchange consistency checks."""
         symbol = event.symbol
         venue = event.metadata.get("venue") if event.metadata else "unknown"
         
-        # 1. Fetch stateless context from EventStore
-        recent_prices = self.event_store.get_recent_prices(symbol, window_size=50)
-        ref_price = self.event_store.get_latest_price_cross_exchange(symbol, exclude_venue=venue)
+        rolling_prices = self.event_store.get_recent_prices(symbol, window_size=50)
         
-        # 2. Synchronous validation logic
+        # Ensure venue is a string for Mypy
+        venue_str = str(venue) if venue else "unknown"
+        ref_price = self.event_store.get_latest_price_cross_exchange(
+            symbol, exclude_venue=venue_str
+        )
+        
         is_valid = self.quality_gate.validate(
-            event=event,
-            recent_prices=recent_prices,
+            event, 
+            rolling_prices, 
             ref_price=ref_price,
             z_threshold=3.0,
-            epsilon_pct=0.05
+            epsilon_pct=0.01
         )
         
         if not is_valid:
-            # Emit DataRejectedEvent (already logged by gate)
             rejected_ev = DataRejectedEvent(
-                event_id=str(uuid.uuid4()),
                 symbol=symbol,
                 trace_id=event.trace_id,
-                reason="MAD Outlier or Cross-Exchange Deviation",
+                reason="Outlier/Cross-exchange deviation",
                 value=event.close,
                 threshold=3.0,
             )
             await self.event_bus.publish(EventType.DATA_REJECTED, rejected_ev)
-            return False
             
-        return True
-
-    async def _emit_error(self, stage: str, message: str, symbol: str, trace_id: str) -> None:
-        """Emit a DataErrorEvent describing a pipeline failure."""
-        error_event = DataErrorEvent(
-            type=EventType.DATA_ERROR,
-            source=stage,
-            message=message,
-            symbol=symbol,
-            trace_id=trace_id,
-            severity="ERROR",
-        )
-        await self.event_bus.publish(EventType.DATA_ERROR, error_event)
+        return is_valid

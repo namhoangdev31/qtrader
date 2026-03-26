@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from qtrader.core.event import EventType, GapFreeMarketEvent, RecoveryCompletedEvent
-from qtrader.core.event_bus import EventBus
-from qtrader.oms.event_store import EventStore
+
+if TYPE_CHECKING:
+    from qtrader.core.event_bus import EventBus
+    from qtrader.oms.event_store import EventStore
 
 
 class RecoveryEngine:
@@ -21,7 +23,9 @@ class RecoveryEngine:
         self.event_store = event_store
         self.event_bus = event_bus
 
-    async def recover(self, symbol: str, expected_seq: int, received_seq: int) -> GapFreeMarketEvent | None:
+    async def recover(
+        self, symbol: str, expected_seq: int, received_seq: int
+    ) -> GapFreeMarketEvent | None:
         """Fetch snapshot and replay deltas for a symbol to fill a sequence gap.
         
         Args:

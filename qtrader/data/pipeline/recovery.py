@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+import uuid
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from qtrader.core.event_bus import EventBus
-from qtrader.data.market.snapshot_recovery import RecoveryEngine
+from qtrader.core.event import EventType, RecoveryCompletedEvent
+
+if TYPE_CHECKING:
+    from qtrader.core.event_bus import EventBus
+    from qtrader.data.market.snapshot_recovery import RecoveryEngine
 
 
 class RecoveryService:
@@ -38,25 +42,43 @@ class RecoveryService:
             received_seq = metadata.get("received_seq", 0)
             
             logger.info(
-                f"Recovery: Attempting recovery for {symbol} (expected {expected_seq}, received {received_seq})"
+                f"Recovery: Attempting recovery for {symbol} "
+                f"(expected {expected_seq}, received {received_seq})"
             )
             
             # Execute state reconstruction via Snapshot + Delta Replay
-            gap_free_market_event = await self.recovery_engine.recover(symbol, expected_seq, received_seq)
+            gap_free_market_event = await self.recovery_engine.recover(
+                symbol, expected_seq, received_seq
+            )
             
             if gap_free_market_event:
                 logger.info(f"Recovery: Successfully reconstructed gap-free state for {symbol}")
                 # Tag the event with the recovered state for the Normalizer/Quality Gate
                 metadata["recovery_triggered"] = True
                 metadata["gap_free_event"] = gap_free_market_event
+                
+                if self.event_bus:
+                    rec_ev = RecoveryCompletedEvent(
+                        event_id=str(uuid.uuid4()),
+                        symbol=symbol,
+                        recovered_seq=received_seq,
+                        trace_id=event.get("trace_id", "pending")
+                    )
+                    await self.event_bus.publish(EventType.RECOVERY_COMPLETED, rec_ev)
             else:
                 logger.error(f"Recovery: Failed to reconstruct state for {symbol}")
                 metadata["recovery_failed"] = True
+                return None
             
         return event
 
-    async def _simulated_archive_fetch(self, symbol: str, start: int, end: int) -> list[dict[str, Any]] | None:
+    async def _simulated_archive_fetch(
+        self, symbol: str, start: int, end: int
+    ) -> list[dict[str, Any]] | None:
         """Simulate fetching missing range from a high-fidelity REST/S3 archive."""
         # This is where the actual REST API call / ArcticDB query would go
-        # return [{"symbol": symbol, "seq_id": i, "bid": 0.0, "ask": 0.0} for i in range(start, end + 1)]
+        # return [
+        #     {"symbol": symbol, "seq_id": i, "bid": 0.0, "ask": 0.0} 
+        #     for i in range(start, end + 1)
+        # ]
         return []
