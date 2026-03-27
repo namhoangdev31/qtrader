@@ -1,38 +1,94 @@
-from qtrader.security.rbac import Permission, Role, has_permission
+import pytest
+
+from qtrader.security.rbac import (
+    Permission,
+    RBACProcessor,
+    Role,
+    rbac_required,
+    set_context_user,
+)
 
 
-def test_admin_permissions() -> None:
-    """Admin should have all permissions."""
-    role = Role.ADMIN.value
-    assert has_permission(role, Permission.READ) is True
-    assert has_permission(role, Permission.EXECUTE) is True
-    assert has_permission(role, Permission.MANAGE) is True
+@pytest.fixture(autouse=True)
+def reset_context() -> None:
+    """Reset identity context before each test."""
+    set_context_user("UNKNOWN", Role.TRADER)
 
 
-def test_trader_permissions() -> None:
-    """Trader should have read and execute but not manage."""
-    role = Role.TRADER.value
-    assert has_permission(role, Permission.READ) is True
-    assert has_permission(role, Permission.EXECUTE) is True
-    assert has_permission(role, Permission.MANAGE) is False
+def test_rbac_hierarchy_inheritance() -> None:
+    """Verify that ADMIN inherits permissions from lower roles."""
+    set_context_user("admin_user", Role.ADMIN)
+
+    # ADMIN should have EXECUTE_TRADE (inherited via TRADER in hierarchy)
+    assert RBACProcessor.check_access(Permission.EXECUTE_TRADE) is True  # noqa: S101
+
+    # ADMIN should have OVERRIDE_RISK (explicit)
+    assert RBACProcessor.check_access(Permission.OVERRIDE_RISK) is True  # noqa: S101
 
 
-def test_viewer_permissions() -> None:
-    """Viewer should only have read permission."""
-    role = Role.VIEWER.value
-    assert has_permission(role, Permission.READ) is True
-    assert has_permission(role, Permission.EXECUTE) is False
-    assert has_permission(role, Permission.MANAGE) is False
+def test_rbac_deny_by_default() -> None:
+    """Verify that TRADER cannot perform HIGH_PRIVILEGE actions."""
+    set_context_user("trader_user", Role.TRADER)
+
+    # TRADER cannot OVERRIDE_RISK
+    assert RBACProcessor.check_access(Permission.OVERRIDE_RISK) is False  # noqa: S101
+
+    # TRADER cannot MANAGE_SYSTEM
+    assert RBACProcessor.check_access(Permission.MANAGE_SYSTEM) is False  # noqa: S101
 
 
-def test_invalid_role() -> None:
-    """Invalid role should have no permissions."""
-    assert has_permission("invalid_role", Permission.READ) is False
-    assert has_permission("", Permission.EXECUTE) is False
-    assert has_permission("super_admin", Permission.MANAGE) is False
+def test_rbac_separation_of_duties_violation() -> None:
+    """Verify that a user cannot approve their own strategy (SoD)."""
+    # RISK_MANAGER has APPROVE_STRATEGY permission
+    set_context_user("risk_manager_1", Role.RISK_MANAGER)
+
+    # 1. OK: Approve someone else's strategy
+    is_ok = RBACProcessor.check_access(Permission.APPROVE_STRATEGY, resource_owner_id="trader_A")
+    assert is_ok is True  # noqa: S101
+
+    # 2. DENY: Approve own strategy (Violation)
+    is_denied = RBACProcessor.check_access(
+        Permission.APPROVE_STRATEGY, resource_owner_id="risk_manager_1"
+    )
+    assert is_denied is False  # noqa: S101
 
 
-def test_none_role() -> None:
-    """None or empty role should be handled gracefully."""
-    # mypy --strict will prevent passing None, but let's test string-based roles
-    assert has_permission("none", Permission.READ) is False
+@pytest.mark.asyncio
+async def test_rbac_required_decorator_success() -> None:
+    """Verify that the decorator authorizes valid requests."""
+    set_context_user("trader_1", Role.TRADER)
+
+    @rbac_required(Permission.EXECUTE_TRADE)
+    async def place_order(symbol: str) -> str:
+        return f"Order placed for {symbol}"
+
+    result = await place_order("AAPL")
+    assert result == "Order placed for AAPL"  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_rbac_required_decorator_failure() -> None:
+    """Verify that the decorator blocks unauthorized requests."""
+    set_context_user("trader_1", Role.TRADER)
+
+    @rbac_required(Permission.APPROVE_STRATEGY)
+    async def approve_strat(owner_id: str) -> str:
+        return "Approved"
+
+    with pytest.raises(PermissionError, match="Security DENIED"):
+        await approve_strat(owner_id="trader_2")
+
+
+@pytest.mark.asyncio
+async def test_rbac_required_decorator_sod_failure() -> None:
+    """Verify that the decorator enforces SoD via owner_id kwarg."""
+    # ADMIN has APPROVE_STRATEGY but cannot approve own
+    set_context_user("admin_1", Role.ADMIN)
+
+    @rbac_required(Permission.APPROVE_STRATEGY)
+    async def approve_strat(owner_id: str) -> str:
+        return "Approved"
+
+    # Violation: admin_1 approving admin_1
+    with pytest.raises(PermissionError, match="Security DENIED"):
+        await approve_strat(owner_id="admin_1")

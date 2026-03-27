@@ -3,6 +3,7 @@
 from qtrader.ml.autonomous import AutonomousLoop
 from qtrader.ml.distributed import RayCompute, RayHyperparamTuner
 from qtrader.ml.evaluation import ModelEvaluator, NestedCrossValidation
+from qtrader.ml.feedback_loop import FeedbackController, FeedbackSample
 from qtrader.ml.hmm_smoother import HMMRegimeSmoother
 from qtrader.ml.regime import RegimeDetector, VolatilityRegimeDetector
 from qtrader.ml.rotation import ModelRotator
@@ -22,6 +23,8 @@ except (ImportError, RuntimeError):
 
 __all__ = [
     "AutonomousLoop",
+    "FeedbackController",
+    "FeedbackSample",
     "HMMRegimeSmoother",
     "ModelEvaluator",
     "ModelRotator",
