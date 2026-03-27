@@ -21,6 +21,7 @@ class Permission(Enum):
     MANAGE_SYSTEM = auto()
     APPROVE_STRATEGY = auto()
     VIEW_AUDIT = auto()
+    READ_SECRET = auto()
 
 
 class Role(Enum):
@@ -55,10 +56,16 @@ ROLE_PERMISSIONS: Final[dict[Role, frozenset[Permission]]] = {
             Permission.MANAGE_SYSTEM,
             Permission.APPROVE_STRATEGY,
             Permission.VIEW_AUDIT,
+            Permission.READ_SECRET,
         ]
     ),
     Role.RISK_MANAGER: frozenset(
-        [Permission.READ_PROD_DATA, Permission.OVERRIDE_RISK, Permission.APPROVE_STRATEGY]
+        [
+            Permission.READ_PROD_DATA,
+            Permission.OVERRIDE_RISK,
+            Permission.APPROVE_STRATEGY,
+            Permission.READ_SECRET,
+        ]
     ),
     Role.TRADER: frozenset([Permission.EXECUTE_TRADE, Permission.READ_PROD_DATA]),
     Role.AUDITOR: frozenset([Permission.READ_PROD_DATA, Permission.VIEW_AUDIT]),

@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-
 _LOG = logging.getLogger("qtrader.security.mfa")
 
 
@@ -55,7 +54,7 @@ class MultiFactorAuthenticator:
         return (
             len(token) == 6  # noqa: PLR2004
             and token.isdigit()
-            and token != "000000"
+            and token != "000000"  # noqa: S105
         )
 
     def verify(
@@ -92,7 +91,7 @@ class MultiFactorAuthenticator:
         # 3. IP Network Anomaly Analysis
         # Note: IP shifts between distinct continents/quadrants trigger warning logs
         if ip_address not in known_ips:
-            _LOG.warning(f"[MFA] ANOMALY | User={user_id} IP={ip_address} | Unrecognized Network Endpoint")
+            _LOG.warning(f"[MFA] ANOMALY | User={user_id} IP={ip_address} | Unrecognized Endpoint")
 
         # 4. Success Completion
         self._stats["success"] += 1
@@ -106,8 +105,6 @@ class MultiFactorAuthenticator:
         total = self._stats["success"] + self._stats["failed"]
         return {
             "status": "MFA_REPORT",
-            "success_rate": (
-                round(self._stats["success"] / total, 4) if total > 0 else 1.0
-            ),
+            "success_rate": (round(self._stats["success"] / total, 4) if total > 0 else 1.0),
             "failed_attempts": self._stats["failed"],
         }

@@ -1,74 +1,71 @@
-from datetime import datetime, timedelta
-from unittest.mock import patch
+import time
 
-from qtrader.security.key_rotation import KeyRotationManager
+import pytest
 
-
-def test_key_generation() -> None:
-    """Generated keys should be unique and valid initially."""
-    manager = KeyRotationManager()
-    key1 = manager.generate_key()
-    key2 = manager.generate_key()
-
-    assert key1 != key2
-    assert manager.is_valid(key1) is True
-    assert manager.is_valid(key2) is True
+from qtrader.security.key_rotation import KeyRotator
 
 
-def test_key_revocation() -> None:
-    """Revoked keys should no longer be valid."""
-    manager = KeyRotationManager()
-    key = manager.generate_key()
-    assert manager.is_valid(key) is True
-
-    assert manager.revoke_key(key) is True
-    assert manager.is_valid(key) is False
+@pytest.fixture
+def rotator() -> KeyRotator:
+    """Initialize a KeyRotator with a short window for simulation."""
+    # Simulation: 30s window instead of 30d
+    return KeyRotator(rotation_days=0)  # Window will be 0, all keys stale immediately for test
 
 
-def test_key_rotation() -> None:
-    """Rotating a key should revoke the old one and return a new valid one."""
-    manager = KeyRotationManager()
-    old_key = manager.generate_key()
+def test_key_creation_and_registration(rotator: KeyRotator) -> None:
+    """Verify that a new key can be registered and retrieved."""
+    key_id = "EXCHANGE_API"
+    val = rotator.create_key(key_id)
+    assert len(val) > 40  # noqa: S101, PLR2004 (Token-urlsafe 32 result length)
 
-    new_key = manager.rotate_key(old_key)
-    assert new_key is not None
-    assert new_key != old_key
-    assert manager.is_valid(old_key) is False
-    assert manager.is_valid(new_key) is True
+    report = rotator.get_rotation_report()
+    assert report["active_secrets"] == 1  # noqa: S101
 
 
-def test_invalid_key_rotation() -> None:
-    """Rotating an invalid key should return None."""
-    manager = KeyRotationManager()
-    assert manager.rotate_key("non_existent_key") is None
+def test_stale_key_identification(rotator: KeyRotator) -> None:
+    """Verify that keys exceeding the window are flagged for rotation."""
+    # 1. Create a key with 30-day window (mocked by 0s window in fixture)
+    kid = "STALE_KEY"
+    rotator.create_key(kid)
+
+    # 2. Key should be stale immediately due to 0s window
+    stale = rotator.identify_stale_keys()
+    # Need to wait a tiny bit because create_key uses time.time()
+    time.sleep(0.01)
+    stale = rotator.identify_stale_keys()
+    assert kid in stale  # noqa: S101
 
 
-def test_key_expiry() -> None:
-    """Keys should automatically expire after the rotation period."""
-    rotation_days = 30
-    manager = KeyRotationManager(rotation_days=rotation_days)
+def test_rotation_logic_and_new_key_generation(rotator: KeyRotator) -> None:
+    """Verify that rotating an existing key generates a fresh secret."""
+    kid = "PROD_SECRET"
+    val_v1 = rotator.create_key(kid)
 
-    with patch("qtrader.security.key_rotation.datetime") as mock_datetime:
-        # Initial creation at now()
-        start_time = datetime(2025, 1, 1, 12, 0, 0)
-        mock_datetime.now.return_value = start_time
-        key = manager.generate_key()
-        assert manager.is_valid(key) is True
+    # Rotate
+    val_v2 = rotator.rotate_key(kid)
+    assert val_v1 != val_v2  # noqa: S101
 
-        # Test just before expiry
-        mock_datetime.now.return_value = start_time + timedelta(days=rotation_days - 1)
-        assert manager.is_valid(key) is True
-
-        # Test exactly at expiry (still valid for the sake of the test logic > vs >=)
-        mock_datetime.now.return_value = start_time + timedelta(days=rotation_days)
-        assert manager.is_valid(key) is True
-
-        # Test just after expiry
-        mock_datetime.now.return_value = start_time + timedelta(days=rotation_days, seconds=1)
-        assert manager.is_valid(key) is False
+    report = rotator.get_rotation_report()
+    assert report["rotation_events"] == 1  # noqa: S101
+    assert report["active_secrets"] == 1  # noqa: S101
 
 
-def test_revoke_non_existent_key() -> None:
-    """Revoking a non-existent key should return False."""
-    manager = KeyRotationManager()
-    assert manager.revoke_key("not_there") is False
+def test_emergency_rotation_tracking(rotator: KeyRotator) -> None:
+    """Verify that emergency (manual) rotations are tracked and logged."""
+    kid = "SENSITIVE_KEY"
+    rotator.create_key(kid)
+
+    # Emergency trigger
+    rotator.rotate_key(kid, urgent=True)
+
+    report = rotator.get_rotation_report()
+    assert report["rotation_events"] == 1  # noqa: S101
+
+
+def test_unauthorized_rotation_rejection(rotator: KeyRotator) -> None:
+    """Verify that attempting to rotate a non-existent key fails."""
+    with pytest.raises(ValueError, match="Rotation target ID MISSING not found"):
+        rotator.rotate_key("MISSING")
+
+    report = rotator.get_rotation_report()
+    assert report["failed_rotations"] == 1  # noqa: S101
