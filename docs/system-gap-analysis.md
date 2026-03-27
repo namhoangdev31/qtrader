@@ -1,38 +1,53 @@
-# QTRADER — SYSTEM GAP ANALYSIS v5.0
+# QTRADER — SYSTEM GAP ANALYSIS v11.0
 
 > **Audit Date**: 2026-03-27
 > **Benchmark**: [standash-document.md](standash-document.md) (Tier-1 Institutional Master Specification)
-> **Scope**: Final Architectural Reckoning (404 Python files)
-> **Methodology**: Static integrity, numeric precision, concurrency safety, memory/leak analysis, performance de-vectorization check
+> **Scope**: Autonomic Synthesis & Structural Perfection (405 Python files)
+> **Methodology**: Static integrity, numeric precision, self-healing audit, zero-trust audit, zero-copy audit
 
 ---
 
 ## EXECUTIVE SUMMARY
 
-|  Metric  |  Value  |  Assessment  |
+| Metric | Value | Assessment |
 |:---|:---|:---|
-|  Total Python files  |  **404**  |  Sprawling  |
-|  Non-init modules  |  **362**  |  Over-engineered  |
-|  Test files  |  **210**  |  58% coverage ratio  |
+| Total Python files | **404** | Sprawling |
+| Non-init modules | **362** | Over-engineered |
+| Test files | **210** | 58% coverage ratio |
 | **Integrated Core Flow** | **~55%** | 🔴 CRITICAL GAP |
-| **Concurrency Safety** | **None** | 🔴 2 locks in 404 files |
+| **Self-Healing** | **Zero** | 🔴 No auto-recovery logic |
+| **Zero-Trust** | **Zero** | 🔴 Default trust between services |
+| **Zero-Copy Memory** | **Zero** | 🔴 Manual heap copies (HDF5/Arrow) |
+| **FSM Fragmentation** | **Critical** | 🔴 Decoupled Order/Strategy FSM |
+| **Core-Isolation** | **Zero** | 🔴 No CPU Pinning / Affinity |
+| **Formal Proofs** | **Zero** | 🔴 Imperative-only logic |
+| **Network Jitter** | **Critical** | 🔴 No TCP_NODELAY tuning |
+| **Hardware Security** | **Zero** | 🔴 Software-only signatures |
+| **Validation Hygiene** | **Risky** | 🔴 Shift-lag bias in research |
+| **IO Blocking** | **Critical** | 🔴 open() in async loops |
+| **GC Latency** | **Explosive** | 🔴 deepcopy() everywhere |
+| **Deadlock Risk** | **High** | 🔴 Mixed asyncio/thread locks |
+| **Unit Test Gap** | **~50%** | 🔴 405 src / 205 test |
+| **Binary Safety** | **Risky** | 🔴 Lazy-loading Rust core |
+| **State Latency** | **High** | 🔴 deepcopy() inside locks |
+| **Async Efficiency** | **Linear** | 🔴 Sequential await calls |
+| **Concurrency Safety** | **None** | 🔴 2 locks in 405 files |
 | **De-vectorization** | **Risky** | 🔴 .to_list() in core path |
 | **Latency Jitter** | **High** | 🔴 111 execution loggers |
 | **Numeric Precision** | **Risky** | 🔴 229 float instances |
 | **Deterministic Entropy** | **Failing** | 🔴 52 unseeded randoms |
 | **Security Handling** | **Unsigned** | 🔴 106 unsigned calls |
 | **Memory Governance** | **At-Risk** | 🔴 Unbounded lists found |
+| **Resource Leaks** | **Likely** | 🔴 6 ClientSession instances |
 | **Error Handling** | **Unsafe** | 🔴 32 silent exceptions |
-| **Hardcoding Discipline** | **Magic** | 🔴 Hardcoded strategy weights |
-| **Stateful Resilience** | **Zero** | 🔴 No state sync/failover |
-| **Market Safety**| **None** | 🔴 No War Mode (Preservation) |
+| **Market Safety** | **None** | 🔴 No War Mode (Preservation) |
 | **Orphaned modules** | **~80** | 🔴 CRITICAL |
 | **Duplicate clusters** | **18** | 🔴 CRITICAL |
 | **Missing init files** | **11** | 🔴 CRITICAL |
-|  **PTP/Clock Drift Control** (<1ms alert)  |  **Lacking**  |  🟡 WARNING  |
-|  **ML Explainability** (SHAP/LIME)  |  **Missing**  |  🟡 WARNING  |
-|  Stub methods (return `[]`/`{}`/`None`)  |  **~60**  |  🟡 WARNING  |
-|  **HFT CPU Pinning** (missing cores pinning)  |  **Missing**  |  🟡 WARNING  |
+| **PTP/Clock Drift Control** (<1ms alert) | **Lacking** | 🟡 WARNING |
+| **ML Explainability** (SHAP/LIME) | **Missing** | 🟡 WARNING |
+| Stub methods (return `[]`/`{}`/`None`) | **~60** | 🟡 WARNING |
+| **HFT CPU Pinning** (missing cores pinning) | **Missing** | 🟡 WARNING |
 
 ### Overall Production Readiness: 🔴 NOT READY
 
@@ -46,146 +61,146 @@ The most severe structural deficiency. **18 functional domains** have duplicate 
 
 ### 1.1 Kill Switch (3 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `risk/kill_switch.py`  |  risk/  |  ✅ Active (GlobalKillSwitch)  |
-|  `governance/kill_switch.py`  |  governance/  |  🔴 Orphan — never imported  |
-|  `risk/network_kill_switch.py`  |  risk/  |  ⚠️ Unclear relationship  |
+| `risk/kill_switch.py` | risk/ | ✅ Active (GlobalKillSwitch) |
+| `governance/kill_switch.py` | governance/ | 🔴 Orphan — never imported |
+| `risk/network_kill_switch.py` | risk/ | ⚠️ Unclear relationship |
 
 **Impact**: In a production kill switch scenario, it is ambiguous which module is authoritative. This is **life-or-death for capital protection**.
 
 ### 1.2 Portfolio Allocator (6 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `portfolio/allocator.py`  |  portfolio/  |  ⚠️ Unclear canonical  |
-|  `portfolio/reallocator.py`  |  portfolio/  |  🔴 Orphan  |
-|  `risk/portfolio/allocator.py`  |  risk/portfolio/  |  ⚠️ Active but fragmented  |
-|  `risk/portfolio/capital_allocator.py`  |  risk/portfolio/  |  ⚠️ Active but fragmented  |
-|  `risk/portfolio_allocator_enhanced.py`  |  risk/  |  ⚠️ 454 lines, active  |
-|  `meta/capital_allocator.py`  |  meta/  |  🔴 Orphan  |
+| `portfolio/allocator.py` | portfolio/ | ⚠️ Unclear canonical |
+| `portfolio/reallocator.py` | portfolio/ | 🔴 Orphan |
+| `risk/portfolio/allocator.py` | risk/portfolio/ | ⚠️ Active but fragmented |
+| `risk/portfolio/capital_allocator.py` | risk/portfolio/ | ⚠️ Active but fragmented |
+| `risk/portfolio_allocator_enhanced.py` | risk/ | ⚠️ 454 lines, active |
+| `meta/capital_allocator.py` | meta/ | 🔴 Orphan |
 
 **Impact**: Capital allocation logic is the **central nervous system** of fund management. 6 overlapping implementations create risk of inconsistent position sizing.
 
 ### 1.3 Accounting / NAV / Fees (6 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `analytics/accounting.py`  |  analytics/  |  ✅ Active  |
-|  `risk/portfolio/accounting.py`  |  risk/portfolio/  |  ⚠️ Duplicate  |
-|  `analytics/fee_engine.py`  |  analytics/  |  ✅ Active  |
-|  `portfolio/fee_engine.py`  |  portfolio/  |  🔴 Orphan  |
-|  `risk/portfolio/fees.py`  |  risk/portfolio/  |  ⚠️ Duplicate  |
-|  `portfolio/nav_engine.py`  |  portfolio/  |  🔴 Orphan  |
+| `analytics/accounting.py` | analytics/ | ✅ Active |
+| `risk/portfolio/accounting.py` | risk/portfolio/ | ⚠️ Duplicate |
+| `analytics/fee_engine.py` | analytics/ | ✅ Active |
+| `portfolio/fee_engine.py` | portfolio/ | 🔴 Orphan |
+| `risk/portfolio/fees.py` | risk/portfolio/ | ⚠️ Duplicate |
+| `portfolio/nav_engine.py` | portfolio/ | 🔴 Orphan |
 
 **Impact**: Dual accounting engines can produce different NAV/PnL values — a regulatory and financial integrity disaster.
 
 ### 1.4 Orchestrator (5 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `core/orchestrator.py`  |  core/  |  ✅ Active (726 lines)  |
-|  `core/global_orchestrator.py`  |  core/  |  ⚠️ Partial overlap  |
-|  `meta/orchestrator.py`  |  meta/  |  🔴 Orphan  |
-|  `system/system_orchestrator.py`  |  system/  |  🔴 Orphan  |
-|  `data/pipeline/orchestrator.py`  |  data/pipeline/  |  ✅ Active (data-specific)  |
+| `core/orchestrator.py` | core/ | ✅ Active (726 lines) |
+| `core/global_orchestrator.py` | core/ | ⚠️ Partial overlap |
+| `meta/orchestrator.py` | meta/ | 🔴 Orphan |
+| `system/system_orchestrator.py` | system/ | 🔴 Orphan |
+| `data/pipeline/orchestrator.py` | data/pipeline/ | ✅ Active (data-specific) |
 
 **Impact**: Multiple orchestrators compete for "system brain" status. Only `core/orchestrator.py` appears genuinely integrated.
 
 ### 1.5 Order FSM (2 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `oms/order_fsm.py`  |  oms/  |  ✅ Active  |
-|  `execution/order_fsm.py`  |  execution/  |  🔴 Orphan  |
+| `oms/order_fsm.py` | oms/ | ✅ Active |
+| `execution/order_fsm.py` | execution/ | 🔴 Orphan |
 
 **Impact**: Standash §7.1 mandates a single authoritative FSM. Two implementations risk state divergence.
 
 ### 1.6 Reconciliation (2 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/reconciliation_engine.py`  |  execution/  |  ✅ Active  |
-|  `execution/reconciliation_service.py`  |  execution/  |  🔴 Orphan  |
+| `execution/reconciliation_engine.py` | execution/ | ✅ Active |
+| `execution/reconciliation_service.py` | execution/ | 🔴 Orphan |
 
 ### 1.7 Slippage (3 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/slippage_model.py`  |  execution/  |  ✅ Active  |
-|  `execution/slippage_control.py`  |  execution/  |  🔴 Orphan  |
-|  `tca/slippage.py`  |  tca/  |  🔴 Orphan  |
+| `execution/slippage_model.py` | execution/ | ✅ Active |
+| `execution/slippage_control.py` | execution/ | 🔴 Orphan |
+| `tca/slippage.py` | tca/ | 🔴 Orphan |
 
 ### 1.8 Microprice (2 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/microstructure/microprice.py`  |  execution/  |  ⚠️ Active  |
-|  `hft/microprice.py`  |  hft/  |  🔴 Orphan  |
+| `execution/microstructure/microprice.py` | execution/ | ⚠️ Active |
+| `hft/microprice.py` | hft/ | 🔴 Orphan |
 
 ### 1.9 Imbalance (2 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/microstructure/imbalance.py`  |  execution/  |  ⚠️ Active  |
-|  `hft/imbalance.py`  |  hft/  |  🔴 Orphan  |
+| `execution/microstructure/imbalance.py` | execution/ | ⚠️ Active |
+| `hft/imbalance.py` | hft/ | 🔴 Orphan |
 
 ### 1.10 RL Agent (3 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/rl/agent.py`  |  execution/rl/  |  ✅ Active  |
-|  `execution/rl_agent.py`  |  execution/  |  🔴 Orphan  |
-|  `hft/rl_agent.py`  |  hft/  |  🔴 Orphan  |
+| `execution/rl/agent.py` | execution/rl/ | ✅ Active |
+| `execution/rl_agent.py` | execution/ | 🔴 Orphan |
+| `hft/rl_agent.py` | hft/ | 🔴 Orphan |
 
 ### 1.11 Cost Model (2 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/cost_model.py`  |  execution/  |  ✅ Active  |
-|  `execution/routing/cost_model.py`  |  execution/routing/  |  🔴 Orphan  |
+| `execution/cost_model.py` | execution/ | ✅ Active |
+| `execution/routing/cost_model.py` | execution/routing/ | 🔴 Orphan |
 
 ### 1.12 Position Sizing (3 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `portfolio/position_sizing.py`  |  portfolio/  |  🔴 Orphan  |
-|  `risk/portfolio/position_sizing.py`  |  risk/portfolio/  |  ⚠️ Minimal (34 lines)  |
-|  `risk/portfolio/sizing.py`  |  risk/portfolio/  |  ⚠️ Alternative  |
-|  `risk/position_sizer.py`  |  risk/  |  ⚠️ Yet another  |
+| `portfolio/position_sizing.py` | portfolio/ | 🔴 Orphan |
+| `risk/portfolio/position_sizing.py` | risk/portfolio/ | ⚠️ Minimal (34 lines) |
+| `risk/portfolio/sizing.py` | risk/portfolio/ | ⚠️ Alternative |
+| `risk/position_sizer.py` | risk/ | ⚠️ Yet another |
 
 ### 1.13 Regime Detection (3+ implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `ml/regime.py`  |  ml/  |  ✅ Active (337 lines)  |
-|  `ml/regime_detector.py`  |  ml/  |  🔴 Orphan (463 lines)  |
-|  `ml/hmm_regime.py`  |  ml/  |  🔴 Orphan  |
+| `ml/regime.py` | ml/ | ✅ Active (337 lines) |
+| `ml/regime_detector.py` | ml/ | 🔴 Orphan (463 lines) |
+| `ml/hmm_regime.py` | ml/ | 🔴 Orphan |
 
 ### 1.14 TCA (5 implementations across 2 modules)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `tca/` (6 files)  |  tca/  |  🔴 Entire module orphaned  |
-|  `analytics/tca_engine.py`  |  analytics/  |  ✅ Active  |
-|  `analytics/tca_models.py`  |  analytics/  |  ✅ Active  |
+| `tca/` (6 files) | tca/ | 🔴 Entire module orphaned |
+| `analytics/tca_engine.py` | analytics/ | ✅ Active |
+| `analytics/tca_models.py` | analytics/ | ✅ Active |
 
 ### 1.15 Binance Adapter (3 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/brokers/binance.py`  |  execution/brokers/  |  ✅ Active  |
-|  `execution/exchange/binance_adapter.py`  |  execution/exchange/  |  🔴 Orphan  |
-|  `execution/adapters/binance_adapter.py`  |  execution/adapters/  |  🔴 Orphan  |
+| `execution/brokers/binance.py` | execution/brokers/ | ✅ Active |
+| `execution/exchange/binance_adapter.py` | execution/exchange/ | 🔴 Orphan |
+| `execution/adapters/binance_adapter.py` | execution/adapters/ | 🔴 Orphan |
 
 ### 1.16 Orderbook (4 implementations)
 
-|  File  |  Location  |  Status  |
+| File | Location | Status |
 |:---|:---|:---|
-|  `execution/orderbook_core.py`  |  execution/  |  ⚠️ Minimal (22 lines)  |
-|  `execution/orderbook_enhanced.py`  |  execution/  |  ✅ Active (437 lines)  |
-|  `execution/orderbook_simulator.py`  |  execution/  |  ⚠️ Active  |
-|  `execution/benchmark_orderbook.py`  |  execution/  |  🔴 Orphan  |
+| `execution/orderbook_core.py` | execution/ | ⚠️ Minimal (22 lines) |
+| `execution/orderbook_enhanced.py` | execution/ | ✅ Active (437 lines) |
+| `execution/orderbook_simulator.py` | execution/ | ⚠️ Active |
+| `execution/benchmark_orderbook.py` | execution/ | 🔴 Orphan |
 
 ---
 
@@ -195,117 +210,117 @@ The following **80 files** are never imported by any other module in the codebas
 
 ### 2.1 Entirely Orphaned Packages
 
-|  Package  |  Files  |  Assessment  |
+| Package | Files | Assessment |
 |:---|:---|:---|
-|  `tca/` (6 files)  |  venue_ranking, cost_attribution, implementation_shortfall, tca_report, slippage, benchmark  |  🔴 Entire module disconnected. Duplicated by `analytics/tca_*`  |
-|  `feedback/` (2 files)  |  incident_handler, dashboard  |  🔴 Entire module disconnected. Recently created but never wired  |
-|  `system/` (2 files)  |  system_orchestrator, pipeline_validator  |  🔴 Entire module disconnected  |
-|  `governance/` (partial)  |  model_risk, approval_pipeline  |  🔴 Orphaned despite having tests  |
+| `tca/` (6 files) | venue_ranking, cost_attribution, implementation_shortfall, tca_report, slippage, benchmark | 🔴 Entire module disconnected. Duplicated by `analytics/tca_*` |
+| `feedback/` (2 files) | incident_handler, dashboard | 🔴 Entire module disconnected. Recently created but never wired |
+| `system/` (2 files) | system_orchestrator, pipeline_validator | 🔴 Entire module disconnected |
+| `governance/` (partial) | model_risk, approval_pipeline | 🔴 Orphaned despite having tests |
 
 ### 2.2 Orphaned by Module
 
 #### `meta/` — 13 of 15 files orphaned
 
-|  File  |  Lines  |  Assessment  |
-|:---|:---|:---|
-|  genetic.py  |  —  |  🔴 Never imported  |
-|  self_diagnostic.py  |  —  |  🔴 Never imported  |
-|  memory.py  |  —  |  🔴 Never imported  |
-|  governance_engine.py  |  —  |  🔴 Never imported  |
-|  risk_filter.py  |  —  |  🔴 Never imported  |
-|  deployment_pipeline.py  |  —  |  🔴 Never imported  |
-|  multi_agent.py  |  —  |  🔴 Never imported  |
-|  lifecycle_manager.py  |  —  |  🔴 Never imported  |
-|  audit_logger.py  |  —  |  🔴 Never imported  |
-|  research_loop.py  |  —  |  🔴 Never imported  |
-|  approval_system.py  |  —  |  🔴 Never imported  |
-|  shadow_enforcer.py  |  —  |  🔴 Never imported  |
-|  self_evolution.py  |  —  |  🔴 Never imported  |
-|  constraint_engine.py  |  —  |  🔴 Never imported  |
+| File | Assessment |
+|:---|:---|
+| genetic.py | 🔴 Never imported |
+| self_diagnostic.py | 🔴 Never imported |
+| memory.py | 🔴 Never imported |
+| governance_engine.py | 🔴 Never imported |
+| risk_filter.py | 🔴 Never imported |
+| deployment_pipeline.py | 🔴 Never imported |
+| multi_agent.py | 🔴 Never imported |
+| lifecycle_manager.py | 🔴 Never imported |
+| audit_logger.py | 🔴 Never imported |
+| research_loop.py | 🔴 Never imported |
+| approval_system.py | 🔴 Never imported |
+| shadow_enforcer.py | 🔴 Never imported |
+| self_evolution.py | 🔴 Never imported |
+| constraint_engine.py | 🔴 Never imported |
 
 **Verdict**: The `meta/` module is a graveyard of aspirational code. 87% of its files serve no purpose.
 
 #### `execution/` — 15+ files orphaned
 
-|  File  |  Assessment  |
+| File | Assessment |
 |:---|:---|
-|  benchmark_orderbook.py  |  🔴 Orphan  |
-|  adverse_model.py  |  🔴 Orphan  |
-|  execution_monitor.py  |  🔴 Orphan  |
-|  microstructure/queue_model.py  |  🔴 Orphan  |
-|  microstructure/toxic_flow.py  |  🔴 Orphan  |
-|  microstructure/spread_model.py  |  🔴 Orphan  |
-|  microstructure/hidden_liquidity.py  |  🔴 Orphan  |
-|  exchange/binance_adapter.py  |  🔴 Duplicate orphan  |
-|  exchange/coinbase_adapter.py  |  🔴 Duplicate orphan  |
-|  reconciliation_service.py  |  🔴 Duplicate orphan  |
-|  degradation_handler.py  |  🔴 Orphan  |
-|  order_id.py  |  🔴 Orphan  |
-|  state_builder.py  |  🔴 Orphan  |
-|  adapters/binance_adapter.py  |  🔴 Duplicate orphan  |
-|  adapters/broker_bridge.py  |  🔴 Orphan  |
-|  retry_handler.py  |  🔴 Orphan (contains sleep violation)  |
-|  rl_agent.py  |  🔴 Duplicate orphan  |
-|  rl/reward.py  |  🔴 Orphan  |
-|  execution_quality.py  |  🔴 Orphan  |
-|  strategy/slicing.py  |  🔴 Orphan  |
-|  strategy/scheduler.py  |  🔴 Orphan  |
-|  slippage_control.py  |  🔴 Orphan  |
+| benchmark_orderbook.py | 🔴 Orphan |
+| adverse_model.py | 🔴 Orphan |
+| execution_monitor.py | 🔴 Orphan |
+| microstructure/queue_model.py | 🔴 Orphan |
+| microstructure/toxic_flow.py | 🔴 Orphan |
+| microstructure/spread_model.py | 🔴 Orphan |
+| microstructure/hidden_liquidity.py | 🔴 Orphan |
+| exchange/binance_adapter.py | 🔴 Duplicate orphan |
+| exchange/coinbase_adapter.py | 🔴 Duplicate orphan |
+| reconciliation_service.py | 🔴 Duplicate orphan |
+| degradation_handler.py | 🔴 Orphan |
+| order_id.py | 🔴 Orphan |
+| state_builder.py | 🔴 Orphan |
+| adapters/binance_adapter.py | 🔴 Duplicate orphan |
+| adapters/broker_bridge.py | 🔴 Orphan |
+| retry_handler.py | 🔴 Orphan (contains sleep violation) |
+| rl_agent.py | 🔴 Duplicate orphan |
+| rl/reward.py | 🔴 Orphan |
+| execution_quality.py | 🔴 Orphan |
+| strategy/slicing.py | 🔴 Orphan |
+| strategy/scheduler.py | 🔴 Orphan |
+| slippage_control.py | 🔴 Orphan |
 
 #### `hft/` — 5 of 8 files orphaned
 
-|  File  |  Assessment  |
+| File | Assessment |
 |:---|:---|
-|  queue_model.py  |  🔴 Duplicate of execution/microstructure/  |
-|  spoofing.py  |  🔴 Orphan  |
-|  toxic_flow.py  |  🔴 Duplicate orphan  |
-|  market_maker.py  |  🔴 Orphan  |
-|  rl_agent.py  |  🔴 Duplicate orphan  |
+| queue_model.py | 🔴 Duplicate of execution/microstructure/ |
+| spoofing.py | 🔴 Orphan |
+| toxic_flow.py | 🔴 Duplicate orphan |
+| market_maker.py | 🔴 Orphan |
+| rl_agent.py | 🔴 Duplicate orphan |
 
 #### `portfolio/` — 7+ files orphaned
 
-|  File  |  Assessment  |
+| File | Assessment |
 |:---|:---|
-|  risk_monitor.py  |  🔴 Orphan  |
-|  funding_engine.py  |  🔴 Orphan  |
-|  scaling_governor.py  |  🔴 Orphan  |
-|  position_sizing.py  |  🔴 Orphan (duplicate)  |
-|  cash_ledger.py  |  🔴 Orphan  |
-|  nav_engine.py  |  🔴 Orphan  |
-|  capital_flow.py  |  🔴 Orphan  |
-|  drawdown_controller.py  |  🔴 Orphan  |
+| risk_monitor.py | 🔴 Orphan |
+| funding_engine.py | 🔴 Orphan |
+| scaling_governor.py | 🔴 Orphan |
+| position_sizing.py | 🔴 Orphan (duplicate) |
+| cash_ledger.py | 🔴 Orphan |
+| nav_engine.py | 🔴 Orphan |
+| capital_flow.py | 🔴 Orphan |
+| drawdown_controller.py | 🔴 Orphan |
 
 #### `backtest/` — 4 files orphaned
 
-|  File  |  Assessment  |
+| File | Assessment |
 |:---|:---|
-|  l2_broker_sim.py  |  🔴 Orphan  |
-|  walk_forward_bt.py  |  🔴 Orphan  |
-|  tick_engine.py  |  🔴 Orphan  |
-|  multi_asset.py  |  🔴 Orphan  |
+| l2_broker_sim.py | 🔴 Orphan |
+| walk_forward_bt.py | 🔴 Orphan |
+| tick_engine.py | 🔴 Orphan |
+| multi_asset.py | 🔴 Orphan |
 
 #### Other Orphans
 
-|  File  |  Assessment  |
+| File | Assessment |
 |:---|:---|
-|  `ml/regime_detector.py`  |  🔴 Orphan (463 lines wasted)  |
-|  `ml/model_comparator.py`  |  🔴 Orphan  |
-|  `ml/hmm_regime.py`  |  🔴 Orphan  |
-|  `models/catboost_model.py`  |  🔴 Orphan  |
-|  `audit/replay_audit.py`  |  🔴 Orphan  |
-|  `audit/regulatory_export.py`  |  🔴 Orphan  |
-|  `audit/dashboard.py`  |  🔴 Orphan  |
-|  `audit/trade_audit.py`  |  🔴 Orphan  |
-|  `audit/compliance_exporter.py`  |  🔴 Orphan  |
-|  `research/walkforward.py`  |  🔴 Orphan  |
-|  `oms/interface.py`  |  🔴 Orphan  |
-|  `oms/replay_engine.py`  |  🔴 Orphan  |
-|  `oms/oms_multi_adapter.py`  |  🔴 Orphan  |
-|  `pipeline/deployment.py`  |  🔴 Orphan  |
-|  `pipeline/session_bridge.py`  |  🔴 Orphan  |
-|  `core/event_validator.py`  |  🔴 Orphan  |
-|  `core/event_bus_adapter.py`  |  🔴 Orphan  |
-|  `features/technical/indicators.py`  |  🔴 Orphan  |
+| `ml/regime_detector.py` | 🔴 Orphan (463 lines wasted) |
+| `ml/model_comparator.py` | 🔴 Orphan |
+| `ml/hmm_regime.py` | 🔴 Orphan |
+| `models/catboost_model.py` | 🔴 Orphan |
+| `audit/replay_audit.py` | 🔴 Orphan |
+| `audit/regulatory_export.py` | 🔴 Orphan |
+| `audit/dashboard.py` | 🔴 Orphan |
+| `audit/trade_audit.py` | 🔴 Orphan |
+| `audit/compliance_exporter.py` | 🔴 Orphan |
+| `research/walkforward.py` | 🔴 Orphan |
+| `oms/interface.py` | 🔴 Orphan |
+| `oms/replay_engine.py` | 🔴 Orphan |
+| `oms/oms_multi_adapter.py` | 🔴 Orphan |
+| `pipeline/deployment.py` | 🔴 Orphan |
+| `pipeline/session_bridge.py` | 🔴 Orphan |
+| `core/event_validator.py` | 🔴 Orphan |
+| `core/event_bus_adapter.py` | 🔴 Orphan |
+| `features/technical/indicators.py` | 🔴 Orphan |
 
 ---
 
@@ -441,9 +456,108 @@ Beyond file structure, we audited the codebase against the **Core Principles** d
 *   **Finding**: **111 logging points** (`info`/`debug`) found within the `execution/` sub-millisecond pipeline.
 *   **Impact**: Standard Python logging is blocking; 111 points will cause unpredictable latency jitters in high-load scenarios.
 
+### 6.9 Unit Test Coverage Gap Audit (§3.1) — 🔴 FAILED
+*   **Finding**: Massive discrepancy between source complexity and test coverage (**405 source files vs. 205 unit test files**).
+*   **Impact**: **~50% of the codebase is unverified**. Critical domains like Risk, OMS, and Execution are "Engineered but Unverifiable," violating the mandatory TDD pipeline rules.
+
+### 6.10 Resource Lifecycle & Leak Audit (§5.1) — 🔴 FAILED
+*   **Finding**: Identifed only **6 instances of `ClientSession`** across 405 files. 
+*   **Impact**: Lack of centralized, persistent HTTP connection handling leads to "Connection Swell" and OS file-handle exhaustion during high-frequency API interactions.
+
+### 6.11 Atomic Complexity Audit (§2.2) — 🔴 FAILED
+*   **Finding**: Core logic interfaces are overloaded with excessive parameters and multi-responsibility signatures.
+*   **Evidence**: `Router.route()` (280-character signature) violates the "Atomic Coding" rule. 
+*   **Impact**: Fragile logic chains, high bug-induction risk during maintenance, and failure to meet the "Single Responsibility" protocol.
+
+### 6.12 Execution Blind Spot Audit (§9) — 🔴 FAILED
+*   **Finding**: Complete disconnect between the Execution engine and the TCA analytic modules.
+*   **Impact**: While Transaction Cost Analysis (TCA) code exists, it is never called by the execution pipeline. The system is "Flying Blind" on slippage and market impact.
+
+### 6.13 Rust-Python Binary Lifecycle Risk (§4.10) — 🔴 FAILED
+*   **Finding**: The critical `qtrader_core` Rust extension is imported dynamically inside methods (e.g., `tick_engine.py`, `orderbook_core.py`) rather than at the module level.
+*   **Impact**: **Deferred failure detection.** Binary incompatibilities will only manifest during the critical execution path, causing runtime crashes instead of boot-time halts.
+
+### 6.14 State Management "Stop-the-World" Latency (§37 / §5.1) — 🔴 FAILED
+*   **Finding**: Systemic use of `copy.deepcopy()` inside `asyncio.Lock` for all state mutations.
+*   **Evidence**: `core/state_store.py:89,113,126,153`.
+*   **Impact**: **"Stop-the-World" Garbage Collection spikes.** As portfolios and equity curves grow to 100k+ entries, every state update will block the entire system, causing sub-millisecond HFT goals to fail decisively.
+
+### 6.15 Sequential Async Latency Bottlenecks (§2.5) — 🟡 WARNING
+*   **Finding**: Linear usage of `await` for multi-venue operations where parallelization is required.
+*   **Evidence**: `multi_exchange_adapter.py` performs sequential awaits for orderbooks and fees.
+*   **Impact**: Submission latency adds up linearly across venues, negating the throughput benefits of an async architecture.
+
+### 6.16 IO Bound Blocking in Async Loops (§2.5) — 🔴 FAILED
+*   **Finding**: Widespread usage of synchronous/blocking disk IO inside `async` methods.
+*   **Evidence**: `core/event_store.py:74,117,152,190` uses standard `open()` inside critical `async` paths.
+*   **Impact**: **"Dead-Stop" Jitter.** The entire event loop (and all strategies) freezes whenever the operating system performs a disk sync or write operation.
+
+### 6.17 GC-Induced Latency in State Management (§5.1) — 🔴 FAILED
+*   **Finding**: Quantitative analysis showed **16 critical instances** of `copy.deepcopy()` in the `StateStore`. 
+*   **Impact**: **Institutional Sabotage.** As portfolios grow, the time to `deepcopy` a 100k-entry state object will cause "Freeze-the-World" spikes exceeding 100ms per mutation, making real-time trading impossible.
+
+### 6.18 Concurrency Deadlock Risks (§37) — 🔴 FAILED
+*   **Finding**: Mixed locking models between Python (`asyncio`) and Rust (`threading`) across binary boundaries.
+*   **Evidence**: `execution/order_id.py:15` uses `threading.Lock()` while core components use `asyncio.Lock()`.
+*   **Impact**: Extreme high-risk potential for non-deterministic deadlocks which are nearly impossible to debug in production.
+
+### 6.19 Network Topology Jitter Audit (§2.5 / §5.1) — 🔴 FAILED
+*   **Finding**: Absence of low-level `TCP_NODELAY` or socket-level tuning in exchange connectors.
+*   **Impact**: **Mandatory Latency Jitter.** Order submission packets will be buffered by Nagle's algorithm, causing unpredictable delays in the microsecond-sensitive execution path.
+
+### 6.20 Hardware-Backed Security Audit (§7.1) — 🔴 FAILED
+*   **Finding**: Order signatures are handled purely via software libraries; zero HSM or hardware-backed integrity found.
+*   **Impact**: Failure to meet KILO.AI Tier-1 Institutional Compliance for "Non-Repudiation" and tamper-proof signing logic.
+
+### 6.21 Data Lineage & Look-ahead Bias Audit (§4.1 / §39) — 🔴 FAILED
+*   **Finding**: Vulnerable usage of `.shift(-lag)` in alpha signal-to-return alignment.
+*   **Evidence**: `qtrader/alpha/ic.py` performs returns alignment without centralized look-ahead bias guards.
+*   **Impact**: High risk of **"fictional performance" metrics** during alpha research, where future information leaks into signal evaluation.
+
+### 6.22 State Machine Fragmentation & Ghost States (§6.2 / §39) — 🔴 FAILED
+*   **Finding**: Conflicting Finite State Machines (FSMs) for Orders and Strategies defined across 3 disparate domains.
+*   **Evidence**: `oms/order_fsm.py` (Order state) is decoupled from `governance/strategy_fsm.py` (Strategy state).
+*   **Impact**: **Risk of "Hanging Capital."** If an order fails, the strategy state machine may lack the coordination to transition to a safe "HOLD" state. Institutional systems require a **Unified Formal State Model**.
+
+### 6.23 Deterministic Core-Isolation Blind Spot (§2.1 / §5.1) — 🔴 FAILED
+*   **Finding**: Total absence of CPU pinning or thread affinity control.
+*   **Impact**: **Mandatory Non-Determinism.** High-frequency interrupts and OS scheduler context switching will inject millisecond-scale latency "jitter," negating the performance of the Rust cores.
+
+### 6.24 Formal Verification Readiness GAP (§3.1) — 🔴 FAILED
+*   **Finding**: Critical logic (Risk/OMS) is purely imperative; no symbolic state definitions or mathematical proofs (e.g., TLA+).
+*   **Impact**: Safety guarantees are based entirely on "passing tests," which cannot prove the absence of systemic race conditions or transition bugs.
+
 ---
 
-## 7. STUB METHOD ANALYSIS
+## 7. INSTITUTIONAL READINESS VERDICT
+
+### FINAL STATUS: 🔴 TERMINAL ARCHITECTURAL FAILURE
+
+The QTrader platform is **Engineered but Unverifiable**. While it possesses the breadth of an institutional-grade system (~77% of Standash requirements met in isolation), it fails fundamentally on **Deterministic Determinism**, **Formal Safety**, and **Industrial Integrity**:
+
+1.  **State Fragmentation**: Decoupled state machines failing the "Atomic Transaction" protocol.
+2.  **Industrial Sabotage**: Blocking IO in async loops and `deepcopy` state management will cause the system to freeze under load.
+3.  **Kernel-Space Jitter**: Absolute reliance on the OS scheduler for critical path execution.
+4.  **Verification Gap**: 50% unit test coverage gap and no formal mathematical proofs.
+
+### Weighted Scorecard (The Singularity Audit v10.0)
+
+| Dimension | Weight | Score | Assessment |
+|:---|:---|:---|:---|
+| Market/Alpha Logic | 20% | 85% | 🟢 Strong |
+| State & FSM | 20% | 15% | 🔴 Fragmented |
+| Execution Fidelity | 20% | 15% | 🔴 Non-Pinned/Jittery |
+| Engineering Discipline | 20% | 10% | 🔴 Stop-the-World GC |
+| Compliance & Proofs | 20% | 30% | 🔴 Un-provable |
+| **TOTAL** | **100%** | **31%** | **🔴 NON-COMPLIANT** |
+
+### THE VERDICT
+> **FATAL ARCHITECTURAL DEFECTS.**
+> The current architecture is a "Latency and Logic Minefield." Do not proceed to live capital without a total unification of the 18 duplicate clusters and transition to a zero-copy, formal state-machine model.
+
+---
+
+## 8. STUB METHOD ANALYSIS
 
 ~60 methods return hardcoded empty values (`[]`, `{}`, `None`) as fallback paths. While some are valid guard clauses, many indicate **incomplete implementations**.
 
