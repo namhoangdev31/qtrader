@@ -81,6 +81,9 @@ class EventType(str, Enum):
     SIMULATION_ACCURACY_ERROR = "SIMULATION_ACCURACY_ERROR"
     COVERAGE_REPORT = "COVERAGE_REPORT"
     COVERAGE_ERROR = "COVERAGE_ERROR"
+    EXECUTION_OBJECTIVE = "EXECUTION_OBJECTIVE"
+    EXECUTION_STATE_UPDATE = "EXECUTION_STATE_UPDATE"
+    EXECUTION_COST_REPORT = "EXECUTION_COST_REPORT"
 
 
 class MarketPayload(BaseModel):
@@ -592,6 +595,38 @@ class CoverageErrorPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExecutionObjectivePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    strategy_id: str
+    symbol: str
+    total_cost: float
+    impact_cost: float
+    timing_cost: float
+    fee_cost: float
+    risk_cost: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionStatePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    symbol: str
+    venue: str
+    state_vector: list[float]
+    features: dict[str, float] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionCostPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    symbol: str
+    total_cost: float
+    impact_cost: float
+    timing_cost: float
+    spread_cost: float
+    fee_cost: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -1019,3 +1054,21 @@ class CoverageErrorEvent(BaseEvent):
     """Event representing a failure in the coverage enforcement pipeline."""
     event_type: EventType = EventType.COVERAGE_ERROR
     payload: CoverageErrorPayload
+
+
+class ExecutionObjectiveEvent(BaseEvent):
+    """Event representing the mathematical cost breakdown of an execution decision."""
+    event_type: EventType = EventType.EXECUTION_OBJECTIVE
+    payload: ExecutionObjectivePayload
+
+
+class ExecutionStateEvent(BaseEvent):
+    """Event representing the 7-dimensional microstructure state vector (S_t)."""
+    event_type: EventType = EventType.EXECUTION_STATE_UPDATE
+    payload: ExecutionStatePayload
+
+
+class ExecutionCostEvent(BaseEvent):
+    """Event representing the 4-dimensional microstructure cost decomposition."""
+    event_type: EventType = EventType.EXECUTION_COST_REPORT
+    payload: ExecutionCostPayload

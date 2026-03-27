@@ -34,3 +34,25 @@ retry:
   max_attempts: 3
   delay_base: 0.1  # seconds
   backoff_factor: 2.0
+
+objective:
+  impact_k: 0.1
+  impact_alpha: 0.5
+  timing_lambda: 0.01
+  risk_gamma: 0.1
+  base_fee: 0.0001 # 1bps
+
+cost_model:
+  impact_k: 0.15
+  timing_alpha: 0.05
+  fixed_fee: 1.0  # USD
+  prop_fee: 0.0002 # 2bps
+
+microstructure:
+  imbalance:
+    n_levels: 5
+    lambda_decay: 0.5
+  toxic_flow:
+    window_size: 50
+    impact_horizon: 5
+    threshold: 0.7

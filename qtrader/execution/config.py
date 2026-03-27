@@ -17,6 +17,9 @@ class ExecutionConfig:
         self.routing = config_data.get("routing", {})
         self.risk_limits = config_data.get("risk_limits", {})
         self.retry = config_data.get("retry", {})
+        self.objective = config_data.get("objective", {})
+        self.cost_model = config_data.get("cost_model", {})
+        self.microstructure = config_data.get("microstructure", {})
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "ExecutionConfig":
