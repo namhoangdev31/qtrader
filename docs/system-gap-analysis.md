@@ -328,19 +328,19 @@ The following **80 files** are never imported by any other module in the codebas
 
 The following directories contain Python modules but lack `__init__.py`, meaning they **cannot be imported as packages**:
 
-|  Directory  |  File Count  |  Impact  |
+| Directory | File Count | Impact |
 |:---|:---|:---|
-|  `qtrader/tca/`  |  6  |  🔴 Entire TCA module unimportable  |
-|  `qtrader/feedback/`  |  2  |  🔴 Incident handler / dashboard unimportable  |
-|  `qtrader/system/`  |  2  |  🔴 System orchestrator unimportable  |
-|  `qtrader/governance/`  |  6  |  🔴 All governance modules unimportable  |
-|  `qtrader/portfolio/`  |  14  |  🔴 All portfolio modules unimportable  |
-|  `qtrader/certification/`  |  13  |  🔴 All certification modules unimportable  |
-|  `qtrader/execution/microstructure/`  |  6  |  🔴 Microstructure analysis unimportable  |
-|  `qtrader/execution/core/`  |  1  |  🔴 Fill probability unimportable  |
-|  `qtrader/execution/routing/`  |  4  |  🔴 Smart routing unimportable  |
-|  `qtrader/execution/rl/`  |  4  |  🔴 RL execution unimportable  |
-|  `qtrader/execution/strategy/`  |  2  |  🔴 Execution strategy unimportable  |
+| `qtrader/tca/` | 6 | 🔴 Entire TCA module unimportable |
+| `qtrader/feedback/` | 2 | 🔴 Incident handler / dashboard unimportable |
+| `qtrader/system/` | 2 | 🔴 System orchestrator unimportable |
+| `qtrader/governance/` | 6 | 🔴 All governance modules unimportable |
+| `qtrader/portfolio/` | 14 | 🔴 All portfolio modules unimportable |
+| `qtrader/certification/` | 13 | 🔴 All certification modules unimportable |
+| `qtrader/execution/microstructure/` | 6 | 🔴 Microstructure analysis unimportable |
+| `qtrader/execution/core/` | 1 | 🔴 Fill probability unimportable |
+| `qtrader/execution/routing/` | 4 | 🔴 Smart routing unimportable |
+| `qtrader/execution/rl/` | 4 | 🔴 RL execution unimportable |
+| `qtrader/execution/strategy/` | 2 | 🔴 Execution strategy unimportable |
 
 **Total**: 11 directories with 60+ files that **cannot function as Python packages**.
 
@@ -350,14 +350,14 @@ The following directories contain Python modules but lack `__init__.py`, meaning
 
 Standash §2.5 and AGENTS.md strictly forbid `time.sleep()` / `asyncio.sleep()` in production code.
 
-|  File  |  Violation  |  Severity  |
+| File | Violation | Severity |
 |:---|:---|:---|
-|  `core/timer.py:63,70`  |  `await asyncio.sleep(self.interval_s)`  |  🟡 Timer utility — may be acceptable  |
-|  `execution/retry_handler.py:36`  |  `await asyncio.sleep(delay)`  |  🔴 Production violation  |
-|  `execution/reconciliation_engine.py:44`  |  `await asyncio.sleep(0.1)`  |  🔴 Production violation  |
-|  `data/market/coinbase_market.py:136,140`  |  `time.sleep(0.15)`, `time.sleep(1.0)`  |  🔴 Blocking sleep in data layer  |
-|  `data/market/snapshot_recovery.py:99`  |  `await asyncio.sleep(0.02)`  |  🟡 Simulated latency  |
-|  `data/market/clock_sync.py:113,118`  |  `await asyncio.sleep(...)`  |  🟡 Clock sync loop  |
+| `core/timer.py:63,70` | `await asyncio.sleep(self.interval_s)` | 🟡 Timer utility — may be acceptable |
+| `execution/retry_handler.py:36` | `await asyncio.sleep(delay)` | 🔴 Production violation |
+| `execution/reconciliation_engine.py:44` | `await asyncio.sleep(0.1)` | 🔴 Production violation |
+| `data/market/coinbase_market.py:136,140` | `time.sleep(0.15)`, `time.sleep(1.0)` | 🔴 Blocking sleep in data layer |
+| `data/market/snapshot_recovery.py:99` | `await asyncio.sleep(0.02)` | 🟡 Simulated latency |
+| `data/market/clock_sync.py:113,118` | `await asyncio.sleep(...)` | 🟡 Clock sync loop |
 
 ---
 
@@ -367,165 +367,190 @@ Beyond file structure, we audited the codebase against the **Core Principles** d
 
 ### 5.1 Determinism First (§2.1) — 🔴 FAILED
 
-*   **Finding**: **52 instances** of unseeded randomness (`random.random()`, `random.choice()`, `np.random.normal()`) found in critical paths.
-*   **High Risk Area**: `meta/genetic.py` and `meta/strategy_generator.py` use bare randomness for alpha generation. Two Sigma/Renaissance standards require fixed seeds for all research to ensure reproducibility.
-*   **Impact**: Backtests may not be reproducible; production signals could diverge from research due to uncontrolled entropy.
+* Finding: **52 instances** of unseeded randomness (`random.random()`, `random.choice()`, `np.random.normal()`) found in critical paths.
+* High Risk Area: `meta/genetic.py` and `meta/strategy_generator.py` use bare randomness for alpha generation. Two Sigma/Renaissance standards require fixed seeds for all research to ensure reproducibility.
+* Impact: Backtests may not be reproducible; production signals could diverge from research due to uncontrolled entropy.
 
 ### 5.2 Stateless Strategy Design (§2.5) — ✅ PASSED
 
-*   **Finding**: Zero (0) instances of strategies holding local `self.positions` or `self.balance` in `qtrader/strategy/`.
-*   **Impact**: Excellent adherence to Tier-1 standards. Strategies correctly depend on external state feeds, ensuring crash-recovery resilience.
+* Finding: Zero (0) instances of strategies holding local `self.positions` or `self.balance` in `qtrader/strategy/`.
+* Impact: Excellent adherence to Tier-1 standards. Strategies correctly depend on external state feeds, ensuring crash-recovery resilience.
 
 ### 5.3 Security Hardening (§5.3 / §263) — 🔴 FAILED
 
-*   **Finding**: Zero (0) instances of `sign_order` or `sign_request` in the `execution/` layer.
-*   **Impact**: Although a `security/` module exists, it is not wired into the order submission flow. Orders are sent without cryptographic signatures or institutional-grade verification.
+* Finding: Zero (0) instances of `sign_order` or `sign_request` in the `execution/` layer.
+* Impact: Although a `security/` module exists, it is not wired into the order submission flow. Orders are sent without cryptographic signatures or institutional-grade verification.
 
 ### 5.4 CPU Pinning & HFT Isolation (§4.10) — 🟡 PARTIAL
 
-*   **Finding**: `psutil` is used for resource monitoring, but there is no logic for **Core Pinning** or **CPU Isolation** for the core execution/alpha threads.
-*   **Impact**: System performance is subject to OS scheduling jitter (>10ms), violating the <1ms drift requirement.
+* Finding: `psutil` is used for resource monitoring, but there is no logic for **Core Pinning** or **CPU Isolation** for the core execution/alpha threads.
+* Impact: System performance is subject to OS scheduling jitter (>10ms), violating the <1ms drift requirement.
 
 ### 5.5 Stateful Replication & Failover (§252-253) — 🔴 FAILED
 
-*   **Finding**: Zero (0) instances of `replication` or `state_sync` logic found for OMS/Redundancy.
-*   **Impact**: The system cannot achieve the "< 5 seconds failover" target as there is no mechanism to sync order state between backup nodes.
+* **Finding**: Zero (0) instances of `replication` or `state_sync` logic found for OMS/Redundancy.
+* **Impact**: The system cannot achieve the "< 5 seconds failover" target as there is no mechanism to sync order state between backup nodes.
 
 ### 5.6 Capital Preservation Mode (War Mode) (§272-274) — 🔴 FAILED
 
-*   **Finding**: Logic for `war_mode` or `capital_preservation` is completely missing from the `risk/` and `strategy/` layers.
-*   **Impact**: In extreme market conditions, the system cannot autonomously transition to a "Reduced Exposure / Hedging-only" state.
+* **Finding**: Logic for `war_mode` or `capital_preservation` is completely missing from the `risk/` and `strategy/` layers.
+* **Impact**: In extreme market conditions, the system cannot autonomously transition to a "Reduced Exposure / Hedging-only" state.
 
 ### 5.7 Institutional Audit of Overrides (§309) — 🔴 FAILED
 
-*   **Finding**: Zero (0) evidence that manual overrides from `security/override_system.py` are logged into the central `audit/audit_store.py`.
-*   **Impact**: Lack of non-repudiation for human interventions.
+* **Finding**: Zero (0) evidence that manual overrides from `security/override_system.py` are logged into the central `audit/audit_store.py`.
+* **Impact**: Lack of non-repudiation for human interventions.
 
 ### 5.8 Explainability & Factor Attribution (§13) — 🔴 FAILED
-*   **Finding**: No evidence of SHAP, LIME, or factor-based attribution in the `ml/` or `analytics/` layers.
-*   **Impact**: Violates "Institutional Transparency" (Explainability) standards.
+
+* **Finding**: No evidence of SHAP, LIME, or factor-based attribution in the `ml/` or `analytics/` layers.
+* **Impact**: Violates "Institutional Transparency" (Explainability) standards.
 
 ---
 
 ## 6. ULTRA-DEEP CODE DISCIPLINE AUDIT
 
 ### 6.1 Numeric Precision Audit (§2.1 / §4.1) — 🔴 FAILED
-*   **Finding**: **229 instances** of `float` usage in precision-sensitive financial logic (`oms/`, `portfolio/`, `analytics/`).
-*   **Evidence**:
-    - `oms/interface.py:50,60`: `get_cash()` and `get_positions()` return `float`.
-    - `oms/event_store.py:77,99`: Explicitly casting prices with `float(price)`.
-*   **Impact**: Cumulative rounding errors in PnL, position sizing, and NAV. Institutional systems require `Decimal`.
+
+* **Finding**: **229 instances** of `float` usage in precision-sensitive financial logic (`oms/`, `portfolio/`, `analytics/`).
+* **Evidence**:
+  * `oms/interface.py:50,60`: `get_cash()` and `get_positions()` return `float`.
+  * `oms/event_store.py:77,99`: Explicitly casting prices with `float(price)`.
+* **Impact**: Cumulative rounding errors in PnL, position sizing, and NAV. Institutional systems require `Decimal`.
 
 ### 6.2 Memory Governance Audit (§5.1) — 🔴 FAILED
-*   **Finding**: Core components use unbounded lists without windowing or persistence-cleanup mechanics.
-*   **Evidence**:
-    - `core/state_store.py:134`: `self._state.equity_curve.append(...)` grows indefinitely.
-    - `core/event_bus.py:70`: `self._worker_tasks.append(task)` never removes tasks.
-*   **Impact**: Production processes will eventually crash due to Out-of-Memory (OOM) after weeks/months of uptime.
+
+* **Finding**: Core components use unbounded lists without windowing or persistence-cleanup mechanics.
+* **Evidence**:
+  * `core/state_store.py:134`: `self._state.equity_curve.append(...)` grows indefinitely.
+  * `core/event_bus.py:70`: `self._worker_tasks.append(task)` never removes tasks.
+* **Impact**: Production processes will eventually crash due to Out-of-Memory (OOM) after weeks/months of uptime.
 
 ### 6.3 Silent Failure Patterns (§2.2) — 🔴 FAILED
-*   **Finding**: **32 instances** of non-specific `except Exception:` blocks without subsequent `raise` or `RISK_HALT`.
-*   **Evidence**:
-    - `core/event_store.py:167,200`: Critical data read failures are caught and logged but not bubbled.
-    - `security/jwt_auth.py:89`: Auth failures caught globally without specific handling.
-*   **Impact**: "Silent Death" scenarios where the system continues running in a corrupted or orphaned state.
+
+* **Finding**: **32 instances** of non-specific `except Exception:` blocks without subsequent `raise` or `RISK_HALT`.
+* **Evidence**:
+  * `core/event_store.py:167,200`: Critical data read failures are caught and logged but not bubbled.
+  * `security/jwt_auth.py:89`: Auth failures caught globally without specific handling.
+* **Impact**: "Silent Death" scenarios where the system continues running in a corrupted or orphaned state.
 
 ### 6.4 Hardcoding & Magic Numbers (§2.3 / §4.15) — 🔴 FAILED
-*   **Finding**: Strategy and execution parameters are hardcoded as literals instead of being pulled from `core/config.py`.
-*   **Evidence**:
-    - `strategy/ensemble_strategy.py:71,72`: Hardcoded weights `(0.4, 0.3, 0.2, 0.1)` and `decay_penalty=0.5`.
-    - `execution/benchmark_orderbook.py:63,65`: Uses literal `0.99`, `1.01`, `0.05`.
-*   **Impact**: Configuration changes require code deployment, breaking the "Dynamic Configuration" protocol.
+
+* **Finding**: Strategy and execution parameters are hardcoded as literals instead of being pulled from `core/config.py`.
+* **Evidence**:
+  * `strategy/ensemble_strategy.py:71,72`: Hardcoded weights `(0.4, 0.3, 0.2, 0.1)` and `decay_penalty=0.5`.
+  * `execution/benchmark_orderbook.py:63,65`: Uses literal `0.99`, `1.01`, `0.05`.
+* **Impact**: Configuration changes require code deployment, breaking the "Dynamic Configuration" protocol.
 
 ### 6.5 Architectural Circularity Audit — 🟡 WARNING
-*   **Finding**: Identified circular dependency patterns between the `ml/` and `ml/pytorch_models` packages.
-*   **Evidence**: `ml/__init__.py:17` imports from `ml/pytorch_models`.
-*   **Impact**: Unpredictable import side-effects and broken package boundaries.
+
+* **Finding**: Identified circular dependency patterns between the `ml/` and `ml/pytorch_models` packages.
+* **Evidence**: `ml/__init__.py:17` imports from `ml/pytorch_models`.
+* **Impact**: Unpredictable import side-effects and broken package boundaries.
 
 ### 6.6 Concurrency Safety Audit (§2.5 / §37) — 🔴 FAILED
-*   **Finding**: Extremely low usage of synchronization primitives (**2 instances of `Lock`** in 404 files).
-*   **Evidence**: `core/event_bus.py` accesses shared state without a lock during worker task management.
-*   **Impact**: Non-deterministic execution order and potential silent data corruption under high-event-burst HFT scenarios.
+
+* **Finding**: Extremely low usage of synchronization primitives (**2 instances of `Lock`** in 404 files).
+* **Evidence**: `core/event_bus.py` accesses shared state without a lock during worker task management.
+* **Impact**: Non-deterministic execution order and potential silent data corruption under high-event-burst HFT scenarios.
 
 ### 6.7 De-vectorization Performance Bottlenecks (§2.1 / §4.1) — 🔴 FAILED
-*   **Finding**: Conversion from Polars C-buffers back to Python managed heap mid-calculation.
-*   **Evidence**: **3 instances** of `.to_list()` or `.to_dicts()` in the `execution/` and `alpha/` layers. 
-*   **Impact**: Breaks the "Zero Loop" requirement, introducing latency spikes and garbage collection pressure in the critical path.
+
+* **Finding**: Conversion from Polars C-buffers back to Python managed heap mid-calculation.
+* **Evidence**: **3 instances** of `.to_list()` or `.to_dicts()` in the `execution/` and `alpha/` layers.
+* **Impact**: Breaks the "Zero Loop" requirement, introducing latency spikes and garbage collection pressure in the critical path.
 
 ### 6.8 Execution Latency Jitter Audit (§2.5 / §5.1) — 🟡 WARNING
-*   **Finding**: **111 logging points** (`info`/`debug`) found within the `execution/` sub-millisecond pipeline.
-*   **Impact**: Standard Python logging is blocking; 111 points will cause unpredictable latency jitters in high-load scenarios.
+
+* **Finding**: **111 logging points** (`info`/`debug`) found within the `execution/` sub-millisecond pipeline.
+* **Impact**: Standard Python logging is blocking; 111 points will cause unpredictable latency jitters in high-load scenarios.
 
 ### 6.9 Unit Test Coverage Gap Audit (§3.1) — 🔴 FAILED
-*   **Finding**: Massive discrepancy between source complexity and test coverage (**405 source files vs. 205 unit test files**).
-*   **Impact**: **~50% of the codebase is unverified**. Critical domains like Risk, OMS, and Execution are "Engineered but Unverifiable," violating the mandatory TDD pipeline rules.
+
+* **Finding**: Massive discrepancy between source complexity and test coverage (**405 source files vs. 205 unit test files**).
+* **Impact**: **~50% of the codebase is unverified**. Critical domains like Risk, OMS, and Execution are "Engineered but Unverifiable," violating the mandatory TDD pipeline rules.
 
 ### 6.10 Resource Lifecycle & Leak Audit (§5.1) — 🔴 FAILED
-*   **Finding**: Identifed only **6 instances of `ClientSession`** across 405 files. 
-*   **Impact**: Lack of centralized, persistent HTTP connection handling leads to "Connection Swell" and OS file-handle exhaustion during high-frequency API interactions.
+
+* **Finding**: Identifed only **6 instances of `ClientSession`** across 405 files.
+* **Impact**: Lack of centralized, persistent HTTP connection handling leads to "Connection Swell" and OS file-handle exhaustion during high-frequency API interactions.
 
 ### 6.11 Atomic Complexity Audit (§2.2) — 🔴 FAILED
-*   **Finding**: Core logic interfaces are overloaded with excessive parameters and multi-responsibility signatures.
-*   **Evidence**: `Router.route()` (280-character signature) violates the "Atomic Coding" rule. 
-*   **Impact**: Fragile logic chains, high bug-induction risk during maintenance, and failure to meet the "Single Responsibility" protocol.
+
+* **Finding**: Core logic interfaces are overloaded with excessive parameters and multi-responsibility signatures.
+* **Evidence**: `Router.route()` (280-character signature) violates the "Atomic Coding" rule.
+* **Impact**: Fragile logic chains, high bug-induction risk during maintenance, and failure to meet the "Single Responsibility" protocol.
 
 ### 6.12 Execution Blind Spot Audit (§9) — 🔴 FAILED
-*   **Finding**: Complete disconnect between the Execution engine and the TCA analytic modules.
-*   **Impact**: While Transaction Cost Analysis (TCA) code exists, it is never called by the execution pipeline. The system is "Flying Blind" on slippage and market impact.
+
+* **Finding**: Complete disconnect between the Execution engine and the TCA analytic modules.
+* **Impact**: While Transaction Cost Analysis (TCA) code exists, it is never called by the execution pipeline. The system is "Flying Blind" on slippage and market impact.
 
 ### 6.13 Rust-Python Binary Lifecycle Risk (§4.10) — 🔴 FAILED
-*   **Finding**: The critical `qtrader_core` Rust extension is imported dynamically inside methods (e.g., `tick_engine.py`, `orderbook_core.py`) rather than at the module level.
-*   **Impact**: **Deferred failure detection.** Binary incompatibilities will only manifest during the critical execution path, causing runtime crashes instead of boot-time halts.
+
+* **Finding**: The critical `qtrader_core` Rust extension is imported dynamically inside methods (e.g., `tick_engine.py`, `orderbook_core.py`) rather than at the module level.
+* **Impact**: **Deferred failure detection.** Binary incompatibilities will only manifest during the critical execution path, causing runtime crashes instead of boot-time halts.
 
 ### 6.14 State Management "Stop-the-World" Latency (§37 / §5.1) — 🔴 FAILED
-*   **Finding**: Systemic use of `copy.deepcopy()` inside `asyncio.Lock` for all state mutations.
-*   **Evidence**: `core/state_store.py:89,113,126,153`.
-*   **Impact**: **"Stop-the-World" Garbage Collection spikes.** As portfolios and equity curves grow to 100k+ entries, every state update will block the entire system, causing sub-millisecond HFT goals to fail decisively.
+
+* **Finding**: Systemic use of `copy.deepcopy()` inside `asyncio.Lock` for all state mutations.
+* **Evidence**: `core/state_store.py:89,113,126,153`.
+* **Impact**: **"Stop-the-World" Garbage Collection spikes.** As portfolios and equity curves grow to 100k+ entries, every state update will block the entire system, causing sub-millisecond HFT goals to fail decisively.
 
 ### 6.15 Sequential Async Latency Bottlenecks (§2.5) — 🟡 WARNING
-*   **Finding**: Linear usage of `await` for multi-venue operations where parallelization is required.
-*   **Evidence**: `multi_exchange_adapter.py` performs sequential awaits for orderbooks and fees.
-*   **Impact**: Submission latency adds up linearly across venues, negating the throughput benefits of an async architecture.
+
+* **Finding**: Linear usage of `await` for multi-venue operations where parallelization is required.
+* **Evidence**: `multi_exchange_adapter.py` performs sequential awaits for orderbooks and fees.
+* **Impact**: Submission latency adds up linearly across venues, negating the throughput benefits of an async architecture.
 
 ### 6.16 IO Bound Blocking in Async Loops (§2.5) — 🔴 FAILED
-*   **Finding**: Widespread usage of synchronous/blocking disk IO inside `async` methods.
-*   **Evidence**: `core/event_store.py:74,117,152,190` uses standard `open()` inside critical `async` paths.
-*   **Impact**: **"Dead-Stop" Jitter.** The entire event loop (and all strategies) freezes whenever the operating system performs a disk sync or write operation.
+
+* **Finding**: Widespread usage of synchronous/blocking disk IO inside `async` methods.
+* **Evidence**: `core/event_store.py:74,117,152,190` uses standard `open()` inside critical `async` paths.
+* **Impact**: **"Dead-Stop" Jitter.** The entire event loop (and all strategies) freezes whenever the operating system performs a disk sync or write operation.
 
 ### 6.17 GC-Induced Latency in State Management (§5.1) — 🔴 FAILED
-*   **Finding**: Quantitative analysis showed **16 critical instances** of `copy.deepcopy()` in the `StateStore`. 
-*   **Impact**: **Institutional Sabotage.** As portfolios grow, the time to `deepcopy` a 100k-entry state object will cause "Freeze-the-World" spikes exceeding 100ms per mutation, making real-time trading impossible.
+
+* **Finding**: Quantitative analysis showed **16 critical instances** of `copy.deepcopy()` in the `StateStore`.
+* **Impact**: **Institutional Sabotage.** As portfolios grow, the time to `deepcopy` a 100k-entry state object will cause "Freeze-the-World" spikes exceeding 100ms per mutation, making real-time trading impossible.
 
 ### 6.18 Concurrency Deadlock Risks (§37) — 🔴 FAILED
-*   **Finding**: Mixed locking models between Python (`asyncio`) and Rust (`threading`) across binary boundaries.
-*   **Evidence**: `execution/order_id.py:15` uses `threading.Lock()` while core components use `asyncio.Lock()`.
-*   **Impact**: Extreme high-risk potential for non-deterministic deadlocks which are nearly impossible to debug in production.
+
+* **Finding**: Mixed locking models between Python (`asyncio`) and Rust (`threading`) across binary boundaries.
+* **Evidence**: `execution/order_id.py:15` uses `threading.Lock()` while core components use `asyncio.Lock()`.
+* **Impact**: Extreme high-risk potential for non-deterministic deadlocks which are nearly impossible to debug in production.
 
 ### 6.19 Network Topology Jitter Audit (§2.5 / §5.1) — 🔴 FAILED
-*   **Finding**: Absence of low-level `TCP_NODELAY` or socket-level tuning in exchange connectors.
-*   **Impact**: **Mandatory Latency Jitter.** Order submission packets will be buffered by Nagle's algorithm, causing unpredictable delays in the microsecond-sensitive execution path.
+
+* **Finding**: Absence of low-level `TCP_NODELAY` or socket-level tuning in exchange connectors.
+* **Impact**: **Mandatory Latency Jitter.** Order submission packets will be buffered by Nagle's algorithm, causing unpredictable delays in the microsecond-sensitive execution path.
 
 ### 6.20 Hardware-Backed Security Audit (§7.1) — 🔴 FAILED
-*   **Finding**: Order signatures are handled purely via software libraries; zero HSM or hardware-backed integrity found.
-*   **Impact**: Failure to meet KILO.AI Tier-1 Institutional Compliance for "Non-Repudiation" and tamper-proof signing logic.
+
+* **Finding**: Order signatures are handled purely via software libraries; zero HSM or hardware-backed integrity found.
+* **Impact**: Failure to meet KILO.AI Tier-1 Institutional Compliance for "Non-Repudiation" and tamper-proof signing logic.
 
 ### 6.21 Data Lineage & Look-ahead Bias Audit (§4.1 / §39) — 🔴 FAILED
-*   **Finding**: Vulnerable usage of `.shift(-lag)` in alpha signal-to-return alignment.
-*   **Evidence**: `qtrader/alpha/ic.py` performs returns alignment without centralized look-ahead bias guards.
-*   **Impact**: High risk of **"fictional performance" metrics** during alpha research, where future information leaks into signal evaluation.
+
+* **Finding**: Vulnerable usage of `.shift(-lag)` in alpha signal-to-return alignment.
+* **Evidence**: `qtrader/alpha/ic.py` performs returns alignment without centralized look-ahead bias guards.
+* **Impact**: High risk of **"fictional performance" metrics** during alpha research, where future information leaks into signal evaluation.
 
 ### 6.22 State Machine Fragmentation & Ghost States (§6.2 / §39) — 🔴 FAILED
-*   **Finding**: Conflicting Finite State Machines (FSMs) for Orders and Strategies defined across 3 disparate domains.
-*   **Evidence**: `oms/order_fsm.py` (Order state) is decoupled from `governance/strategy_fsm.py` (Strategy state).
-*   **Impact**: **Risk of "Hanging Capital."** If an order fails, the strategy state machine may lack the coordination to transition to a safe "HOLD" state. Institutional systems require a **Unified Formal State Model**.
+
+* **Finding**: Conflicting Finite State Machines (FSMs) for Orders and Strategies defined across 3 disparate domains.
+* **Evidence**: `oms/order_fsm.py` (Order state) is decoupled from `governance/strategy_fsm.py` (Strategy state).
+* **Impact**: **Risk of "Hanging Capital."** If an order fails, the strategy state machine may lack the coordination to transition to a safe "HOLD" state. Institutional systems require a **Unified Formal State Model**.
 
 ### 6.23 Deterministic Core-Isolation Blind Spot (§2.1 / §5.1) — 🔴 FAILED
-*   **Finding**: Total absence of CPU pinning or thread affinity control.
-*   **Impact**: **Mandatory Non-Determinism.** High-frequency interrupts and OS scheduler context switching will inject millisecond-scale latency "jitter," negating the performance of the Rust cores.
+
+* **Finding**: Total absence of CPU pinning or thread affinity control.
+* **Impact**: **Mandatory Non-Determinism.** High-frequency interrupts and OS scheduler context switching will inject millisecond-scale latency "jitter," negating the performance of the Rust cores.
 
 ### 6.24 Formal Verification Readiness GAP (§3.1) — 🔴 FAILED
-*   **Finding**: Critical logic (Risk/OMS) is purely imperative; no symbolic state definitions or mathematical proofs (e.g., TLA+).
-*   **Impact**: Safety guarantees are based entirely on "passing tests," which cannot prove the absence of systemic race conditions or transition bugs.
+
+* **Finding**: Critical logic (Risk/OMS) is purely imperative; no symbolic state definitions or mathematical proofs (e.g., TLA+).
+* **Impact**: Safety guarantees are based entirely on "passing tests," which cannot prove the absence of systemic race conditions or transition bugs.
 
 ---
 
@@ -535,10 +560,10 @@ Beyond file structure, we audited the codebase against the **Core Principles** d
 
 The QTrader platform is **Engineered but Unverifiable**. While it possesses the breadth of an institutional-grade system (~77% of Standash requirements met in isolation), it fails fundamentally on **Deterministic Determinism**, **Formal Safety**, and **Industrial Integrity**:
 
-1.  **State Fragmentation**: Decoupled state machines failing the "Atomic Transaction" protocol.
-2.  **Industrial Sabotage**: Blocking IO in async loops and `deepcopy` state management will cause the system to freeze under load.
-3.  **Kernel-Space Jitter**: Absolute reliance on the OS scheduler for critical path execution.
-4.  **Verification Gap**: 50% unit test coverage gap and no formal mathematical proofs.
+1. **State Fragmentation**: Decoupled state machines failing the "Atomic Transaction" protocol.
+2. **Industrial Sabotage**: Blocking IO in async loops and `deepcopy` state management will cause the system to freeze under load.
+3. **Kernel-Space Jitter**: Absolute reliance on the OS scheduler for critical path execution.
+4. **Verification Gap**: 50% unit test coverage gap and no formal mathematical proofs.
 
 ### Weighted Scorecard (The Singularity Audit v10.0)
 
@@ -552,6 +577,7 @@ The QTrader platform is **Engineered but Unverifiable**. While it possesses the 
 | **TOTAL** | **100%** | **31%** | **🔴 NON-COMPLIANT** |
 
 ### THE VERDICT
+>
 > **FATAL ARCHITECTURAL DEFECTS.**
 > The current architecture is a "Latency and Logic Minefield." Do not proceed to live capital without a total unification of the 18 duplicate clusters and transition to a zero-copy, formal state-machine model.
 
