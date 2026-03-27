@@ -5,7 +5,6 @@ import time
 from enum import Enum, auto
 from typing import Any
 
-
 _LOG = logging.getLogger("qtrader.certification.stress_test")
 
 
@@ -41,9 +40,7 @@ class StrategyStressValidator:
         # Telemetry for institutional situational awareness.
         self._stats = {"worst_case_loss": 0.0, "scenario_failures_count": 0}
 
-    def run_stress_audit(
-        self, scenario_results: dict[StressScenario, float]
-    ) -> dict[str, Any]:
+    def run_stress_audit(self, scenario_results: dict[StressScenario, float]) -> dict[str, Any]:
         """
         Produce a terminal strategy stress report for simulated extreme market events.
 
@@ -66,8 +63,7 @@ class StrategyStressValidator:
                 all_robustness_passed = False
                 self._stats["scenario_failures_count"] += 1
 
-            if pnl < worst_observed_pnl:
-                worst_observed_pnl = pnl
+            worst_observed_pnl = min(worst_observed_pnl, pnl)
 
             scenario_evaluations[scenario.name] = {
                 "pnl": round(pnl, 6),
@@ -87,9 +83,7 @@ class StrategyStressValidator:
                 f"{peak_loss_percent * 100:.2f}% | Limit: {self._limit * 100:.2f}%"
             )
         else:
-            _LOG.info(
-                f"[STRESS] ROBUSTNESS_PASS | peak_loss: {peak_loss_percent * 100:.2f}%"
-            )
+            _LOG.info(f"[STRESS] ROBUSTNESS_PASS | peak_loss: {peak_loss_percent * 100:.2f}%")
 
         # 3. Certification Artifact Construction.
         artifact = {
