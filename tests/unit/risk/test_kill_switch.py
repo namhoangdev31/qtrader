@@ -1,100 +1,97 @@
-"""
-Level 1 Critical Tests for NetworkKillSwitch (risk/network_kill_switch.py)
-Covers: hard kill, soft kill, idempotent triggering, OMS cancel-all integration.
-"""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from qtrader.risk.network_kill_switch import NetworkKillSwitch
+
+from qtrader.risk.kill_switch import GlobalKillSwitch
 
 
 @pytest.fixture
-def switch_no_oms():
-    return NetworkKillSwitch()
+def kill_switch() -> GlobalKillSwitch:
+    """Initialize a GlobalKillSwitch for institutional capital certification."""
+    return GlobalKillSwitch(dd_limit=0.15, loss_limit=500_000.0, anomaly_limit=0.9)
 
 
-@pytest.fixture
-def mock_oms():
-    adapter = MagicMock()
-    adapter.cancel_all_orders = AsyncMock()
-    return adapter
+def test_kill_drawdown_veracity(kill_switch: GlobalKillSwitch) -> None:
+    """Verify shutdown on critical drawdown breach (15% limit)."""
+    # Scenario: Drawdown 0.20 (20%). Breach.
+    report = kill_switch.evaluate_kill_system(
+        current_drawdown=0.20,
+        current_absolute_loss=0,
+        current_anomaly_score=0,
+    )
+
+    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
+    assert "CRITICAL_DRAWDOWN_BREACH" in report["state"]["kill_reason"]  # noqa: S101
+    assert report["state"]["is_halted"] is True  # noqa: S101
 
 
-# ---------------------------------------------------------------------------
-# Initial state
-# ---------------------------------------------------------------------------
-def test_kill_switch_starts_inactive(switch_no_oms):
-    assert switch_no_oms._triggered is False
-    assert switch_no_oms._trigger_reason is None
-    assert switch_no_oms._triggered_at is None
+def test_kill_capital_loss_precision(kill_switch: GlobalKillSwitch) -> None:
+    """Verify shutdown on absolute capital loss breach (500k limit)."""
+    # Scenario: Loss 600,000. Breach.
+    report = kill_switch.evaluate_kill_system(
+        current_drawdown=0,
+        current_absolute_loss=600_000,
+        current_anomaly_score=0,
+    )
+
+    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
+    assert "MAX_LOSS_EXCEEDED" in report["state"]["kill_reason"]  # noqa: S101
 
 
-# ---------------------------------------------------------------------------
-# Hard kill — no OMS
-# ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_hard_kill_sets_triggered_flag(switch_no_oms):
-    await switch_no_oms.engage_hard_kill("max drawdown")
-    assert switch_no_oms._triggered is True
-    assert switch_no_oms._trigger_reason == "max drawdown"
-    assert switch_no_oms._mode == "hard"
-    assert switch_no_oms._triggered_at is not None
+def test_kill_anomaly_intensity_trigger(kill_switch: GlobalKillSwitch) -> None:
+    """Verify shutdown on severe anomaly intensity breach (0.9 limit)."""
+    # Scenario: Anomaly 0.95. Breach.
+    report = kill_switch.evaluate_kill_system(
+        current_drawdown=0,
+        current_absolute_loss=0,
+        current_anomaly_score=0.95,
+    )
+
+    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
+    assert "SEVERE_ANOMALY" in report["state"]["kill_reason"]  # noqa: S101
 
 
-@pytest.mark.asyncio
-async def test_hard_kill_idempotent(switch_no_oms):
-    """Calling engage_hard_kill twice must not crash or double-trigger."""
-    await switch_no_oms.engage_hard_kill("first")
-    await switch_no_oms.engage_hard_kill("second")  # Should be no-op
-    # Reason should still be the first one
-    assert switch_no_oms._trigger_reason == "first"
+def test_kill_manual_trigger_reliability(kill_switch: GlobalKillSwitch) -> None:
+    """Verify immediate shutdown on institutional manual trigger request."""
+    # Scenario: Manual trigger. Breach.
+    report = kill_switch.evaluate_kill_system(
+        current_drawdown=0,
+        current_absolute_loss=0,
+        current_anomaly_score=0,
+        manual_trigger=True,
+    )
+
+    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
+    assert "MANUAL_HALT" in report["state"]["kill_reason"]  # noqa: S101
 
 
-# ---------------------------------------------------------------------------
-# Hard kill — with OMS adapter (cancel_all_orders)
-# ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_hard_kill_calls_cancel_all_orders(mock_oms):
-    switch = NetworkKillSwitch(oms_adapter=mock_oms)
-    await switch.engage_hard_kill("P&L breach")
-    mock_oms.cancel_all_orders.assert_awaited_once()
+def test_kill_persistent_state_veracity(kill_switch: GlobalKillSwitch) -> None:
+    """Verify that the kill switch is non-overrideable once triggered."""
+    # 1. Trigger kill.
+    kill_switch.evaluate_kill_system(
+        current_drawdown=0.3,
+        current_absolute_loss=0,
+        current_anomaly_score=0,
+    )
+
+    # 2. Attempt to evaluate healthy state.
+    report = kill_switch.evaluate_kill_system(
+        current_drawdown=0,
+        current_absolute_loss=0,
+        current_anomaly_score=0,
+    )
+
+    # State should remain HALTED.
+    assert report["status"] == "ALREADY_HALTED"  # noqa: S101
+    assert report["reason"] != ""  # noqa: S101
 
 
-@pytest.mark.asyncio
-async def test_hard_kill_oms_error_does_not_crash(mock_oms):
-    """Even if OMS cancel_all_orders raises, the kill switch must stay triggered."""
-    mock_oms.cancel_all_orders.side_effect = ConnectionError("Exchange unreachable")
-    switch = NetworkKillSwitch(oms_adapter=mock_oms)
-    # Should not raise
-    await switch.engage_hard_kill("P&L breach")
-    assert switch._triggered is True
+def test_kill_telemetry_tracking(kill_switch: GlobalKillSwitch) -> None:
+    """Verify situational awareness and forensic kill telemetry indexing."""
+    kill_switch.evaluate_kill_system(
+        current_drawdown=0.3,
+        current_absolute_loss=0,
+        current_anomaly_score=0,
+    )
 
-
-# ---------------------------------------------------------------------------
-# Soft kill — must NOT cancel orders
-# ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_soft_kill_sets_mode(mock_oms):
-    switch = NetworkKillSwitch(oms_adapter=mock_oms)
-    if hasattr(switch, "engage_soft_kill"):
-        await switch.engage_soft_kill("precautionary halt")
-        assert switch._triggered is True
-        assert switch._mode == "soft"
-        # Soft kill should NOT cancel existing orders
-        mock_oms.cancel_all_orders.assert_not_awaited()
-
-
-# ---------------------------------------------------------------------------
-# Market-stress scenario: rapid sequential risk events
-# ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_rapid_risk_events_only_trigger_once(mock_oms):
-    """Simulates multiple concurrent risk signals — kill switch must be exactly once."""
-    import asyncio
-    switch = NetworkKillSwitch(oms_adapter=mock_oms)
-    
-    async def fire():
-        await switch.engage_hard_kill("rapid fire")
-
-    await asyncio.gather(fire(), fire(), fire())
-    # cancel_all_orders should be called at most once
-    assert mock_oms.cancel_all_orders.call_count <= 1
+    stats = kill_switch.get_kill_telemetry()
+    assert stats["is_system_halted"] is True  # noqa: S101
+    assert stats["kill_reason_captured"] != ""  # noqa: S101
