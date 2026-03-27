@@ -84,6 +84,7 @@ class EventType(str, Enum):
     EXECUTION_OBJECTIVE = "EXECUTION_OBJECTIVE"
     EXECUTION_STATE_UPDATE = "EXECUTION_STATE_UPDATE"
     EXECUTION_COST_REPORT = "EXECUTION_COST_REPORT"
+    META_DECISION = "META_DECISION"
 
 
 class MarketPayload(BaseModel):
@@ -627,6 +628,17 @@ class ExecutionCostPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MetaDecisionPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    module: str
+    action: str
+    entity_id: str
+    decision: str
+    reason: str
+    metrics: dict[str, float] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -1072,3 +1084,9 @@ class ExecutionCostEvent(BaseEvent):
     """Event representing the 4-dimensional microstructure cost decomposition."""
     event_type: EventType = EventType.EXECUTION_COST_REPORT
     payload: ExecutionCostPayload
+
+
+class MetaDecisionEvent(BaseEvent):
+    """Event representing a deterministic meta-control decision (Gov/Life/Constraint)."""
+    event_type: EventType = EventType.META_DECISION
+    payload: MetaDecisionPayload
