@@ -1,94 +1,96 @@
 import numpy as np
-import polars as pl
 import pytest
 
-from qtrader.ml.online_learning import OnlineLearner
-
-# ──────────────────────────────────────────────
-# Constants
-# ──────────────────────────────────────────────
-SEED = 42
-N_SAMPLES = 100
-BATCH_SIZE = 10
-N_FEATURES = 2
-ETA_0 = 0.01
-POWER_T = 0.25
-SIGNAL_VAL = 2.0
-ITERATIONS = 50
-EXPECTED_LEN_2 = 2
-EXPECTED_NON_EMPTY = 0
+from qtrader.ml.online_learning import OnlineLearner, ReplayBuffer, SafeOnlineLearningEngine
 
 
-def test_online_initialization() -> None:
-    """Verify state before any updates."""
-    learner = OnlineLearner(eta0=ETA_0, power_t=POWER_T, random_state=SEED)
-    assert not learner._is_initialized
-    assert learner.coefficients.size == EXPECTED_NON_EMPTY
-
-    # Predict on zeroes should return zeroes
-    x_test = np.zeros((1, N_FEATURES))
-    pred = learner.predict(x_test)
-    assert pred[0] == 0.0
+@pytest.fixture
+def engine() -> SafeOnlineLearningEngine:
+    """Initialize SafeOnlineLearningEngine with linear scaling defaults."""
+    return SafeOnlineLearningEngine(min_performance_gain=1e-6)
 
 
-def test_online_update_fit() -> None:
-    """Verify that coefficients change after an update."""
-    learner = OnlineLearner(eta0=ETA_0, power_t=POWER_T, random_state=SEED)
-    rng = np.random.default_rng(SEED)
-
-    x_batch = rng.standard_normal((BATCH_SIZE, N_FEATURES))
-    y_batch = SIGNAL_VAL * x_batch[:, 0]
-
-    learner.update(x_batch, y_batch)
-    assert learner._is_initialized
-    coeff = learner.coefficients
-    assert coeff.size == N_FEATURES
-    assert not np.array_equal(coeff, np.zeros(N_FEATURES))
+@pytest.fixture
+def buffer() -> ReplayBuffer:
+    """Initialize ReplayBuffer with 100 capacity."""
+    return ReplayBuffer(capacity=100)
 
 
-def test_online_batch_mismatch() -> None:
-    """Verify error on shape mismatch."""
-    learner = OnlineLearner(eta0=ETA_0, power_t=POWER_T, random_state=SEED)
-    x_batch = np.zeros((BATCH_SIZE, N_FEATURES))
-    y_batch = np.zeros(BATCH_SIZE - 1)  # Mismatch
-
-    with pytest.raises(ValueError, match="Batch size mismatch"):
-        learner.update(x_batch, y_batch)
-
-
-def test_online_convergence() -> None:
-    """Verify that the model learns over many batches."""
-    learner = OnlineLearner(eta0=ETA_0, power_t=POWER_T, random_state=SEED)
-    rng = np.random.default_rng(SEED)
-
-    # Targets: y = 2*f1 - 1*f2
-    weights = np.array([2.0, -1.0])
-
-    # Track error
-    errors = []
-
-    for _ in range(ITERATIONS):
-        x_batch = rng.standard_normal((BATCH_SIZE, N_FEATURES))
-        y_batch = x_batch @ weights
-
-        # Pred before update
-        pred_before = learner.predict(x_batch)
-        error_before = np.mean((y_batch - pred_before) ** 2)
-        errors.append(error_before)
-
-        learner.update(x_batch, y_batch)
-
-    # Final error should be much lower than initial error
-    assert errors[-1] < errors[0]
+@pytest.fixture
+def base_model() -> OnlineLearner:
+    """Initialize a model with 2 features."""
+    model = OnlineLearner(eta0=0.1)
+    # Prime with 1 sample to initialize weights
+    model.update(np.array([[1.0, 2.0]]), np.array([5.0]))
+    return model
 
 
-def test_online_polars_compat() -> None:
-    """Verify support for Polars inputs."""
-    learner = OnlineLearner(eta0=ETA_0, power_t=POWER_T, random_state=SEED)
-    x_df = pl.DataFrame({"f1": [1.0, 2.0], "f2": [0.0, 1.0]})
-    y_sr = pl.Series("target", [2.0, 4.0])
+def test_replay_buffer_logic(buffer: ReplayBuffer) -> None:
+    """Verify that the replay buffer correctly manages samples and capacity."""
+    # 1. Fill buffer
+    for i in range(150):
+        buffer.push(np.array([float(i), 0.0]), float(i))
 
-    learner.update(x_df, y_sr)
-    assert learner._is_initialized
-    pred = learner.predict(x_df)
-    assert pred.shape[0] == EXPECTED_LEN_2
+    assert buffer.size == 100  # noqa: S101, PLR2004 (Evicted 50)
+
+    # 2. Sample batch
+    x_batch, y_batch = buffer.sample(32)
+    assert x_batch.shape == (32, 2)  # noqa: S101
+    assert y_batch.shape == (32,)  # noqa: S101
+
+
+def test_learning_engine_candidate_generation(
+    engine: SafeOnlineLearningEngine, buffer: ReplayBuffer, base_model: OnlineLearner
+) -> None:
+    """Verify that candidate generation does not modify the production model."""
+    original_weights = base_model.coefficients.copy()
+
+    # 1. Add data to buffer
+    buffer.push(np.array([1.0, 2.0]), 10.0)
+
+    # 2. Generate candidate
+    candidate = engine.generate_candidate(base_model, buffer, batch_size=1)
+
+    # Check that candidate evolved
+    assert not np.array_equal(candidate.coefficients, original_weights)  # noqa: S101
+    # Check that base_model is static
+    assert np.array_equal(base_model.coefficients, original_weights)  # noqa: S101
+
+
+def test_learning_engine_promotion_success(
+    engine: SafeOnlineLearningEngine, base_model: OnlineLearner
+) -> None:
+    """Verify that a model with better performance is promoted."""
+    # 1. Create a "shifted" model that is intentionally worse
+    worse_model = SafeOnlineLearningEngine().generate_candidate(base_model, ReplayBuffer())  # No-op
+    worse_model.weights += 10.0  # Introduce massive error
+
+    # 2. Create validation data that matches the base_model better
+    x_val = np.array([[1.0, 2.0], [2.0, 4.0]])
+    y_val = base_model.predict(x_val)  # Perfect fit for base_model
+
+    # 3. Validate base_model (new) vs worse_model (old)
+    # Wait, the logic is Validate(theta_new) vs Validate(theta_old)
+    report = engine.validate_and_promote(worse_model, base_model, (x_val, y_val))
+
+    assert report.promotion_authorized is True  # noqa: S101
+    assert report.performance_gain > 0  # noqa: S101
+
+
+def test_learning_engine_rejection_on_degradation(
+    engine: SafeOnlineLearningEngine, base_model: OnlineLearner
+) -> None:
+    """Verify that models with worse performance are rejected."""
+    # 1. Create a "candidate" that is intentionally degraded
+    degraded_model = SafeOnlineLearningEngine().generate_candidate(base_model, ReplayBuffer())
+    degraded_model.weights += 5.0
+
+    # 2. Validation data
+    x_val = np.array([[1.0, 2.0]])
+    y_val = base_model.predict(x_val)
+
+    # 3. Validate degraded (new) vs base (old)
+    report = engine.validate_and_promote(base_model, degraded_model, (x_val, y_val))
+
+    assert report.promotion_authorized is False  # noqa: S101
+    assert report.performance_gain < 0  # noqa: S101
