@@ -1,9 +1,9 @@
-# QTRADER — SYSTEM GAP ANALYSIS v2.0
+# QTRADER — SYSTEM GAP ANALYSIS v5.0
 
-> **Audit Date**: 2026-03-27  
-> **Benchmark**: [standash-document.md](standash-document.md) (Tier-1 Institutional Master Specification)  
-> **Scope**: Full codebase deep-scan of `qtrader/` (404 Python files, 30+ modules)  
-> **Methodology**: Static import analysis, stub detection, duplication scan, structural integrity check
+> **Audit Date**: 2026-03-27
+> **Benchmark**: [standash-document.md](standash-document.md) (Tier-1 Institutional Master Specification)
+> **Scope**: Final Architectural Reckoning (404 Python files)
+> **Methodology**: Static integrity, numeric precision, concurrency safety, memory/leak analysis, performance de-vectorization check
 
 ---
 
@@ -14,15 +14,21 @@
 |  Total Python files  |  **404**  |  Sprawling  |
 |  Non-init modules  |  **362**  |  Over-engineered  |
 |  Test files  |  **210**  |  58% coverage ratio  |
-|  **Integrated Core Flow**  |  **~55%**  |  🔴 CRITICAL GAP  |
-|  **Orphaned modules** (never imported)  |  **~80**  |  🔴 CRITICAL  |
-|  **Duplicate module clusters**  |  **18**  |  🔴 CRITICAL  |
-|  Missing `__init__.py` packages  |  **11**  |  🔴 CRITICAL  |
-|  `asyncio.sleep` / `time.sleep` violations  |  **13**  |  🟡 WARNING  |
-|  **Determinism violations** (unseeded random)  |  **52**  |  🔴 CRITICAL  |
-|  **Security integration gaps** (unsigned orders)  |  **106**  |  🔴 CRITICAL  |
-|  **Stateful Replication** (failover)  |  **Missing**  |  🔴 CRITICAL  |
-|  **Capital Preservation (War Mode)**  |  **Missing**  |  🔴 CRITICAL  |
+| **Integrated Core Flow** | **~55%** | 🔴 CRITICAL GAP |
+| **Concurrency Safety** | **None** | 🔴 2 locks in 404 files |
+| **De-vectorization** | **Risky** | 🔴 .to_list() in core path |
+| **Latency Jitter** | **High** | 🔴 111 execution loggers |
+| **Numeric Precision** | **Risky** | 🔴 229 float instances |
+| **Deterministic Entropy** | **Failing** | 🔴 52 unseeded randoms |
+| **Security Handling** | **Unsigned** | 🔴 106 unsigned calls |
+| **Memory Governance** | **At-Risk** | 🔴 Unbounded lists found |
+| **Error Handling** | **Unsafe** | 🔴 32 silent exceptions |
+| **Hardcoding Discipline** | **Magic** | 🔴 Hardcoded strategy weights |
+| **Stateful Resilience** | **Zero** | 🔴 No state sync/failover |
+| **Market Safety**| **None** | 🔴 No War Mode (Preservation) |
+| **Orphaned modules** | **~80** | 🔴 CRITICAL |
+| **Duplicate clusters** | **18** | 🔴 CRITICAL |
+| **Missing init files** | **11** | 🔴 CRITICAL |
 |  **PTP/Clock Drift Control** (<1ms alert)  |  **Lacking**  |  🟡 WARNING  |
 |  **ML Explainability** (SHAP/LIME)  |  **Missing**  |  🟡 WARNING  |
 |  Stub methods (return `[]`/`{}`/`None`)  |  **~60**  |  🟡 WARNING  |
@@ -346,48 +352,98 @@ Beyond file structure, we audited the codebase against the **Core Principles** d
 
 ### 5.1 Determinism First (§2.1) — 🔴 FAILED
 
-* **Finding**: **52 instances** of unseeded randomness (`random.random()`, `random.choice()`, `np.random.normal()`) found in critical paths.
-* **High Risk Area**: `meta/genetic.py` and `meta/strategy_generator.py` use bare randomness for alpha generation. Two Sigma/Renaissance standards require fixed seeds for all research to ensure reproducibility.
-* **Impact**: Backtests may not be reproducible; production signals could diverge from research due to uncontrolled entropy.
+*   **Finding**: **52 instances** of unseeded randomness (`random.random()`, `random.choice()`, `np.random.normal()`) found in critical paths.
+*   **High Risk Area**: `meta/genetic.py` and `meta/strategy_generator.py` use bare randomness for alpha generation. Two Sigma/Renaissance standards require fixed seeds for all research to ensure reproducibility.
+*   **Impact**: Backtests may not be reproducible; production signals could diverge from research due to uncontrolled entropy.
 
 ### 5.2 Stateless Strategy Design (§2.5) — ✅ PASSED
 
-* **Finding**: Zero (0) instances of strategies holding local `self.positions` or `self.balance` in `qtrader/strategy/`.
-* **Impact**: Excellent adherence to Tier-1 standards. Strategies correctly depend on external state feeds, ensuring crash-recovery resilience.
+*   **Finding**: Zero (0) instances of strategies holding local `self.positions` or `self.balance` in `qtrader/strategy/`.
+*   **Impact**: Excellent adherence to Tier-1 standards. Strategies correctly depend on external state feeds, ensuring crash-recovery resilience.
 
 ### 5.3 Security Hardening (§5.3 / §263) — 🔴 FAILED
 
-* **Finding**: Zero (0) instances of `sign_order` or `sign_request` in the `execution/` layer.
-* **Impact**: Although a `security/` module exists, it is not wired into the order submission flow. Orders are sent without cryptographic signatures or institutional-grade verification.
+*   **Finding**: Zero (0) instances of `sign_order` or `sign_request` in the `execution/` layer.
+*   **Impact**: Although a `security/` module exists, it is not wired into the order submission flow. Orders are sent without cryptographic signatures or institutional-grade verification.
 
 ### 5.4 CPU Pinning & HFT Isolation (§4.10) — 🟡 PARTIAL
 
-* **Finding**: `psutil` is used for resource monitoring, but there is no logic for **Core Pinning** or **CPU Isolation** for the core execution/alpha threads.
-* **Impact**: System performance is subject to OS scheduling jitter (>10ms), violating the <1ms drift requirement.
+*   **Finding**: `psutil` is used for resource monitoring, but there is no logic for **Core Pinning** or **CPU Isolation** for the core execution/alpha threads.
+*   **Impact**: System performance is subject to OS scheduling jitter (>10ms), violating the <1ms drift requirement.
 
 ### 5.5 Stateful Replication & Failover (§252-253) — 🔴 FAILED
 
-* **Finding**: Zero (0) instances of `replication` or `state_sync` logic found for OMS/Redundancy.
-* **Impact**: The system cannot achieve the "< 5 seconds failover" target as there is no mechanism to sync order state between backup nodes.
+*   **Finding**: Zero (0) instances of `replication` or `state_sync` logic found for OMS/Redundancy.
+*   **Impact**: The system cannot achieve the "< 5 seconds failover" target as there is no mechanism to sync order state between backup nodes.
 
 ### 5.6 Capital Preservation Mode (War Mode) (§272-274) — 🔴 FAILED
 
-* **Finding**: Logic for `war_mode` or `capital_preservation` is completely missing from the `risk/` and `strategy/` layers.
-* **Impact**: In extreme market conditions, the system cannot autonomously transition to a "Reduced Exposure / Hedging-only" state.
+*   **Finding**: Logic for `war_mode` or `capital_preservation` is completely missing from the `risk/` and `strategy/` layers.
+*   **Impact**: In extreme market conditions, the system cannot autonomously transition to a "Reduced Exposure / Hedging-only" state.
 
 ### 5.7 Institutional Audit of Overrides (§309) — 🔴 FAILED
 
-* **Finding**: Zero (0) evidence that manual overrides from `security/override_system.py` are logged into the central `audit/audit_store.py`.
-* **Impact**: Lack of non-repudiation for human interventions.
+*   **Finding**: Zero (0) evidence that manual overrides from `security/override_system.py` are logged into the central `audit/audit_store.py`.
+*   **Impact**: Lack of non-repudiation for human interventions.
 
 ### 5.8 Explainability & Factor Attribution (§13) — 🔴 FAILED
-
-* **Finding**: No evidence of SHAP, LIME, or factor-based attribution in the `ml/` or `analytics/` layers.
-* **Impact**: Violates "Institutional Transparency" (Explainability) standards.
+*   **Finding**: No evidence of SHAP, LIME, or factor-based attribution in the `ml/` or `analytics/` layers.
+*   **Impact**: Violates "Institutional Transparency" (Explainability) standards.
 
 ---
 
-## 6. STUB METHOD ANALYSIS
+## 6. ULTRA-DEEP CODE DISCIPLINE AUDIT
+
+### 6.1 Numeric Precision Audit (§2.1 / §4.1) — 🔴 FAILED
+*   **Finding**: **229 instances** of `float` usage in precision-sensitive financial logic (`oms/`, `portfolio/`, `analytics/`).
+*   **Evidence**:
+    - `oms/interface.py:50,60`: `get_cash()` and `get_positions()` return `float`.
+    - `oms/event_store.py:77,99`: Explicitly casting prices with `float(price)`.
+*   **Impact**: Cumulative rounding errors in PnL, position sizing, and NAV. Institutional systems require `Decimal`.
+
+### 6.2 Memory Governance Audit (§5.1) — 🔴 FAILED
+*   **Finding**: Core components use unbounded lists without windowing or persistence-cleanup mechanics.
+*   **Evidence**:
+    - `core/state_store.py:134`: `self._state.equity_curve.append(...)` grows indefinitely.
+    - `core/event_bus.py:70`: `self._worker_tasks.append(task)` never removes tasks.
+*   **Impact**: Production processes will eventually crash due to Out-of-Memory (OOM) after weeks/months of uptime.
+
+### 6.3 Silent Failure Patterns (§2.2) — 🔴 FAILED
+*   **Finding**: **32 instances** of non-specific `except Exception:` blocks without subsequent `raise` or `RISK_HALT`.
+*   **Evidence**:
+    - `core/event_store.py:167,200`: Critical data read failures are caught and logged but not bubbled.
+    - `security/jwt_auth.py:89`: Auth failures caught globally without specific handling.
+*   **Impact**: "Silent Death" scenarios where the system continues running in a corrupted or orphaned state.
+
+### 6.4 Hardcoding & Magic Numbers (§2.3 / §4.15) — 🔴 FAILED
+*   **Finding**: Strategy and execution parameters are hardcoded as literals instead of being pulled from `core/config.py`.
+*   **Evidence**:
+    - `strategy/ensemble_strategy.py:71,72`: Hardcoded weights `(0.4, 0.3, 0.2, 0.1)` and `decay_penalty=0.5`.
+    - `execution/benchmark_orderbook.py:63,65`: Uses literal `0.99`, `1.01`, `0.05`.
+*   **Impact**: Configuration changes require code deployment, breaking the "Dynamic Configuration" protocol.
+
+### 6.5 Architectural Circularity Audit — 🟡 WARNING
+*   **Finding**: Identified circular dependency patterns between the `ml/` and `ml/pytorch_models` packages.
+*   **Evidence**: `ml/__init__.py:17` imports from `ml/pytorch_models`.
+*   **Impact**: Unpredictable import side-effects and broken package boundaries.
+
+### 6.6 Concurrency Safety Audit (§2.5 / §37) — 🔴 FAILED
+*   **Finding**: Extremely low usage of synchronization primitives (**2 instances of `Lock`** in 404 files).
+*   **Evidence**: `core/event_bus.py` accesses shared state without a lock during worker task management.
+*   **Impact**: Non-deterministic execution order and potential silent data corruption under high-event-burst HFT scenarios.
+
+### 6.7 De-vectorization Performance Bottlenecks (§2.1 / §4.1) — 🔴 FAILED
+*   **Finding**: Conversion from Polars C-buffers back to Python managed heap mid-calculation.
+*   **Evidence**: **3 instances** of `.to_list()` or `.to_dicts()` in the `execution/` and `alpha/` layers. 
+*   **Impact**: Breaks the "Zero Loop" requirement, introducing latency spikes and garbage collection pressure in the critical path.
+
+### 6.8 Execution Latency Jitter Audit (§2.5 / §5.1) — 🟡 WARNING
+*   **Finding**: **111 logging points** (`info`/`debug`) found within the `execution/` sub-millisecond pipeline.
+*   **Impact**: Standard Python logging is blocking; 111 points will cause unpredictable latency jitters in high-load scenarios.
+
+---
+
+## 7. STUB METHOD ANALYSIS
 
 ~60 methods return hardcoded empty values (`[]`, `{}`, `None`) as fallback paths. While some are valid guard clauses, many indicate **incomplete implementations**.
 
