@@ -1,0 +1,140 @@
+{
+  "audit_id": "PH-1-AUDIT-20260328T060000Z",
+  "audit_timestamp": "2026-03-28T06:03:47Z",
+  "system_name": "qtrader",
+  "phase": "PHASE_-1_PRE_ALIGNMENT",
+
+  "system_ready": false,
+  "overall_score": 0.4567,
+
+  "dimensions": {
+    "determinism": {
+      "score": 0.0518,
+      "total_entropy_sources": 251,
+      "controlled": 13,
+      "uncontrolled": 238,
+      "status": "NON_DETERMINISTIC",
+      "infrastructure_present": true,
+      "infrastructure_integrated": false,
+      "details": {
+        "seed_manager": "IMPLEMENTED (qtrader/core/seed_manager.py)",
+        "seed_manager_imported_by_modules": 0,
+        "replay_validator": "IMPLEMENTED (qtrader/verification/replay_validator.py)",
+        "unseeded_random_calls": 20,
+        "critical_modules_affected": ["certification", "compliance", "execution", "hft", "portfolio", "risk"],
+        "random_calls_in_meta": 14,
+        "random_calls_in_backtest": 1,
+        "random_calls_in_ml": 1
+      }
+    },
+    "failure_transparency": {
+      "score": 0.3830,
+      "silent_failures": 128,
+      "critical_silent_failures": 109,
+      "total_detections": 334,
+      "status": "UNSAFE",
+      "infrastructure_present": true,
+      "infrastructure_integrated": false,
+      "details": {
+        "fail_fast_engine": "IMPLEMENTED (qtrader/core/fail_fast_engine.py)",
+        "fail_fast_importers": 1,
+        "error_taxonomy": "IMPLEMENTED (qtrader/core/errors.py)",
+        "error_bus": "IMPLEMENTED (qtrader/core/error_bus.py)",
+        "error_system_importers": 2,
+        "broad_exception_handlers": 33,
+        "bare_except_statements": 0,
+        "pass_only_handlers": 62,
+        "modules_with_silent_failures": ["core", "execution", "governance", "hft", "oms", "risk"]
+      }
+    },
+    "config_authority": {
+      "score": 0.6551,
+      "hardcoded_values": 1881,
+      "critical_hardcodes": 649,
+      "status": "CONFIG_VIOLATION",
+      "infrastructure_present": true,
+      "infrastructure_integrated": true,
+      "details": {
+        "config_enforcer": "IMPLEMENTED (qtrader/core/config_enforcer.py)",
+        "config_manager": "IMPLEMENTED (qtrader/core/config_manager.py)",
+        "config_loader": "IMPLEMENTED (qtrader/core/config_loader.py)",
+        "config_system_importers": 18,
+        "modules_with_violations": ["certification", "compliance", "core", "execution", "governance", "hft", "meta", "oms", "portfolio", "risk"],
+        "config_files_present": 15,
+        "modules_loading_configs_directly": 15
+      }
+    },
+    "numeric_precision": {
+      "score": 0.6332,
+      "float_usages": 2140,
+      "high_risk_floats": 785,
+      "status": "PRECISION_RISK",
+      "infrastructure_present": true,
+      "infrastructure_integrated": false,
+      "details": {
+        "decimal_adapter": "IMPLEMENTED (qtrader/core/decimal_adapter.py)",
+        "decimal_adapter_importers": 1,
+        "precision_validator": "IMPLEMENTED (qtrader/core/precision_validator.py)",
+        "precision_config": "IMPLEMENTED (configs/precision_config.yaml)",
+        "decimal_using_modules": 20,
+        "float_cast_count": 670,
+        "modules_with_precision_risk": ["certification", "compliance", "execution", "governance", "meta", "oms", "portfolio", "risk"]
+      }
+    },
+    "async_discipline": {
+      "score": 0.8046,
+      "blocking_calls": 87,
+      "critical_blocking": 17,
+      "status": "LATENCY_VIOLATION",
+      "infrastructure_present": true,
+      "infrastructure_integrated": false,
+      "details": {
+        "async_adapter": "IMPLEMENTED (qtrader/core/async_adapter.py)",
+        "async_adapter_importers": 0,
+        "latency_monitor": "IMPLEMENTED (qtrader/core/latency_monitor.py)",
+        "latency_budget": "IMPLEMENTED (configs/latency_budget.yaml)",
+        "active_sleep_calls": 7,
+        "time_sleep_in_production": 2,
+        "asyncio_sleep_in_production": 5,
+        "modules_with_blocking": ["execution", "hft", "oms", "data"]
+      }
+    },
+    "observability": {
+      "score": 0.2127,
+      "infrastructure_present": true,
+      "infrastructure_integrated": false,
+      "details": {
+        "trace_manager": "IMPLEMENTED (qtrader/core/trace_manager.py)",
+        "trace_references": 314,
+        "structured_logger": "IMPLEMENTED (qtrader/core/logger.py)",
+        "structured_logger_importers": 37,
+        "loguru_adoption_files": 42,
+        "total_py_files": 427,
+        "loguru_coverage_pct": 9.84,
+        "print_statements": 3,
+        "logging_schema": "IMPLEMENTED (configs/logging_schema.json)",
+        "metrics_registry": "IMPLEMENTED (configs/metrics_registry.yaml)",
+        "log_event_callers": 37
+      }
+    }
+  },
+
+  "codebase_stats": {
+    "total_python_files": 427,
+    "total_lines": 56890,
+    "test_files": 232,
+    "modules": 34,
+    "phase_minus_1_files_added": 86,
+    "lines_modified": 11519
+  },
+
+  "input_reports_loaded": {
+    "entropy_report": "qtrader/audit/entropy_report.json",
+    "exception_report": "qtrader/audit/exception_report.json",
+    "hardcode_report": "qtrader/audit/hardcode_report.json",
+    "float_report": "qtrader/audit/float_report.json",
+    "blocking_report": "qtrader/audit/blocking_report.json",
+    "logging_schema": "configs/logging_schema.json",
+    "metrics_registry": "configs/metrics_registry.yaml"
+  }
+}
