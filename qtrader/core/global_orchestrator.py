@@ -135,13 +135,22 @@ class GlobalOrchestrator:
         }
 
     async def start(self) -> None:
-        """Start all registered orchestrators with centralized error management."""
+        """Start all registered orchestrators with centralized error management and config enforcement."""
         if self._kill_switch_active:
             logger.error("Cannot start: Global kill switch is active")
             return
             
+        # 1. Configuration Governance Sweep (Zero-Tolerance)
+        from qtrader.core.config_enforcer import ConfigEnforcer
+        enforcer = ConfigEnforcer.get_enforcer()
         try:
-            # Run all orchestrators concurrently
+            enforcer.enforce_compliance(strict=True)
+        except Exception as e:
+            logger.error(f"[STARTUP] Configuration Enforcement Blocked Startup: {e}")
+            return # Block startup sequence
+            
+        try:
+            # 2. Run all orchestrators concurrently
             await asyncio.gather(*[orch.run() for orch in self._orchestrators.values()])
         except Exception as e:
             await self.error_bus.capture_exception(

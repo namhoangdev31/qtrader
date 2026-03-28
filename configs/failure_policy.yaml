@@ -1,0 +1,29 @@
+# QTrader Institutional Failure Policy
+
+# SEVERITY DEFINITIONS:
+#   1: Recoverable (Retry)
+#   2: Critical (Isolate)
+#   3: Fatal (Halt)
+
+# GENERAL POLICIES
+max_retries: 3
+escalation_window_sec: 60
+halt_on_non_standard_error: true
+audit_trail_enabled: true
+
+# MODULE-SPECIFIC POLICIES
+execution:
+  severity_default: 2
+  halt_on_any_drift: true
+  
+risk:
+  severity_default: 3
+  halt_on_any_breach: true
+  
+data:
+  severity_default: 1
+  max_retries: 5
+  
+core:
+  severity_default: 3
+  halt_on_any_inconsistency: true

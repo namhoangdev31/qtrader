@@ -1,0 +1,16 @@
+{
+  "float_usages": 2140,
+  "high_risk": 785,
+  "modules": [
+    "certification",
+    "compliance",
+    "execution",
+    "governance",
+    "meta",
+    "oms",
+    "portfolio",
+    "risk"
+  ],
+  "status": "PRECISION_RISK",
+  "total_detections": 2140
+}

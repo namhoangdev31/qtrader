@@ -1,0 +1,14 @@
+{
+  "silent_failures": 128,
+  "critical": 109,
+  "modules": [
+    "core",
+    "execution",
+    "governance",
+    "hft",
+    "oms",
+    "risk"
+  ],
+  "status": "UNSAFE",
+  "total_detections": 334
+}

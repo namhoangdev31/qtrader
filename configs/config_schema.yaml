@@ -1,0 +1,29 @@
+version: "1.0.0"
+
+# Risk Configuration (Enforced by RiskEngine)
+risk:
+  max_drawdown: 0.15          # Maximum portfolio-level drawdown threshold (float: 0.0 - 1.0)
+  max_leverage: 5.0           # Maximum total leverage (float: 1.0+)
+  var_limit: 0.02             # Value-at-Risk limit (float: 0.0 - 1.0)
+  kill_switch_enabled: true  # Master safety toggle
+
+# Execution Configuration (Enforced by ExecutionEngine)
+execution:
+  slippage_limit_bps: 20      # Max allowed slippage in basis points (int)
+  latency_budget_ms: 100      # Soft limit for order routing (int)
+  retry_policy: "exponential" # Retry strategy: ["exponential", "linear", "none"]
+  simulated_fill: false       # Use simulator vs real exchange
+
+# Strategy Configuration (Domain parameters)
+strategy:
+  min_signal_strength: 0.5    # Minimum alpha strength to trigger trade (float: 0.0 - 1.0)
+  lookback_window: 20         # Default window for rolling indicators (int)
+  feature_flags:
+    hft_optimizations: false  # Toggle low-latency paths
+    risk_check_pre_trade: true # Mandatory pre-trade validation
+
+# Infrastructure Configuration (Operational settings)
+infrastructure:
+  timeout_ms: 5000            # Global service timeout (int)
+  concurrency_limit: 10       # Max concurrent async tasks (int)
+  buffer_size: 1024           # Internal queue capacity (int)

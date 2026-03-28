@@ -639,6 +639,8 @@ class MetaDecisionPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+from qtrader.core.trace_manager import TraceManager
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -647,7 +649,7 @@ class BaseEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     event_id: UUID = Field(default_factory=uuid4, description="Unique event identifier for idempotency")
-    trace_id: UUID = Field(description="Correlation ID propagated across the pipeline")
+    trace_id: UUID = Field(default_factory=TraceManager.ensure_trace, description="Correlation ID propagated across the pipeline")
     event_type: EventType = Field(description="The type of the event")
     version: int = Field(default=1, description="Schema version for backward compatibility")
     timestamp: int = Field(

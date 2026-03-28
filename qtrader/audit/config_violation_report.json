@@ -1,0 +1,19 @@
+{
+  "status": "ENFORCED",
+  "compliance": "0.00%",
+  "violations": 1886,
+  "critical": 654,
+  "modules_affected": [
+    "certification",
+    "compliance",
+    "core",
+    "execution",
+    "governance",
+    "hft",
+    "meta",
+    "oms",
+    "portfolio",
+    "risk"
+  ],
+  "timestamp": "63426"
+}
