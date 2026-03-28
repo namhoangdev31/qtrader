@@ -1,47 +1,58 @@
 import json
-import logging
-import io
-import sys
-from qtrader.core.logger import StructuredLogger
+import pytest
+from unittest.mock import MagicMock, patch
+from qtrader.core.logger import QTraderLogger
 
-def test_structured_logger_json_output():
-    # Redirect stdout to capture logs
-    log_capture = io.StringIO()
-    
-    # Create logger with custom StreamHandler
-    logger_instance = StructuredLogger(name="test_logger", level=logging.INFO)
-    logger_instance.logger.handlers.clear()
-    handler = logging.StreamHandler(log_capture)
-    handler.setFormatter(StructuredLogger.JSONFormatter())
-    logger_instance.logger.addHandler(handler)
-    
-    # Log a message
-    test_msg = "Test message"
-    logger_instance.info(test_msg, extra_field="extra_value")
-    
-    # Capture output
-    output = log_capture.getvalue().strip()
-    log_data = json.loads(output)
-    
-    assert log_data["message"] == test_msg
-    assert log_data["level"] == "INFO"
-    assert log_data["logger"] == "test_logger"
-    assert log_data["extra_field"] == "extra_value"
-    assert "timestamp" in log_data
-    assert "correlation_id" in log_data
+@pytest.fixture
+def mock_trace():
+    with patch("qtrader.core.logger.TraceManager.get_current_trace") as m:
+        m.return_value = "TEST-TRACE-UUID" # Simplified for test
+        yield m
 
-def test_structured_logger_levels():
-    log_capture = io.StringIO()
-    logger_instance = StructuredLogger(name="test_levels", level=logging.DEBUG)
-    logger_instance.logger.handlers.clear()
-    handler = logging.StreamHandler(log_capture)
-    handler.setFormatter(StructuredLogger.JSONFormatter())
-    logger_instance.logger.addHandler(handler)
+def test_logger_json_structure(mock_trace, capsys):
+    qlogger = QTraderLogger()
     
-    logger_instance.debug("debug message")
-    logger_instance.error("error message")
+    # 1. Log a successesful action
+    qlogger.log_event(
+        module="execution",
+        action="order_submit",
+        status="SUCCESS",
+        message="Order submitted to exchange",
+        latency_ms=12.5,
+        metadata={"order_id": "123", "symbol": "BTC"}
+    )
     
-    output = log_capture.getvalue().strip().split('\n')
-    assert len(output) == 2
-    assert json.loads(output[0])["level"] == "DEBUG"
-    assert json.loads(output[1])["level"] == "ERROR"
+    # 2. Capture output from stdout (using loguru's behavior)
+    captured = capsys.readouterr()
+    log_content = captured.out.strip().split("\n")[-1] # Take the JSON line
+    
+    # Loguru's stdout might have some formatting, but our log_event sends a JSON string
+    # We must ensure that our JSON logic is correct.
+    # Note: Using serialize=True in loguru adds its own wrapper, 
+    # but we are sending a json.dumps string to logger.info.
+    parsed = json.loads(log_content)
+    
+    assert parsed["module"] == "execution"
+    assert parsed["action"] == "order_submit"
+    assert parsed["trace_id"] == "TEST-TRACE-UUID"
+    assert parsed["latency_ms"] == 12.5
+    assert parsed["metadata"]["order_id"] == "123"
+
+def test_logger_failure_entry(mock_trace, capsys):
+    qlogger = QTraderLogger()
+    
+    qlogger.log_event(
+        module="oms",
+        action="update_position",
+        status="FAILURE",
+        error="Position Mismatch Error",
+        level="ERROR"
+    )
+    
+    captured = capsys.readouterr()
+    log_content = captured.out.strip().split("\n")[-1]
+    parsed = json.loads(log_content)
+    
+    assert parsed["status"] == "FAILURE"
+    assert parsed["error"] == "Position Mismatch Error"
+    assert parsed["level"] == "ERROR"

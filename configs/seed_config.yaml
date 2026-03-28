@@ -1,0 +1,26 @@
+# seed_config.yaml
+# Configuration for the Global Entropy Control System
+
+seeding:
+  # Base default seed for all modules if strategy_id is missing.
+  default_anchor: 1337
+  # Enable mandatory fail-fast if no seed is provided in live environment.
+  enforce_live_seeding: true
+  # Log seeding successes to the global audit log.
+  log_seeding: true
+  # Modules to ignore during seeding (if any).
+  ignored_modules: []
+
+  # Sub-seed derivation parameters
+  derivation:
+    hash_algorithm: "sha256"
+    bit_depth: 32  # 32 (standard) or 64 (high entropy)
+    salt_offset: 1024
+
+  # Library-specific flags
+  libraries:
+    random: true
+    numpy: true
+    torch: true
+    cudnn_deterministic: true
+    cudnn_benchmark: false

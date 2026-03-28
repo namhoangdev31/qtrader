@@ -1,0 +1,47 @@
+version: "1.0.0"
+
+# QTrader Alert Rules Registry
+# Threshold definitions for active system monitoring and protection.
+
+rules:
+  # Performance Protection
+  critical_latency_p99:
+    metric: execution_latency_ms
+    stat: p99
+    threshold: 80.0
+    severity: CRITICAL
+    action: HALT_SYSTEM # Trigger FailFastEngine
+
+  # Reliability Protection
+  high_error_rate:
+    metric: error_rate
+    stat: value # Gauge
+    threshold: 5.0 # Percent
+    severity: CRITICAL
+    action: ALERT_AND_ESC
+
+  # Risk Protection
+  drawdown_breach:
+    metric: max_drawdown
+    stat: value
+    threshold: 10000.0 # Standard USD drawdown limit
+    severity: CRITICAL
+    action: AUTO_LIQUIDATE # (Planned) trigger risk engine
+
+  excessive_slippage:
+    metric: slippage_bps
+    stat: p95
+    threshold: 50.0
+    severity: WARNING
+    action: ALERT_HUMAN
+
+# Notification Channels Configuration (Mock)
+channels:
+  telegram:
+    enabled: true
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    token: "${TELEGRAM_TOKEN}"
+  
+  email:
+    enabled: true
+    recipient: "${ALERT_EMAIL}"

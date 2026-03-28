@@ -1,0 +1,28 @@
+version: "1.0.0"
+
+# Precision Boundaries per Domain
+# If a value exceeds these decimals during cross-domain boundary traversal, 
+# it MUST be explicitly quantized using math_authority.quantize().
+
+domains:
+  # Internal Financial Pipeline (High-Fidelity)
+  pnl_engine: 18         # Compounding return resolution
+  nav_engine: 12         # Total system equity resolution
+  risk_engine: 12        # Operational limit checking
+
+  # Trading & Microstructure
+  oms:
+    price: 8             # Standard exchange price precision
+    quantity: 6          # Standard exchange quantity precision
+  
+  # Settlement & Reporting (Final)
+  settlement:
+    cash: 2              # Fiat settlement precision (USD)
+    fees: 10             # Granular transaction fee attribution
+    notional: 2          # Reporting Notional Exposure
+
+# Enforcement Global Constraints
+rules:
+  allow_implicit_rounding: false   # HARD FAIL if precision mismatch detected
+  fail_on_precision_mismatch: true # Error on boundary violation
+  enforce_explicit_quantization: true

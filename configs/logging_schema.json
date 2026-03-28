@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QTrader Structured Logging Schema",
+  "description": "Enforces fields for audit-compliant, traceable trading events.",
+  "type": "object",
+  "required": [
+    "timestamp",
+    "trace_id",
+    "module",
+    "action",
+    "status"
+  ],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp"
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Unique lifecycle identifier (from TraceManager)"
+    },
+    "module": {
+      "type": "string",
+      "description": "System module (e.g., execution, alpha, risk)"
+    },
+    "action": {
+      "type": "string",
+      "description": "Specific operation (e.g., order_submit, signal_generate)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "FAILURE",
+        "WARNING",
+        "CRITICAL",
+        "PENDING",
+        "RETRY"
+      ]
+    },
+    "latency_ms": {
+      "type": "number",
+      "description": "Execution time in milliseconds"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "INFO",
+        "DEBUG",
+        "ERROR",
+        "SUCCESS",
+        "WARNING",
+        "CRITICAL"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable summary"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Context-specific key-value pairs"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error traceback or detailed message if status=FAILURE"
+    }
+  }
+}

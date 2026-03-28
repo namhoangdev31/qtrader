@@ -1,0 +1,49 @@
+version: "1.0.0"
+
+# QTrader Metrics Registry
+# Authoritative definitions for performance, reliability, and risk indicators.
+
+metrics:
+  # Performance Indicators
+  execution_latency_ms:
+    type: summary
+    unit: ms
+    description: "End-to-end execution path transit time."
+  
+  throughput_tps:
+    type: counter
+    unit: ticks/sec
+    description: "Normalized market ticks processed per second."
+
+  # Reliability Indicators
+  failure_total:
+    type: counter
+    unit: count
+    description: "Total critical failures and halts."
+  
+  error_rate:
+    type: gauge
+    unit: percentage
+    description: "Percentage of non-blocking errors per 1000 events."
+
+  # Trading/Financial Indicators
+  max_drawdown:
+    type: gauge
+    unit: base_currency
+    description: "Current drawdown from peak equity."
+  
+  portfolio_volatility:
+    type: gauge
+    unit: pct
+    description: "Rolling realized portfolio volatility."
+
+  slippage_bps:
+    type: summary
+    unit: bps
+    description: "Realized vs expected price delta in basis points."
+
+# Telemetry Governance
+rules:
+  sampling_rate: 1.0           # 100% telemetry collection by default
+  flush_interval_sec: 10.0     # Periodic aggregation for external monitoring
+  alert_on_missing_metric: true

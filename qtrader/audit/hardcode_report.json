@@ -1,0 +1,18 @@
+{
+  "hardcoded_values": 1881,
+  "critical": 649,
+  "modules": [
+    "certification",
+    "compliance",
+    "core",
+    "execution",
+    "governance",
+    "hft",
+    "meta",
+    "oms",
+    "portfolio",
+    "risk"
+  ],
+  "status": "CONFIG_VIOLATION",
+  "total_detections": 1881
+}

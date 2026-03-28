@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TraceEvent",
+  "type": "object",
+  "required": ["trace_id", "timestamp", "module", "event_type", "payload"],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Immutable correlation ID for the entire lifecycle chain"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Microseconds since epoch"
+    },
+    "module": {
+      "type": "string",
+      "enum": ["MARKET", "FEATURE", "ALPHA", "STRATEGY", "RISK", "EXECUTION", "OMS"],
+      "description": "The system component emitting the trace"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Type of the underlying event being traced"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Subset of the event data relevant for the audit trail"
+    },
+    "latency_ms": {
+      "type": "number",
+      "description": "Time delta since the previous trace point in the same chain"
+    }
+  }
+}

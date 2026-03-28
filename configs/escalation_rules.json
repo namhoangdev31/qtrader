@@ -1,0 +1,26 @@
+{
+  "escalation_rules": [
+    {
+      "trigger": "RecoverableError",
+      "threshold": 3,
+      "window_sec": 60,
+      "target": "CriticalError",
+      "reason": "Max retries exceeded"
+    },
+    {
+      "trigger": "CriticalError",
+      "threshold": 10,
+      "window_sec": 300,
+      "target": "FatalError",
+      "reason": "System instability detected"
+    },
+    {
+      "trigger": "ValidationError",
+      "threshold": 50,
+      "window_sec": 3600,
+      "target": "FatalError",
+      "reason": "Systemic schema mismatch"
+    }
+  ],
+  "global_halt_on_none": true
+}
