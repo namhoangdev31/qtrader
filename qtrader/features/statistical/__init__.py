@@ -1,6 +1,6 @@
-"""qtrader.feature.features.statistical — Statistical transforms for signal processing."""
+"""qtrader.features.statistical — Statistical transforms for signal processing."""
 
-from qtrader.feature.features.statistical.transforms import (
+from qtrader.features.statistical.transforms import (
     cross_sectional_rank,
     cross_sectional_zscore,
     exponential_decay_ma,

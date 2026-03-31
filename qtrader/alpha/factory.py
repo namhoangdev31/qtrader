@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from qtrader.feature.alpha.models.gbdt_model import GBDTAlphaModel
-from qtrader.feature.features.interaction import InteractionGenerator
+from qtrader.alpha.models.gbdt_model import GBDTAlphaModel
+from qtrader.features.interaction import InteractionGenerator
 
 if TYPE_CHECKING:
     import polars as pl
 
-    from qtrader.feature.alpha.meta_selector import AlphaMetaSelector
-    from qtrader.feature.features.engine import FactorEngine
+    from qtrader.alpha.meta_selector import AlphaMetaSelector
+    from qtrader.features.engine import FactorEngine
     from qtrader.ml.registry import ModelRegistry
 
 

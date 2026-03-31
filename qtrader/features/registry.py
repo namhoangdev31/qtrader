@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 if TYPE_CHECKING:
-    from qtrader.feature.features.base import Feature
+    from qtrader.features.base import Feature
 
 __all__ = ["FeatureRegistry"]
 
-_LOG = logging.getLogger("qtrader.feature.features.registry")
+_LOG = logging.getLogger("qtrader.features.registry")
 
 # Default registry populated with all built-in factors
 _BUILT_IN: dict[str, type] = {}
@@ -26,7 +26,7 @@ class FeatureRegistry:
     """Central registry mapping feature names to Feature instances.
 
     Supports lazy instantiation and version tracking.
-    Pattern mirrors ``qtrader.feature.alpha.registry.AlphaRegistry``.
+    Pattern mirrors ``qtrader.alpha.registry.AlphaRegistry``.
 
     Example::
 
@@ -119,8 +119,8 @@ def build_default_registry() -> FeatureRegistry:
     Returns:
         Fully configured FeatureRegistry.
     """
-    from qtrader.feature.features.factors.lagged import LaggedReturn, ReturnVolatility
-    from qtrader.feature.features.factors.technical import (
+    from qtrader.features.factors.lagged import LaggedReturn, ReturnVolatility
+    from qtrader.features.factors.technical import (
         ATR,
         MACD,
         ROC,
@@ -128,7 +128,7 @@ def build_default_registry() -> FeatureRegistry:
         BollingerBands,
         MomentumReturn,
     )
-    from qtrader.feature.features.factors.volume import (
+    from qtrader.features.factors.volume import (
         OBV,
         VWAP,
         DollarVolume,
@@ -153,22 +153,22 @@ def build_default_registry() -> FeatureRegistry:
 
 def test_registry_get_raises_on_unknown() -> None:
     import pytest
-    from qtrader.feature.features.registry import FeatureRegistry
+    from qtrader.features.registry import FeatureRegistry
 
     reg = FeatureRegistry()
     with pytest.raises(KeyError):
         reg.get("nonexistent_feature")
 
 def test_build_default_registry_has_rsi() -> None:
-    from qtrader.feature.features.registry import build_default_registry
+    from qtrader.features.registry import build_default_registry
 
     reg = build_default_registry()
     assert "rsi_14" in reg.list_features()
 
 def test_registry_compute_all() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.technical import RSI
-    from qtrader.feature.features.registry import FeatureRegistry
+    from qtrader.features.factors.technical import RSI
+    from qtrader.features.registry import FeatureRegistry
 
     reg = FeatureRegistry()
     reg.register("rsi_14", RSI(14))

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 __all__ = ["FeatureStore"]
 
-_LOG = logging.getLogger("qtrader.feature.features.store")
+_LOG = logging.getLogger("qtrader.features.store")
 
 
 class FeatureStore:
@@ -257,7 +257,7 @@ class FeatureStore:
 def test_feature_store_parquet_roundtrip(tmp_path) -> None:
     import polars as pl
     from datetime import datetime
-    from qtrader.feature.features.store import FeatureStore
+    from qtrader.features.store import FeatureStore
 
     store = FeatureStore(base_path=str(tmp_path), use_duckdb=False)
     df = pl.DataFrame({
@@ -273,7 +273,7 @@ def test_feature_store_parquet_roundtrip(tmp_path) -> None:
 def test_feature_store_list_symbols(tmp_path) -> None:
     import polars as pl
     from datetime import datetime
-    from qtrader.feature.features.store import FeatureStore
+    from qtrader.features.store import FeatureStore
 
     store = FeatureStore(base_path=str(tmp_path), use_duckdb=False)
     df = pl.DataFrame({"timestamp": [datetime(2024, 1, 1)], "rsi_14": [50.0]})

@@ -209,7 +209,7 @@ def cross_sectional_zscore(
 
 def test_rolling_zscore_mean_approx_zero() -> None:
     import polars as pl
-    from qtrader.feature.features.statistical.transforms import rolling_zscore
+    from qtrader.features.statistical.transforms import rolling_zscore
 
     s = pl.Series([float(i) for i in range(100)])
     z = rolling_zscore(s, window=20).drop_nulls()
@@ -218,7 +218,7 @@ def test_rolling_zscore_mean_approx_zero() -> None:
 
 def test_information_coefficient_perfect() -> None:
     import polars as pl
-    from qtrader.feature.features.statistical.transforms import information_coefficient
+    from qtrader.features.statistical.transforms import information_coefficient
 
     signal = pl.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     realized = pl.Series([0.1, 0.2, 0.3, 0.4, 0.5])
@@ -227,7 +227,7 @@ def test_information_coefficient_perfect() -> None:
 
 def test_winsorize_clips_outliers() -> None:
     import polars as pl
-    from qtrader.feature.features.statistical.transforms import winsorize
+    from qtrader.features.statistical.transforms import winsorize
 
     s = pl.Series([1.0, 2.0, 3.0, 4.0, 1000.0])
     ws = winsorize(s, lower=0.0, upper=0.8)

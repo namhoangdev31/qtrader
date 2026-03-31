@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from qtrader.feature.features.base import BaseFeature
+from qtrader.features.base import BaseFeature
 
 __all__ = ["OBV", "VWAP", "DollarVolume", "ForceIndex", "VolumeRatio"]
 
@@ -180,7 +180,7 @@ class ForceIndex(BaseFeature):
 
 def test_obv_increases_on_up_days() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.volume import OBV
+    from qtrader.features.factors.volume import OBV
 
     df = pl.DataFrame({"close": [10.0, 11.0, 12.0], "volume": [100.0, 200.0, 150.0]})
     obv = OBV()
@@ -189,7 +189,7 @@ def test_obv_increases_on_up_days() -> None:
 
 def test_vwap_between_low_and_high() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.volume import VWAP
+    from qtrader.features.factors.volume import VWAP
 
     df = pl.DataFrame({
         "high": [12.0, 13.0, 14.0],
@@ -206,7 +206,7 @@ def test_vwap_between_low_and_high() -> None:
 
 def test_dollar_volume_equals_close_times_volume() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.volume import DollarVolume
+    from qtrader.features.factors.volume import DollarVolume
 
     df = pl.DataFrame({"close": [100.0, 200.0], "volume": [10.0, 20.0]})
     dv = DollarVolume()

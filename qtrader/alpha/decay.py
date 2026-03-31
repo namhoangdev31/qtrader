@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qtrader.feature.alpha.ic import SignalAnalyzer
+from qtrader.alpha.ic import SignalAnalyzer
 
 if TYPE_CHECKING:
     import polars as pl

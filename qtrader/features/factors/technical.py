@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from qtrader.feature.features.base import BaseFeature
+from qtrader.features.base import BaseFeature
 
 __all__ = ["ATR", "MACD", "ROC", "RSI", "BollingerBands", "MomentumReturn"]
 
@@ -254,7 +254,7 @@ class ROC(BaseFeature):
 
 def test_rsi_output_range() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.technical import RSI
+    from qtrader.features.factors.technical import RSI
 
     prices = [float(i) + (i % 3) * 0.5 for i in range(1, 40)]
     df = pl.DataFrame({"close": prices})
@@ -265,7 +265,7 @@ def test_rsi_output_range() -> None:
 
 def test_atr_non_negative() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.technical import ATR
+    from qtrader.features.factors.technical import ATR
 
     df = pl.DataFrame({
         "high": [10.0, 11.0, 12.0, 11.5, 13.0] * 5,
@@ -278,7 +278,7 @@ def test_atr_non_negative() -> None:
 
 def test_macd_columns() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.technical import MACD
+    from qtrader.features.factors.technical import MACD
 
     prices = [float(100 + i * 0.1 + (i % 5) * 0.3) for i in range(60)]
     df = pl.DataFrame({"close": prices})

@@ -26,6 +26,11 @@ class SeedManager:
     global_seed: int = 0
     _is_applied: bool = False
 
+    @property
+    def is_applied(self) -> bool:
+        """Returns True if the global seed has been successfully injected."""
+        return self._is_applied
+
     def __post_init__(self) -> None:
         """Initialize and compute the global entropy anchor."""
         self.global_seed = self._compute_global_seed()

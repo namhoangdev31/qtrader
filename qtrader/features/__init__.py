@@ -1,4 +1,4 @@
-"""qtrader.feature.features — Production Feature & Factor Engineering.
+"""qtrader.features — Production Feature & Factor Engineering.
 
 Exports the key public interfaces:
   - Feature, FeaturePipeline   (protocols)
@@ -10,11 +10,11 @@ Exports the key public interfaces:
   - build_default_registry     (convenience factory)
 """
 
-from qtrader.feature.features.base import BaseFeature, Feature, FeaturePipeline
-from qtrader.feature.features.engine import FactorEngine
-from qtrader.feature.features.neutralization import FactorNeutralizer
-from qtrader.feature.features.registry import FeatureRegistry, build_default_registry
-from qtrader.feature.features.store import FeatureStore
+from qtrader.features.base import BaseFeature, Feature, FeaturePipeline
+from qtrader.features.engine import FactorEngine
+from qtrader.features.neutralization import FactorNeutralizer
+from qtrader.features.registry import FeatureRegistry, build_default_registry
+from qtrader.features.store import FeatureStore
 
 __all__ = [
     "BaseFeature",

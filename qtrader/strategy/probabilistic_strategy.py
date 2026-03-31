@@ -10,6 +10,7 @@ import polars as pl
 
 from qtrader.core.types import SignalEvent, ValidatedFeatures
 from qtrader.strategy.base import BaseStrategy
+from qtrader.core.execution_guard import require_initialized
 
 _LOG = logging.getLogger("qtrader.strategy.probabilistic")
 
@@ -211,6 +212,7 @@ class ProbabilisticStrategy(BaseStrategy):
             },
         )
 
+    @require_initialized
     async def generate_signal(self, validated_features: ValidatedFeatures) -> SignalEvent:
         """
         Generate a trading signal from validated features.

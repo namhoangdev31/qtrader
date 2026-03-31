@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 if TYPE_CHECKING:
-    from qtrader.feature.features.base import Feature
-    from qtrader.feature.features.store import FeatureStore
+    from qtrader.features.base import Feature
+    from qtrader.features.store import FeatureStore
 
 __all__ = ["FactorEngine"]
 

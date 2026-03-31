@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from qtrader.feature.features.base import BaseFeature
+from qtrader.features.base import BaseFeature
 
 __all__ = ["AutoCorrelation", "LaggedReturn", "ReturnVolatility", "SkewFeature"]
 
@@ -152,7 +152,7 @@ class SkewFeature(BaseFeature):
 def test_lagged_return_matches_manual() -> None:
     import polars as pl
     import math
-    from qtrader.feature.features.factors.lagged import LaggedReturn
+    from qtrader.features.factors.lagged import LaggedReturn
 
     prices = [100.0, 110.0, 121.0, 133.1, 146.41]
     df = pl.DataFrame({"close": prices})
@@ -164,7 +164,7 @@ def test_lagged_return_matches_manual() -> None:
 
 def test_return_volatility_non_negative() -> None:
     import polars as pl
-    from qtrader.feature.features.factors.lagged import ReturnVolatility
+    from qtrader.features.factors.lagged import ReturnVolatility
 
     prices = [float(100 + i * 0.5 + (i % 4) * 0.2) for i in range(40)]
     df = pl.DataFrame({"close": prices})

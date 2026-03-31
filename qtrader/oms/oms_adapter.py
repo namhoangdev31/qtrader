@@ -11,6 +11,7 @@ from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
 from qtrader.execution.multi_exchange_adapter import MultiExchangeAdapter
 from qtrader.execution.smart_router import SmartOrderRouter
 from qtrader.oms.order_management_system import UnifiedOMS
+from qtrader.core.execution_guard import require_initialized
 
 
 class OMSAdapter(ABC):
@@ -20,6 +21,7 @@ class OMSAdapter(ABC):
         self.name = name
         self.logger = logger
 
+    @require_initialized
     @abstractmethod
     async def create_order(
         self, 
@@ -37,6 +39,7 @@ class OMSAdapter(ABC):
         """
         pass
 
+    @require_initialized
     @abstractmethod
     async def cancel_all_orders(self):
         """Cancel all open orders.
