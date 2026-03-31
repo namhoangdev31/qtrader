@@ -6,6 +6,9 @@ from qtrader.core.logger import logger
 from qtrader.core.types import AlphaOutput, MarketData
 
 
+from qtrader.core.execution_guard import require_initialized
+
+
 class AlphaBase(ABC):
     """Abstract base class for alpha generators."""
 
@@ -14,6 +17,7 @@ class AlphaBase(ABC):
         self.logger = logger
 
     @abstractmethod
+    @require_initialized
     async def generate(self, market_data: MarketData) -> AlphaOutput:
         """Generate alpha values from market data.
         
@@ -27,7 +31,8 @@ class AlphaBase(ABC):
 
 
 # Use the consolidated AlphaCombiner for all operations
-from qtrader.feature.alpha.combiner import AlphaBase
+from qtrader.alpha.combiner import AlphaBase
+
 
 # Alias for backward compatibility
 Alpha = AlphaBase

@@ -12,44 +12,47 @@ __all__ = ["BacktestEngine"]
 log = logging.getLogger(__name__)
 
 
+from qtrader.core.orchestrator import TradingOrchestrator, SystemState
+
 @dataclass(slots=True)
 class BacktestEngine:
-    """Event-driven backtesting engine.
-
-    Orchestrates one or more data pipelines that publish events onto an
-    :class:`EventBus`. The engine itself is asset-agnostic; strategies and
-    portfolio logic subscribe to events downstream.
+    """Historical simulation engine controlled by the sovereign orchestrator.
 
     Args:
-        bus: Shared EventBus instance.
-        pipelines: Collection of data pipelines feeding the bus.
-        name: Optional identifier for logging.
+        orchestrator: The sovereign control layer for the simulation.
+        pipelines: Collection of data pipelines feeding the simulation.
     """
 
-    bus: EventBus
+    orchestrator: TradingOrchestrator
     pipelines: list[DataPipeline]
-    name: str = "default"
+    name: str = "backtest"
     _running: bool = field(init=False, default=False)
 
     async def run(self) -> None:
-        """Run all pipelines and process events until completion."""
+        """Run simulation under sovereign control."""
         if self._running:
             return
+        
+        # 1. Mandatory Sovereign Sequence
+        self.orchestrator.initialize()
+        self.orchestrator.validate()
+        
+        # 2. Simulation Activation
         self._running = True
-        log.info("BacktestEngine '%s' starting.", self.name)
+        log.info("BacktestEngine '%s' starting under sovereign control.", self.name)
 
-        bus_task = asyncio.create_task(self.bus.start())
+        # Use the orchestrator's bus
+        bus_task = asyncio.create_task(self.orchestrator.event_bus.start())
         pipeline_tasks = [asyncio.create_task(p.run()) for p in self.pipelines]
 
         try:
             await asyncio.gather(*pipeline_tasks)
         finally:
-            # Zero Latency: Drain remaining events using join()
-            await self.bus._queue.join()
-            await self.bus.shutdown()
-            await bus_task
+            # Clean halt via orchestrator
+            await self.orchestrator.halt_core("Simulation_Complete")
             self._running = False
             log.info("BacktestEngine '%s' completed.", self.name)
+
 
     def run_until_complete(self) -> None:
         """Synchronous helper for running the engine in scripts/tests."""

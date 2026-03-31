@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from qtrader.core.trace_manager import TraceManager
+from qtrader.core.trace_authority import TraceAuthority
 
 
 @dataclass(slots=True)
@@ -52,7 +52,7 @@ class TraceEngine:
         Record a stage in the currently active trace.
         Automatically pulls trace_id from execution context.
         """
-        trace_id = TraceManager.get_current_trace()
+        trace_id = TraceAuthority.get_current_trace()
         if not trace_id:
              # logger.warning(f"[TRACE] Attempted to record node '{module}:{action}' without active trace context.")
              return

@@ -1,12 +1,12 @@
-"""qtrader.feature.features.factors — Technical, volume, and lagged factor implementations."""
+"""qtrader.features.factors — Technical, volume, and lagged factor implementations."""
 
-from qtrader.feature.features.factors.lagged import (
+from qtrader.features.factors.lagged import (
     AutoCorrelation,
     LaggedReturn,
     ReturnVolatility,
     SkewFeature,
 )
-from qtrader.feature.features.factors.technical import (
+from qtrader.features.factors.technical import (
     ATR,
     MACD,
     ROC,
@@ -14,7 +14,7 @@ from qtrader.feature.features.factors.technical import (
     BollingerBands,
     MomentumReturn,
 )
-from qtrader.feature.features.factors.volume import (
+from qtrader.features.factors.volume import (
     OBV,
     VWAP,
     DollarVolume,

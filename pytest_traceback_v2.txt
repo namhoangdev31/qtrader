@@ -1,0 +1,353 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.10.19, pytest-9.0.2, pluggy-1.6.0 -- /Users/hoangnam/qtrader/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/hoangnam/qtrader
+configfile: pyproject.toml
+plugins: anyio-4.12.1, cov-7.1.0, asyncio-1.3.0
+asyncio: mode=auto, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/unit/core/test_unified_orchestrator.py::test_state_machine_transitions FAILED [ 20%]
+tests/unit/core/test_unified_orchestrator.py::test_initialization_priority FAILED [ 40%]
+tests/unit/core/test_unified_orchestrator.py::test_execution_gating PASSED [ 60%]
+tests/unit/core/test_unified_orchestrator.py::test_high_concurrency_stress FAILED [ 80%]
+tests/unit/core/test_unified_orchestrator.py::test_atomic_halt FAILED    [100%]
+
+=================================== FAILURES ===================================
+________________________ test_state_machine_transitions ________________________
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x13130c9d0>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+>           TraceManager.start_trace()
+E           AttributeError: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:222: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+orchestrator = <qtrader.core.orchestrator.TradingOrchestrator object at 0x13130c9d0>
+
+    @pytest.mark.asyncio
+    async def test_state_machine_transitions(orchestrator):
+        """Verify the formal state machine transitions and gating."""
+        assert orchestrator._state == SystemState.INIT
+    
+        # 1. INIT -> READY via initialize() and validate()
+>       orchestrator.initialize()
+
+tests/unit/core/test_unified_orchestrator.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x13130c9d0>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+            TraceManager.start_trace()
+    
+            # 4. Architectural Validation
+            self.validate()
+    
+            self._state = SystemState.READY
+    
+    
+            # 5. Forensic Boot Log
+            self._write_boot_log(start_time=self._boot_time, status="SUCCESS")
+    
+            logger.info("ORCHESTRATOR_BOOT | System is READY.")
+    
+    
+        except Exception as e:
+            self._state = SystemState.ERROR
+            logger.critical(f"ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: {e}")
+>           raise RuntimeError(f"System initialization failed: {e}")
+E           RuntimeError: System initialization failed: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:239: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+[SEED] Entropy Anchor Initialized | Global Seed: 2637752286
+Network kill switch initialized
+----------------------------- Captured stdout call -----------------------------
+ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).
+[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch
+ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: type object 'TraceManager' has no attribute 'start_trace'
+_________________________ test_initialization_priority _________________________
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x13153f580>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+>           TraceManager.start_trace()
+E           AttributeError: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:222: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+orchestrator = <qtrader.core.orchestrator.TradingOrchestrator object at 0x13153f580>
+
+    @pytest.mark.asyncio
+    async def test_initialization_priority(orchestrator):
+        """Verify that authorities are initialized in the mandatory sequence."""
+>       orchestrator.initialize()
+
+tests/unit/core/test_unified_orchestrator.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x13153f580>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+            TraceManager.start_trace()
+    
+            # 4. Architectural Validation
+            self.validate()
+    
+            self._state = SystemState.READY
+    
+    
+            # 5. Forensic Boot Log
+            self._write_boot_log(start_time=self._boot_time, status="SUCCESS")
+    
+            logger.info("ORCHESTRATOR_BOOT | System is READY.")
+    
+    
+        except Exception as e:
+            self._state = SystemState.ERROR
+            logger.critical(f"ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: {e}")
+>           raise RuntimeError(f"System initialization failed: {e}")
+E           RuntimeError: System initialization failed: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:239: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+[SEED] Entropy Anchor Initialized | Global Seed: 1522645411
+Network kill switch initialized
+----------------------------- Captured stdout call -----------------------------
+ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).
+[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch
+ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: type object 'TraceManager' has no attribute 'start_trace'
+_________________________ test_high_concurrency_stress _________________________
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x131564c10>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+>           TraceManager.start_trace()
+E           AttributeError: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:222: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+orchestrator = <qtrader.core.orchestrator.TradingOrchestrator object at 0x131564c10>
+
+    @pytest.mark.asyncio
+    async def test_high_concurrency_stress(orchestrator):
+        """Stress-test the system with 1,000+ concurrent event injections."""
+>       orchestrator.initialize()
+
+tests/unit/core/test_unified_orchestrator.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x131564c10>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+            TraceManager.start_trace()
+    
+            # 4. Architectural Validation
+            self.validate()
+    
+            self._state = SystemState.READY
+    
+    
+            # 5. Forensic Boot Log
+            self._write_boot_log(start_time=self._boot_time, status="SUCCESS")
+    
+            logger.info("ORCHESTRATOR_BOOT | System is READY.")
+    
+    
+        except Exception as e:
+            self._state = SystemState.ERROR
+            logger.critical(f"ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: {e}")
+>           raise RuntimeError(f"System initialization failed: {e}")
+E           RuntimeError: System initialization failed: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:239: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+[SEED] Entropy Anchor Initialized | Global Seed: 681383240
+Network kill switch initialized
+----------------------------- Captured stdout call -----------------------------
+ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).
+[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch
+ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: type object 'TraceManager' has no attribute 'start_trace'
+_______________________________ test_atomic_halt _______________________________
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x131507fd0>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+>           TraceManager.start_trace()
+E           AttributeError: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:222: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+orchestrator = <qtrader.core.orchestrator.TradingOrchestrator object at 0x131507fd0>
+
+    @pytest.mark.asyncio
+    async def test_atomic_halt(orchestrator):
+        """Verify that halt_core() successfully stops the bus and cleans resources."""
+>       orchestrator.initialize()
+
+tests/unit/core/test_unified_orchestrator.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <qtrader.core.orchestrator.TradingOrchestrator object at 0x131507fd0>
+
+    def initialize(self) -> None:
+        """
+        Sovereign Initialization Sequence: Path to READY state.
+    
+        Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
+        """
+        try:
+            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+    
+            # 1. Config Authority (Pre-loaded via settings singleton)
+            # 2. Entropy Authority (Freezing randomness)
+            self.seed_manager.apply_global()
+    
+            # 3. Trace Authority (Agnostic context start)
+            TraceManager.start_trace()
+    
+            # 4. Architectural Validation
+            self.validate()
+    
+            self._state = SystemState.READY
+    
+    
+            # 5. Forensic Boot Log
+            self._write_boot_log(start_time=self._boot_time, status="SUCCESS")
+    
+            logger.info("ORCHESTRATOR_BOOT | System is READY.")
+    
+    
+        except Exception as e:
+            self._state = SystemState.ERROR
+            logger.critical(f"ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: {e}")
+>           raise RuntimeError(f"System initialization failed: {e}")
+E           RuntimeError: System initialization failed: type object 'TraceManager' has no attribute 'start_trace'
+
+qtrader/core/orchestrator.py:239: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+[SEED] Entropy Anchor Initialized | Global Seed: 3201751565
+Network kill switch initialized
+----------------------------- Captured stdout call -----------------------------
+ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).
+[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch
+ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: type object 'TraceManager' has no attribute 'start_trace'
+=============================== warnings summary ===============================
+tests/unit/core/test_unified_orchestrator.py::test_state_machine_transitions
+  /Users/hoangnam/qtrader/.venv/lib/python3.10/site-packages/mlflow/tracking/_tracking_service/utils.py:184: FutureWarning: The filesystem tracking backend (e.g., './mlruns') is deprecated as of February 2026. Consider transitioning to a database backend (e.g., 'sqlite:///mlflow.db') to take advantage of the latest MLflow features. See https://mlflow.org/docs/latest/self-hosting/migrate-from-file-store for migration guidance.
+    return FileStore(store_uri, store_uri)
+
+tests/unit/core/test_unified_orchestrator.py::test_execution_gating
+  /Users/hoangnam/qtrader/tests/unit/core/test_unified_orchestrator.py:69: RuntimeWarning: coroutine 'TradingOrchestrator.ingest_raw_data' was never awaited
+    orchestrator.ingest_raw_data({"symbol": "BTC/USDT", "bid": 50000.0, "ask": 50001.0})
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/core/test_unified_orchestrator.py::test_state_machine_transitions
+FAILED tests/unit/core/test_unified_orchestrator.py::test_initialization_priority
+FAILED tests/unit/core/test_unified_orchestrator.py::test_high_concurrency_stress
+FAILED tests/unit/core/test_unified_orchestrator.py::test_atomic_halt - Runti...
+=================== 4 failed, 1 passed, 2 warnings in 3.77s ====================

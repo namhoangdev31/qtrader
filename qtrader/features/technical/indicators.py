@@ -1,6 +1,6 @@
 import polars as pl
 
-from qtrader.feature.features.base import Feature
+from qtrader.features.base import Feature
 
 
 class RSI(Feature):

@@ -309,9 +309,29 @@ class NestedCrossValidation:
 
 
 if __name__ == "__main__":
+    import asyncio
     import polars as pl  # type: ignore[reimported]
     from sklearn.linear_model import LinearRegression
+    from qtrader.core.orchestrator import TradingOrchestrator
+    from qtrader.core.bus import EventBus
 
+    # 1. Mandatory Sovereign Initialization
+    # Ensures deterministic seeds and audit logging for the evaluation script
+    orch = TradingOrchestrator(
+        event_bus=EventBus(),
+        market_data_adapter=object(),
+        alpha_modules=[],
+        feature_validator=None, # type: ignore
+        strategies=[],
+        ensemble_strategy=None, # type: ignore
+        portfolio_allocator=None, # type: ignore
+        runtime_risk_engine=None, # type: ignore
+        oms_adapter=None, # type: ignore
+    )
+    orch.initialize()
+    orch.validate()
+
+    # 2. Evaluation Logic
     _df = pl.DataFrame(
         {
             "x": [0.0, 1.0, 2.0, 3.0, 4.0],
@@ -331,10 +351,15 @@ if __name__ == "__main__":
     _nc = NestedCrossValidation(_outer, _inner)
     _res = _nc.evaluate(
         _df,
+        target_col="forward_return",
         train_func=_train,
         param_grid=[{}],
-        target_col="forward_return",
         feature_cols=["x"],
     )
     assert isinstance(_res, list)
+    print(f"Evaluation Complete | Result Count: {len(_res)}")
+    
+    # 3. Graceful Clean Halt
+    asyncio.run(orch.halt_core("Evaluation_Script_Finished"))
+
 

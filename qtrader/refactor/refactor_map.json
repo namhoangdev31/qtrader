@@ -1,0 +1,51 @@
+{
+  "target": "qtrader/core/orchestrator.py",
+  "mappings": [
+    {
+      "source": "qtrader/system/system_orchestrator.py",
+      "methods": {
+        "register_module": "register_module",
+        "inject": "inject_event",
+        "get_system_health": "get_health_metrics"
+      }
+    },
+    {
+      "source": "qtrader/bot/runner.py",
+      "methods": {
+        "start": "run_autonomous",
+        "_run_alpha_models": "handle_market_data",
+        "_on_signal": "handle_signals",
+        "_on_heartbeat": "handle_heartbeat",
+        "emergency_shutdown": "halt_core"
+      }
+    },
+    {
+      "source": "qtrader/core/global_orchestrator.py",
+      "methods": {
+        "run_fund_allocation": "apply_strategic_allocation",
+        "engage_global_kill_switch": "engage_system_wide_halt",
+        "get_total_fund_risk": "aggregate_fund_risk_profile"
+      }
+    },
+    {
+      "source": "qtrader/meta/orchestrator.py",
+      "methods": {
+        "compute_ensemble_signal": "compute_consensus_signal",
+        "adapt_weights": "adapt_model_weights"
+      }
+    },
+    {
+      "source": "qtrader/data/pipeline/orchestrator.py",
+      "methods": {
+        "process": "ingest_raw_data",
+        "_run_quality_checks": "validate_data_quality"
+      }
+    },
+    {
+      "source": "qtrader/backtest/engine.py",
+      "methods": {
+        "run": "simulate_historical_replay"
+      }
+    }
+  ]
+}

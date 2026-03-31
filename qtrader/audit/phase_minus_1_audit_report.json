@@ -104,7 +104,7 @@
       "infrastructure_present": true,
       "infrastructure_integrated": false,
       "details": {
-        "trace_manager": "IMPLEMENTED (qtrader/core/trace_manager.py)",
+        "trace_manager": "IMPLEMENTED (qtrader/core/trace_authority.py)",
         "trace_references": 314,
         "structured_logger": "IMPLEMENTED (qtrader/core/logger.py)",
         "structured_logger_importers": 37,

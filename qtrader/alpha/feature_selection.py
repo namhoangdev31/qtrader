@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, cast
 
 from sklearn.feature_selection import mutual_info_regression
 
-from qtrader.feature.alpha.ic import SignalAnalyzer
+from qtrader.alpha.ic import SignalAnalyzer
 
 if TYPE_CHECKING:
     import numpy as np

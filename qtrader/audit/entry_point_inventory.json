@@ -1,0 +1,71 @@
+{
+  "entry_points": [
+    {
+      "id": "API_LIFECYCLE",
+      "path": "qtrader/api/api.py",
+      "type": "API",
+      "framework": "FastAPI",
+      "status": "UNCONTROLLED",
+      "risk": "HIGH"
+    },
+    {
+      "id": "BACKTEST_ENGINE",
+      "path": "qtrader/backtest/engine.py",
+      "type": "BACKTEST",
+      "framework": "AsyncIO",
+      "status": "UNCONTROLLED",
+      "risk": "MEDIUM"
+    },
+    {
+      "id": "BOT_START_CLI",
+      "path": "Makefile (bot-start)",
+      "type": "CLI",
+      "target": "qtrader.bot.runner",
+      "status": "BROKEN",
+      "risk": "CRITICAL"
+    },
+    {
+      "id": "ORCHESTRATOR_SERVICE",
+      "path": "scripts/orchestrator_service.py",
+      "type": "SERVICE",
+      "framework": "FastAPI",
+      "references": "GlobalOrchestrator",
+      "status": "BROKEN",
+      "risk": "CRITICAL"
+    },
+    {
+      "id": "LIVE_ENGINE_SCRIPTS",
+      "path": "scripts/live_engine.py",
+      "type": "CLI",
+      "status": "UNCONTROLLED",
+      "risk": "HIGH"
+    },
+    {
+      "id": "ML_SERVICES",
+      "path": "scripts/ml_service.py",
+      "type": "SERVICE",
+      "status": "UNCONTROLLED",
+      "risk": "MEDIUM"
+    },
+    {
+      "id": "ML_EVALUATION",
+      "path": "qtrader/ml/evaluation.py",
+      "type": "CLI",
+      "status": "UNCONTROLLED",
+      "risk": "LOW"
+    },
+    {
+      "id": "AUDIT_SCANNERS",
+      "path": "qtrader/audit/*.py",
+      "type": "CLI",
+      "status": "UNCONTROLLED",
+      "risk": "LOW"
+    }
+  ],
+  "summary": {
+    "entry_count": 8,
+    "controlled_entry_count": 0,
+    "uncontrolled_entry_count": 8,
+    "status": "UNSAFE"
+  }
+}

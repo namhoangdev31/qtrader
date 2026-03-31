@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-31T07:08:57.105556+00:00",
+  "boot_duration_ms": 9.959958959370852,
+  "status": "SUCCESS",
+  "config_checksum": "N/A",
+  "seed_applied": true,
+  "authorities_initialized": [
+    "ConfigManager",
+    "SeedManager",
+    "TraceAuthority",
+    "FailFastEngine"
+  ]
+}

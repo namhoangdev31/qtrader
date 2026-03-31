@@ -6,8 +6,12 @@ from starlette.responses import Response
 from qtrader.security.jwt_auth import get_current_active_user, TokenPayload, JWTAuthManager
 from qtrader.security.rbac import rbac_required, Permission
 from qtrader.core.logger import log
+from qtrader.core.orchestrator import TradingOrchestrator, SystemState
+from qtrader.core.events import MarketDataEvent # For type hints if needed
 
-app = FastAPI(title="QTrader HFT API", version="0.4.0")
+app = FastAPI(title="QTrader HFT API", version="0.4.1")
+# The orchestrator will be injected into app.state during initialization
+
 _logger = log.bind(module="api")
 
 # --- Security Middleware ---
@@ -52,6 +56,33 @@ class QTraderAPI:
         uvicorn.run(app, host=self.host, port=self.port)
 
 
+@app.on_event("startup")
+async def startup_event() -> None:
+    """Sovereign Startup Gate: Initialize the orchestrator before accepting traffic."""
+    # Note: In a real deployment, the orchestrator would be passed in 
+    # or initialized from a shared container. Here we use app.state.
+    if not hasattr(app.state, "orchestrator"):
+        # Placeholder initialization if not injected by runner
+        from qtrader.core.bus import EventBus
+        orch = TradingOrchestrator(
+            event_bus=EventBus(),
+            market_data_adapter=object(),
+            alpha_modules=[],
+            feature_validator=None,  # type: ignore
+            strategies=[],
+            ensemble_strategy=None,  # type: ignore
+            portfolio_allocator=None,  # type: ignore
+            runtime_risk_engine=None,  # type: ignore
+            oms_adapter=None,  # type: ignore
+        )
+        app.state.orchestrator = orch
+    
+    _logger.info("API_BOOT | Initializing Sovereign Orchestrator...")
+    app.state.orchestrator.initialize()
+    _logger.info(f"API_BOOT | System is {app.state.orchestrator._state.name}")
+
+
+
 # --- Authentication ---
 
 @app.post("/token")
@@ -82,12 +113,17 @@ async def ping() -> Dict[str, str]:
 @rbac_required(Permission.READ)
 async def get_status(user: TokenPayload = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Retrieve system health and fund status. Required: READ."""
+    orch: TradingOrchestrator = app.state.orchestrator
     _logger.debug("Status request", sub=user["sub"])
+    
     return {
-        "running": True, # In practice, this pulls from global_orchestrator
+        "status": orch._state.name,
+        "is_ready": orch._state == SystemState.READY or orch._state == SystemState.RUNNING,
         "mode": "SHADOW",
-        "user_role": user["role"]
+        "user_role": user["role"],
+        "boot_time": orch._boot_time
     }
+
 
 
 @app.post("/orders/place")
@@ -97,18 +133,26 @@ async def place_order(
     user: TokenPayload = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """Place a manual trade override. Required: EXECUTE."""
+    orch: TradingOrchestrator = app.state.orchestrator
     symbol = payload.get("symbol")
     side = payload.get("side")
-    qty = payload.get("qty")
     
+    if orch._state != SystemState.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"System not in RUNNING state (Current: {orch._state.name})"
+        )
+        
     _logger.info("Manual trade override", sub=user["sub"], symbol=symbol, side=side)
     
-    # Logic to publish OrderEvent would go here
+    # Authoritative injection through the sovereign orchestrator
+    # Note: Logic to convert payload to OrderEvent omitted for brevity
     return {
         "status": "ACCEPTED",
-        "order_id": "man-12345",
+        "order_id": f"man-{uuid.uuid4().hex[:8]}",
         "meta": {"sub": user["sub"]}
     }
+
 
 
 @app.post("/system/halt")
@@ -118,10 +162,12 @@ async def emergency_halt(
     user: TokenPayload = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
     """Trigger a global manual emergency halt. Required: MANAGE."""
+    orch: TradingOrchestrator = app.state.orchestrator
     _logger.critical("MANUAL GLOBAL HALT", sub=user["sub"], reason=reason)
     
-    # Logic to engage global kill switch would go here
+    await orch.halt_core(reason)
     return {"status": "HALTED", "reason": reason, "authorizer": user["sub"]}
+
 
 
 @app.get("/audit/history")

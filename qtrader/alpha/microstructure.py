@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from qtrader.feature.alpha.base import _zscore
+from qtrader.alpha.base import _zscore
 
 __all__ = ["AmihudIlliquidityAlpha", "OrderImbalanceAlpha", "VPINAlpha"]
 

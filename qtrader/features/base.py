@@ -122,7 +122,7 @@ class BaseFeature:
 
 def test_base_feature_validate_missing_col() -> None:
     import pytest
-    from qtrader.feature.features.base import BaseFeature
+    from qtrader.features.base import BaseFeature
     import polars as pl
 
     class DummyFeature(BaseFeature):
@@ -139,7 +139,7 @@ def test_base_feature_validate_missing_col() -> None:
 
 def test_base_feature_validate_min_periods() -> None:
     import pytest
-    from qtrader.feature.features.base import BaseFeature
+    from qtrader.features.base import BaseFeature
     import polars as pl
 
     class DummyFeature(BaseFeature):

@@ -2,7 +2,7 @@ import time
 import pytest
 from unittest.mock import patch, MagicMock
 from qtrader.monitoring.trace_engine import TraceEngine, TraceNode
-from qtrader.core.trace_manager import TraceManager
+from qtrader.core.trace_authority import TraceAuthority
 
 @pytest.fixture
 def engine():
@@ -11,11 +11,11 @@ def engine():
 
 @pytest.fixture
 def trace_id():
-    return TraceManager.start_trace()
+    return TraceAuthority.start_trace()
 
 def test_trace_engine_record_node(engine, trace_id):
     # Record nodes in a trace lifecycle
-    with patch("qtrader.monitoring.trace_engine.TraceManager.get_current_trace", return_value=trace_id):
+    with patch("qtrader.monitoring.trace_engine.TraceAuthority.get_current_trace", return_value=trace_id):
         engine.record_node("market_data", "ingest", {"tick": 100.5})
         time.sleep(0.01) # Simulate some processing delay
         engine.record_node("alpha", "generate_signal", {"side": "BUY"})
@@ -35,7 +35,7 @@ def test_trace_engine_record_node(engine, trace_id):
 
 def test_trace_engine_handoff_latency(engine, trace_id):
     # Correct calculation of 'Air Gap' between stages
-    with patch("qtrader.monitoring.trace_engine.TraceManager.get_current_trace", return_value=trace_id):
+    with patch("qtrader.monitoring.trace_engine.TraceAuthority.get_current_trace", return_value=trace_id):
         engine.record_node("data", "start")
         time.sleep(0.05)
         engine.record_node("execution", "order")
@@ -49,7 +49,7 @@ def test_trace_engine_handoff_latency(engine, trace_id):
 
 def test_trace_engine_report_visualization(engine, trace_id, caplog):
     # Verify trace reporting format
-    with patch("qtrader.monitoring.trace_engine.TraceManager.get_current_trace", return_value=trace_id):
+    with patch("qtrader.monitoring.trace_engine.TraceAuthority.get_current_trace", return_value=trace_id):
         engine.record_node("input", "test")
         engine.record_node("output", "test")
         

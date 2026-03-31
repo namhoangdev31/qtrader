@@ -165,7 +165,7 @@ class AnalystSession:
 
         Returns an empty DataFrame if no features are stored yet.
         """
-        from qtrader.feature.features.store import FeatureStore
+        from qtrader.features.store import FeatureStore
 
         store = FeatureStore()
         df = store.load_features(symbol=symbol, timeframe=timeframe)

@@ -1,0 +1,58 @@
+{
+  "execution_mapping": [
+    {
+      "entry_point": "API_LIFECYCLE",
+      "pipeline": [
+        "FastAPI",
+        "JWTAuthManager",
+        "SecurityHeadersMiddleware",
+        "Uvicorn (Non-Sovereign)"
+      ],
+      "controlled": false,
+      "sovereign_gate": "MISSING"
+    },
+    {
+      "entry_point": "BACKTEST_ENGINE",
+      "pipeline": [
+        "EventBus (Local)",
+        "DataPipelines (Raw)",
+        "AsyncIO.gather (Uncontrolled)"
+      ],
+      "controlled": false,
+      "sovereign_gate": "MISSING"
+    },
+    {
+      "entry_point": "ORCHESTRATOR_SERVICE",
+      "pipeline": [
+        "FastAPI",
+        "GlobalOrchestrator (DELETED/BROKEN)",
+        "OrchestratorService (Custom)"
+      ],
+      "controlled": false,
+      "sovereign_gate": "MISSING"
+    },
+    {
+      "entry_point": "BOT_START_CLI",
+      "pipeline": [
+        "Makefile -> qtrader.bot.runner (MISSING)"
+      ],
+      "controlled": false,
+      "sovereign_gate": "MISSING"
+    },
+    {
+      "entry_point": "LIVE_ENGINE_SCRIPTS",
+      "pipeline": [
+        "Scripts/live_engine.py -> Raw Lifecycle"
+      ],
+      "controlled": false,
+      "sovereign_gate": "MISSING"
+    }
+  ],
+  "authorities_check": {
+    "ConfigManager": "Fragmented",
+    "SeedManager": "Inconsistent",
+    "TraceManager": "Manual Injections",
+    "FailFastEngine": "Missing"
+  },
+  "status": "UNSAFE"
+}

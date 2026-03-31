@@ -10,7 +10,7 @@ from loguru import logger
 _trace_context: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar("trace_id", default=None)
 
 
-class TraceManager:
+class TraceAuthority:
     """
     Central authority for trace ID generation and implicit propagation.
     Ensures that every event created within a transaction context inherits the same trace_id.
@@ -43,7 +43,7 @@ class TraceManager:
         """
         Retrieve existing trace_id or generate/inject a new one if missing.
         """
-        current = TraceManager.get_current_trace()
+        current = TraceAuthority.get_current_trace()
         if trace_id:
             # If a trace_id is explicitly provided, it overrides or sets the context.
             if current and current != trace_id:
@@ -80,3 +80,31 @@ class TraceManager:
                 _trace_context.reset(self.token)
 
         return TraceContextManager(trace_id)
+
+    @staticmethod
+    def generate() -> UUID:
+        """Alias for uuid4() to maintain API compatibility."""
+        return uuid4()
+
+    @staticmethod
+    def propagate(source_event: Any) -> UUID:
+        """
+        Extract trace ID from a source event for propagation to the context.
+        """
+        if hasattr(source_event, 'trace_id'):
+            tid = source_event.trace_id
+            if isinstance(tid, str):
+                tid = UUID(tid)
+            TraceAuthority.start_trace(tid)
+            return tid
+        
+        # Fallback to metadata
+        if hasattr(source_event, 'metadata') and source_event.metadata:
+            tid = source_event.metadata.get('trace_id')
+            if tid:
+                if isinstance(tid, str):
+                    tid = UUID(tid)
+                TraceAuthority.start_trace(tid)
+                return tid
+                
+        return TraceAuthority.start_trace()

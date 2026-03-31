@@ -14,8 +14,9 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
-from qtrader.core.global_orchestrator import GlobalOrchestrator
-from qtrader.core.orchestrator import TradingOrchestrator
+from qtrader.core.orchestrator import TradingOrchestrator, SystemState
+from qtrader.core.bus import EventBus
+
 
 # Setup logging
 logging.basicConfig(
@@ -26,21 +27,40 @@ logging.basicConfig(
 logger = logging.getLogger("OrchestratorService")
 
 # FastAPI for monitoring
-app = FastAPI(title="QTrader Global Orchestrator")
-global_orch = GlobalOrchestrator()
+app = FastAPI(title="QTrader Global Orchestrator Service")
+
+# Sovereign Orchestrator Instance (Injected at runtime)
+# We initialize it here for the standalone service
+orch = TradingOrchestrator(
+    event_bus=EventBus(),
+    market_data_adapter=object(),
+    alpha_modules=[],
+    feature_validator=None, # type: ignore
+    strategies=[],
+    ensemble_strategy=None, # type: ignore
+    portfolio_allocator=None, # type: ignore
+    runtime_risk_engine=None, # type: ignore
+    oms_adapter=None, # type: ignore
+)
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:
-    return {"status": "healthy", "mode": global_orch._mode.value}
+    return {"status": "healthy", "state": orch._state.name}
 
 @app.get("/status")
 async def get_status() -> dict[str, Any]:
-    return await global_orch.get_total_fund_risk()
+    """Retrieve fund-wide status from the sovereign orchestrator."""
+    return {
+        "state": orch._state.name,
+        "boot_time": orch._boot_time,
+        "authorized": True
+    }
 
 @app.post("/kill")
 async def engage_kill_switch(reason: str = "Manual Trigger") -> dict[str, str]:
-    await global_orch.engage_global_kill_switch(reason)
-    return {"status": "STOPPED", "reason": reason}
+    await orch.halt_core(reason)
+    return {"status": "HALTED", "reason": reason}
+
 
 class OrchestratorService:
     def __init__(self) -> None:
@@ -58,15 +78,14 @@ class OrchestratorService:
         await server.serve()
 
     async def main_loop(self) -> None:
-        logger.info("Starting Global Orchestrator Service...")
+        logger.info("Starting Sovereign Orchestrator Service...")
         
-        # Register default orchestrators (Example: Crypto and Forex)
-        crypto_orch = TradingOrchestrator() # In real usage, pass specific config
-        global_orch.register_orchestrator("crypto_fund", crypto_orch)
+        # 1. Initialize Sovereign Orchestrator
+        orch.initialize()
         
-        # Start the Global Orchestrator
-        # This will run all child orchestrators concurrently
-        await global_orch.start()
+        # 2. Start Execution Pipeline
+        await orch.execute_pipeline()
+
 
     async def run(self) -> None:
         await asyncio.gather(

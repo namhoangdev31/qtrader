@@ -12,7 +12,7 @@ import polars as pl
 
 __all__ = ["FactorNeutralizer"]
 
-_LOG = logging.getLogger("qtrader.feature.features.neutralization")
+_LOG = logging.getLogger("qtrader.features.neutralization")
 
 
 class FactorNeutralizer:
@@ -206,7 +206,7 @@ class FactorNeutralizer:
 
 def test_winsorize_clips_top_outlier() -> None:
     import polars as pl
-    from qtrader.feature.features.neutralization import FactorNeutralizer
+    from qtrader.features.neutralization import FactorNeutralizer
 
     s = pl.Series("x", [1.0, 2.0, 3.0, 4.0, 1000.0])
     ws = FactorNeutralizer.winsorize(s, lower=0.0, upper=0.8)
@@ -214,7 +214,7 @@ def test_winsorize_clips_top_outlier() -> None:
 
 def test_zscore_cross_sectional_mean_zero() -> None:
     import polars as pl
-    from qtrader.feature.features.neutralization import FactorNeutralizer
+    from qtrader.features.neutralization import FactorNeutralizer
 
     s = pl.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     z = FactorNeutralizer.zscore(s)
@@ -222,7 +222,7 @@ def test_zscore_cross_sectional_mean_zero() -> None:
 
 def test_rank_normalize_range() -> None:
     import polars as pl
-    from qtrader.feature.features.neutralization import FactorNeutralizer
+    from qtrader.features.neutralization import FactorNeutralizer
 
     s = pl.Series([10.0, 20.0, 5.0, 40.0, 30.0])
     ranked = FactorNeutralizer.rank_normalize(s)

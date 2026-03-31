@@ -8,7 +8,7 @@ from typing import Any, Mapping, Optional
 
 from loguru import logger
 
-from qtrader.core.trace_manager import TraceManager
+from qtrader.core.trace_authority import TraceAuthority
 
 
 class QTraderLogger:
@@ -63,7 +63,7 @@ class QTraderLogger:
         Standardizes on ISO 8601 timestamps and trace_id injection.
         """
         # Automatically pull trace_id from context
-        current_trace = TraceManager.get_current_trace()
+        current_trace = TraceAuthority.get_current_trace()
         trace_id = str(current_trace) if current_trace else "NO_TRACE"
 
         log_entry = {
