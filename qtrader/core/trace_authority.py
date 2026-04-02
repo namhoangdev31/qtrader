@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import contextvars
-from typing import Optional
 from uuid import UUID, uuid4
 
 from loguru import logger
 
 # Context Variable to store the active trace_id across async contexts.
-_trace_context: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar("trace_id", default=None)
+_trace_context: contextvars.ContextVar[UUID | None] = contextvars.ContextVar("trace_id", default=None)
 
 
 class TraceAuthority:
@@ -17,7 +16,7 @@ class TraceAuthority:
     """
 
     @staticmethod
-    def start_trace(trace_id: Optional[UUID] = None) -> UUID:
+    def start_trace(trace_id: UUID | None = None) -> UUID:
         """
         Generate a new trace_id or set an existing one in the current context.
         """
@@ -26,7 +25,7 @@ class TraceAuthority:
         return trace_id
 
     @staticmethod
-    def get_current_trace() -> Optional[UUID]:
+    def get_current_trace() -> UUID | None:
         """
         Retrieve the trace_id from the current context.
         Returns None if no trace is active.
@@ -34,12 +33,17 @@ class TraceAuthority:
         return _trace_context.get()
 
     @staticmethod
+    def ready() -> bool:
+        """Checks if the trace authority is functioning and context is ready."""
+        return TraceAuthority.get_current_trace() is not None
+
+    @staticmethod
     def clear_trace() -> None:
         """Clear the current trace context."""
         _trace_context.set(None)
 
     @staticmethod
-    def ensure_trace(trace_id: Optional[UUID] = None) -> UUID:
+    def ensure_trace(trace_id: UUID | None = None) -> UUID:
         """
         Retrieve existing trace_id or generate/inject a new one if missing.
         """
@@ -70,7 +74,7 @@ class TraceAuthority:
         class TraceContextManager:
             def __init__(self, tid: UUID):
                 self.tid = tid
-                self.token: Optional[contextvars.Token] = None
+                self.token: contextvars.Token | None = None
 
             def __enter__(self):
                 self.token = _trace_context.set(self.tid)

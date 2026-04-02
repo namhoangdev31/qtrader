@@ -42,11 +42,11 @@ async def test_cost_attribution_full_trace() -> None:
     engine = CostAttribution(bus)
     result = await engine.attribute_lifecycle_costs(trace_id, events)
     
-    assert result is not None # noqa: S101
-    assert result.payload.total_cost == 60.0 # noqa: S101, PLR2004
-    assert result.payload.impact_pct == pytest.approx(0.5) # 30/60 # noqa: S101
-    assert result.payload.timing_pct == pytest.approx(1/3) # 20/60 # noqa: S101
-    assert result.payload.fee_pct == pytest.approx(1/6) # 10/60 # noqa: S101
+    assert result is not None
+    assert result.payload.total_cost == 60.0
+    assert result.payload.impact_pct == pytest.approx(0.5) # 30/60
+    assert result.payload.timing_pct == pytest.approx(1/3) # 20/60
+    assert result.payload.fee_pct == pytest.approx(1/6) # 10/60
 
 
 @pytest.mark.asyncio
@@ -74,8 +74,8 @@ async def test_cost_attribution_zero_cost() -> None:
     
     engine = CostAttribution(bus)
     result = await engine.attribute_lifecycle_costs(trace_id, events)
-    assert result is not None # noqa: S101
-    assert result.payload.total_cost == 0.0 # noqa: S101
+    assert result is not None
+    assert result.payload.total_cost == 0.0
 
 
 @pytest.mark.asyncio
@@ -93,9 +93,9 @@ async def test_cost_attribution_missing_events() -> None:
         trace_id=trace_id, source="S", timestamp=1, payload=s_p
     )
     result = await engine.attribute_lifecycle_costs(trace_id, [s_event])
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.ATTRIBUTION_ERROR # noqa: S101
+    assert result is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.ATTRIBUTION_ERROR
 
     # Case 2: Missing Slippage
     bus.reset_mock()
@@ -107,8 +107,8 @@ async def test_cost_attribution_missing_events() -> None:
         trace_id=trace_id, source="I", timestamp=1, payload=is_p
     )
     result = await engine.attribute_lifecycle_costs(trace_id, [is_event])
-    assert result is None # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.ATTRIBUTION_ERROR # noqa: S101
+    assert result is None
+    assert bus.publish.call_args[0][0].event_type == EventType.ATTRIBUTION_ERROR
 
 
 @pytest.mark.asyncio
@@ -121,6 +121,6 @@ async def test_cost_attribution_system_failure() -> None:
     # Trigger exception
     result = await engine.attribute_lifecycle_costs(trace_id, None) # type: ignore
     
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args) # noqa: S101
+    assert result is None
+    assert bus.publish.called
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

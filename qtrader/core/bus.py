@@ -1,6 +1,7 @@
 """Legacy event bus module. Deprecated in favor of qtrader.core.event_bus."""
-from qtrader.core.event_bus import EventBus as ProductionEventBus
 from qtrader.core.event import Event
+from qtrader.core.event_bus import EventBus as ProductionEventBus
+
 
 class EventBus(ProductionEventBus):
     """Compatibility wrapper for the legacy EventBus."""

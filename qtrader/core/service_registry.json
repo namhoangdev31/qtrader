@@ -1,0 +1,32 @@
+{
+  "services": {
+    "config": {
+      "implementation": "qtrader.core.config_manager.ConfigManager",
+      "singleton": true,
+      "status": "READY"
+    },
+    "trace": {
+      "implementation": "qtrader.core.trace_authority.TraceAuthority",
+      "singleton": true,
+      "status": "READY"
+    },
+    "logger": {
+      "implementation": "qtrader.core.logger.QTraderLogger",
+      "singleton": true,
+      "status": "READY"
+    },
+    "failfast": {
+      "implementation": "qtrader.core.fail_fast_engine.FailFastEngine",
+      "singleton": true,
+      "status": "READY"
+    },
+    "decimal": {
+      "implementation": "qtrader.core.decimal_adapter.DecimalAdapter",
+      "singleton": true,
+      "status": "READY"
+    }
+  },
+  "count": 5,
+  "singleton_enforced": true,
+  "status": "READY"
+}

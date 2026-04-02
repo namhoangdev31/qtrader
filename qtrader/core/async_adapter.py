@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import socket
-from typing import Any, AsyncIterator, Callable, Coroutine, Optional, TypeVar
+from collections.abc import Callable, Coroutine
+from typing import Any, TypeVar
 
 import aiohttp
 from loguru import logger
@@ -18,12 +18,12 @@ class AsyncAdapter:
     Ensures zero synchronous blocking in critical execution paths.
     """
 
-    _instance: Optional[AsyncAdapter] = None
-    _session: Optional[aiohttp.ClientSession] = None
+    _instance: AsyncAdapter | None = None
+    _session: aiohttp.ClientSession | None = None
 
     def __new__(cls) -> AsyncAdapter:
         if cls._instance is None:
-            cls._instance = super(AsyncAdapter, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     async def get_session(self) -> aiohttp.ClientSession:
@@ -54,8 +54,8 @@ class AsyncAdapter:
     @staticmethod
     async def run_task(
         coro: Coroutine[Any, Any, T],
-        on_error: Optional[Callable[[Exception], None]] = None
-    ) -> Optional[T]:
+        on_error: Callable[[Exception], None] | None = None
+    ) -> T | None:
         """
         Execute a coroutine in a non-blocking task with built-in error propagation.
         """

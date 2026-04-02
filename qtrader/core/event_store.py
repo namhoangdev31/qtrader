@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
-from typing import Any, List, Optional, Protocol
+from typing import Protocol
 
-from qtrader.core.events import BaseEvent
-from qtrader.core.event_index import EventIndex
 from qtrader.core.event_factory import EventFactory
+from qtrader.core.event_index import EventIndex
+from qtrader.core.events import BaseEvent
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class BaseEventStore(Protocol):
     Enables deterministic replay and recovery of system state.
     """
 
-    async def append(self, event: BaseEvent) -> Optional[int]:
+    async def append(self, event: BaseEvent) -> int | None:
         """Persist an event to stable storage. Returns offset if new, None if duplicate."""
         ...
 
@@ -28,11 +27,11 @@ class BaseEventStore(Protocol):
         partition: str | None = None,
         start_offset: int | None = None, 
         end_offset: int | None = None
-    ) -> List[BaseEvent]:
+    ) -> list[BaseEvent]:
         """Retrieve events based on partition and offset range for replay."""
         ...
 
-    async def get_events_by_trace_id(self, trace_id: str | UUID) -> List[BaseEvent]:
+    async def get_events_by_trace_id(self, trace_id: str | UUID) -> list[BaseEvent]:
         """Retrieve all events across all partitions sharing a common trace_id."""
         ...
 
@@ -71,7 +70,7 @@ class FileEventStore:
                 filepath = os.path.join(self.partitions_dir, filename)
                 
                 try:
-                    with open(filepath, "r", encoding="utf-8") as f:
+                    with open(filepath, encoding="utf-8") as f:
                         for line in f:
                             if not line.strip():
                                 continue
@@ -87,7 +86,7 @@ class FileEventStore:
                     
         logger.info(f"Index rebuild complete. Total events indexed: {self._index.total_event_count}")
 
-    async def append(self, event: BaseEvent) -> Optional[int]:
+    async def append(self, event: BaseEvent) -> int | None:
         """
         Append an event to its partition log if it's not a duplicate.
         
@@ -130,7 +129,7 @@ class FileEventStore:
         partition: str | None = None,
         start_offset: int | None = None, 
         end_offset: int | None = None
-    ) -> List[BaseEvent]:
+    ) -> list[BaseEvent]:
         """
         Retrieve events from a specific partition based on an offset range.
         If partition is None, reads across all partitions (ordered only by local offset).
@@ -149,7 +148,7 @@ class FileEventStore:
             if not os.path.exists(filepath):
                 continue
 
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 for line in f:
                     try:
                         # Reconstruct specialized event subclass via factory
@@ -170,12 +169,12 @@ class FileEventStore:
         # Default sort by global timestamp for cross-partition queries
         return sorted(events, key=lambda x: x.timestamp)
 
-    async def get_events_by_trace_id(self, trace_id: str | UUID) -> List[BaseEvent]:
+    async def get_events_by_trace_id(self, trace_id: str | UUID) -> list[BaseEvent]:
         """
         Scan all partitions for a specific trace_id.
         This enables cross-functional forensic analysis of a single trade lifecycle.
         """
-        events: List[BaseEvent] = []
+        events: list[BaseEvent] = []
         target_trace = str(trace_id)
         
         if not os.path.exists(self.partitions_dir):
@@ -187,7 +186,7 @@ class FileEventStore:
                 continue
             
             filepath = os.path.join(self.partitions_dir, filename)
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 for line in f:
                     try:
                         # Pre-check for trace_id before full Pydantic parsing

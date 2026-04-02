@@ -119,12 +119,12 @@ async def test_tca_report_generation_success() -> None:
     # Generate report
     report = await generator.generate_global_report(events, 0, 1000)
 
-    assert report is not None  # noqa: S101
-    assert isinstance(report, TCAReportEvent)  # noqa: S101
-    assert report.payload.trade_count == 2  # noqa: S101, PLR2004
-    assert report.payload.avg_shortfall == pytest.approx(9.0)  # (6+12)/2 # noqa: S101
-    assert report.payload.best_venue == "BINANCE"  # noqa: S101
-    assert "impact" in report.payload.cost_breakdown  # noqa: S101
+    assert report is not None
+    assert isinstance(report, TCAReportEvent)
+    assert report.payload.trade_count == 2
+    assert report.payload.avg_shortfall == pytest.approx(9.0)  # (6+12)/2
+    assert report.payload.best_venue == "BINANCE"
+    assert "impact" in report.payload.cost_breakdown
 
 
 @pytest.mark.asyncio
@@ -135,10 +135,10 @@ async def test_tca_report_generation_incomplete() -> None:
 
     # 1. Empty events
     report = await generator.generate_global_report([], 0, 1000)
-    assert report is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.TCA_REPORT_ERROR  # noqa: S101
-    assert bus.publish.call_args[0][0].payload.error_type == "EMPTY_DATASET"  # noqa: S101
+    assert report is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.TCA_REPORT_ERROR
+    assert bus.publish.call_args[0][0].payload.error_type == "EMPTY_DATASET"
 
     # 2. Insufficient metrics (only VenueRanking, no IS/Slip)
     bus.reset_mock()
@@ -151,8 +151,8 @@ async def test_tca_report_generation_incomplete() -> None:
         )
     ]
     report = await generator.generate_global_report(events, 0, 1000)
-    assert report is None  # noqa: S101
-    assert bus.publish.call_args[0][0].payload.error_type == "INSUFFICIENT_METRICS"  # noqa: S101
+    assert report is None
+    assert bus.publish.call_args[0][0].payload.error_type == "INSUFFICIENT_METRICS"
 
 
 @pytest.mark.asyncio
@@ -166,6 +166,6 @@ async def test_tca_report_generation_system_failure() -> None:
     with patch("qtrader.tca.tca_report.isinstance", side_effect=Exception("SIMULATED_FAILURE")):
         report = await generator.generate_global_report([AsyncMock()], 0, 1)
 
-    assert report is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)  # noqa: S101
+    assert report is None
+    assert bus.publish.called
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

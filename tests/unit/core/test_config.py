@@ -1,7 +1,10 @@
-import pytest
 import os
 from pathlib import Path
-from qtrader.core.config import QTraderSettings, Config
+
+import pytest
+
+from qtrader.core.config import Config, QTraderSettings
+
 
 def test_config_default_values():
     settings = QTraderSettings()

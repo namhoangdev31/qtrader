@@ -1,0 +1,61 @@
+{
+  "constraint_mapping": {
+    "qtrader.core": [
+      "determinism",
+      "config_usage",
+      "trace_propagation",
+      "no_float",
+      "failfast",
+      "async_compliance"
+    ],
+    "qtrader.execution": [
+      "determinism",
+      "config_usage",
+      "trace_propagation",
+      "no_float",
+      "failfast",
+      "async_compliance"
+    ],
+    "qtrader.strategy": [
+      "determinism",
+      "config_usage",
+      "trace_propagation",
+      "no_float",
+      "failfast"
+    ],
+    "qtrader.portfolio": [
+      "determinism",
+      "config_usage",
+      "trace_propagation",
+      "no_float",
+      "failfast"
+    ],
+    "qtrader.risk": [
+      "determinism",
+      "config_usage",
+      "trace_propagation",
+      "no_float",
+      "failfast",
+      "async_compliance"
+    ],
+    "qtrader.analytics": [
+      "determinism",
+      "config_usage",
+      "trace_propagation",
+      "no_float",
+      "failfast"
+    ],
+    "qtrader.data": [
+      "config_usage",
+      "trace_propagation",
+      "failfast",
+      "async_compliance"
+    ],
+    "qtrader.bot": [
+      "config_usage",
+      "trace_propagation",
+      "failfast",
+      "async_compliance"
+    ]
+  }
+}

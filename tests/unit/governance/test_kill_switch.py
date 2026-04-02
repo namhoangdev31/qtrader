@@ -23,19 +23,19 @@ async def test_kill_switch_trigger_drawdown() -> None:
     event = await ks.evaluate_metrics(STRATEGY_ID, metrics)
     
     # Validation
-    assert event is not None # noqa: S101
-    assert event.payload.reason == "MAX_DRAWDOWN_BREACHED" # noqa: S101
-    assert event.payload.metric == "drawdown" # noqa: S101
+    assert event is not None
+    assert event.payload.reason == "MAX_DRAWDOWN_BREACHED"
+    assert event.payload.metric == "drawdown"
     
     # Transition
-    assert fsm.transition.called # noqa: S101
+    assert fsm.transition.called
     fsm.transition.assert_called_with(
         STRATEGY_ID, "KILLED", reason="KILL_SWITCH_TRIGGERED: MAX_DRAWDOWN_BREACHED"
     )
     
     # Event
-    assert bus.publish.called # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.STRATEGY_KILL # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.STRATEGY_KILL
 
 
 @pytest.mark.asyncio
@@ -50,8 +50,8 @@ async def test_kill_switch_trigger_pnl_crash() -> None:
     
     event = await ks.evaluate_metrics(STRATEGY_ID, metrics)
     
-    assert event is not None # noqa: S101
-    assert event.payload.reason == "PNL_CRASH_DETECTED" # noqa: S101
+    assert event is not None
+    assert event.payload.reason == "PNL_CRASH_DETECTED"
 
 
 @pytest.mark.asyncio
@@ -66,8 +66,8 @@ async def test_kill_switch_trigger_slippage() -> None:
     
     event = await ks.evaluate_metrics(STRATEGY_ID, metrics)
     
-    assert event is not None # noqa: S101
-    assert event.payload.reason == "ANOMALOUS_SLIPPAGE_DETECTED" # noqa: S101
+    assert event is not None
+    assert event.payload.reason == "ANOMALOUS_SLIPPAGE_DETECTED"
 
 
 @pytest.mark.asyncio
@@ -80,9 +80,9 @@ async def test_kill_switch_normal_operation() -> None:
     metrics = {"drawdown": 0.02, "pnl_change": 10.0, "slippage": 0.001}
     event = await ks.evaluate_metrics(STRATEGY_ID, metrics)
     
-    assert event is None # noqa: S101
-    assert not fsm.transition.called # noqa: S101
-    assert not bus.publish.called # noqa: S101
+    assert event is None
+    assert not fsm.transition.called
+    assert not bus.publish.called
 
 
 @pytest.mark.asyncio
@@ -95,7 +95,7 @@ async def test_kill_switch_system_failure() -> None:
     # Faulty inputs causing exception
     event = await ks.evaluate_metrics(STRATEGY_ID, None) # type: ignore
     
-    assert event is None # noqa: S101
-    assert bus.publish.called # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.KILL_ERROR # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args) # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.KILL_ERROR
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

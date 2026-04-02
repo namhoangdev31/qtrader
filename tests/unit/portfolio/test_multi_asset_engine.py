@@ -2,13 +2,15 @@
 Tests for MultiAssetPortfolioEngine.
 """
 
-import pytest
-import polars as pl
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from qtrader.portfolio.multi_asset_engine import MultiAssetPortfolioEngine, AssetClassMapping
-from qtrader.core.types import SignalEvent, AllocationWeights
+import polars as pl
+import pytest
+
+from qtrader.core.events import SignalEvent, SignalPayload
+from qtrader.core.types import AllocationWeights
+from qtrader.portfolio.multi_asset_engine import AssetClassMapping, MultiAssetPortfolioEngine
 
 
 def make_market_data(
@@ -92,7 +94,12 @@ class TestMultiAssetPortfolioEngine:
 
         # Create a long signal
         signal = SignalEvent(
-            symbol="BTCUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.8")
+            source="test",
+            payload=SignalPayload(
+                symbol="BTCUSD",
+                signal_type="LONG",
+                strength=0.8
+            )
         )
 
         result = self.engine.allocate_portfolio(
@@ -117,10 +124,20 @@ class TestMultiAssetPortfolioEngine:
 
         # Create signals for both
         btc_signal = SignalEvent(
-            symbol="BTCUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.8")
+            source="test",
+            payload=SignalPayload(
+                symbol="BTCUSD",
+                signal_type="LONG",
+                strength=0.8
+            )
         )
         eth_signal = SignalEvent(
-            symbol="ETHUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.6")
+            source="test",
+            payload=SignalPayload(
+                symbol="ETHUSD",
+                signal_type="LONG",
+                strength=0.6
+            )
         )
 
         result = self.engine.allocate_portfolio(
@@ -151,13 +168,28 @@ class TestMultiAssetPortfolioEngine:
 
         # Create signals
         btc_signal = SignalEvent(
-            symbol="BTCUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.7")
+            source="test",
+            payload=SignalPayload(
+                symbol="BTCUSD",
+                signal_type="LONG",
+                strength=0.7
+            )
         )
         eur_signal = SignalEvent(
-            symbol="EURUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.5")
+            source="test",
+            payload=SignalPayload(
+                symbol="EURUSD",
+                signal_type="LONG",
+                strength=0.5
+            )
         )
         aapl_signal = SignalEvent(
-            symbol="AAPL", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.6")
+            source="test",
+            payload=SignalPayload(
+                symbol="AAPL",
+                signal_type="LONG",
+                strength=0.6
+            )
         )
 
         result = self.engine.allocate_portfolio(
@@ -177,9 +209,14 @@ class TestMultiAssetPortfolioEngine:
         # Create minimal data (only 1 period)
         btc_data = make_market_data("BTCUSD", periods=1)
         market_data = {"BTCUSD": btc_data}
-
+ 
         signal = SignalEvent(
-            symbol="BTCUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.8")
+            source="test",
+            payload=SignalPayload(
+                symbol="BTCUSD",
+                signal_type="LONG",
+                strength=0.8
+            )
         )
 
         result = self.engine.allocate_portfolio(
@@ -219,9 +256,14 @@ class TestMultiAssetPortfolioEngine:
         """Test that current positions are considered (though not used in current implementation)."""
         btc_data = make_market_data("BTCUSD", periods=30)
         market_data = {"BTCUSD": btc_data}
-
+ 
         signal = SignalEvent(
-            symbol="BTCUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.8")
+            source="test",
+            payload=SignalPayload(
+                symbol="BTCUSD",
+                signal_type="LONG",
+                strength=0.8
+            )
         )
 
         current_positions = {"BTCUSD": Decimal("1.5")}  # Already long 1.5 BTC
@@ -243,10 +285,20 @@ class TestMultiAssetPortfolioEngine:
 
         # Long BTC, Short ETH (Hedge)
         btc_signal = SignalEvent(
-            symbol="BTCUSD", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("0.8")
+            source="test",
+            payload=SignalPayload(
+                symbol="BTCUSD",
+                signal_type="LONG",
+                strength=0.8
+            )
         )
         eth_signal = SignalEvent(
-            symbol="ETHUSD", timestamp=datetime.now(), signal_type="SHORT", strength=Decimal("-0.4")
+            source="test",
+            payload=SignalPayload(
+                symbol="ETHUSD",
+                signal_type="SHORT",
+                strength=-0.4
+            )
         )
 
         result = self.engine.allocate_portfolio(
@@ -311,9 +363,9 @@ class TestMultiAssetPortfolioEngine:
 
         # Equal signals
         signals = [
-            SignalEvent(symbol="SYM1", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("1.0")),
-            SignalEvent(symbol="SYM2", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("1.0")),
-            SignalEvent(symbol="SYM3", timestamp=datetime.now(), signal_type="LONG", strength=Decimal("1.0")),
+            SignalEvent(source="test", payload=SignalPayload(symbol="SYM1", signal_type="LONG", strength=1.0)),
+            SignalEvent(source="test", payload=SignalPayload(symbol="SYM2", signal_type="LONG", strength=1.0)),
+            SignalEvent(source="test", payload=SignalPayload(symbol="SYM3", signal_type="LONG", strength=1.0)),
         ]
 
         result = self.engine.allocate_portfolio(

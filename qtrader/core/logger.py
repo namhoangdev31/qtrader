@@ -4,7 +4,8 @@ import datetime
 import json
 import os
 import sys
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from loguru import logger
 
@@ -100,3 +101,4 @@ class QTraderLogger:
 # Single source of logging truth
 qlogger = QTraderLogger(log_dir="logs")
 log_event = qlogger.log_event
+log = logger  # Backward compatibility alias

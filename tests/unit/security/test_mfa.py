@@ -18,9 +18,9 @@ def test_mfa_verified_authorized(mfa: MultiFactorAuthenticator) -> None:
     known = {"127.0.0.1"}
 
     status = mfa.verify(user, pwd, token, ip, known)
-    assert status.verified is True  # noqa: S101
-    assert status.user_id == user  # noqa: S101
-    assert status.reason == "VERIFIED"  # noqa: S101
+    assert status.verified is True
+    assert status.user_id == user
+    assert status.reason == "VERIFIED"
 
 
 def test_mfa_invalid_password_rejection(mfa: MultiFactorAuthenticator) -> None:
@@ -30,8 +30,8 @@ def test_mfa_invalid_password_rejection(mfa: MultiFactorAuthenticator) -> None:
     token = "123456"  # noqa: S105
 
     status = mfa.verify(user, pwd, token, "1.1.1.1", set())
-    assert status.verified is False  # noqa: S101
-    assert status.reason == "PRIMARY_FACTOR_FAIL"  # noqa: S101
+    assert status.verified is False
+    assert status.reason == "PRIMARY_FACTOR_FAIL"
 
 
 def test_mfa_invalid_token_rejection(mfa: MultiFactorAuthenticator) -> None:
@@ -41,13 +41,13 @@ def test_mfa_invalid_token_rejection(mfa: MultiFactorAuthenticator) -> None:
 
     # 1. Invalid length (must be 6)
     status_len = mfa.verify(user, pwd, "12345", "1.1.1.1", set())
-    assert status_len.verified is False  # noqa: S101
-    assert status_len.reason == "SECONDARY_FACTOR_FAIL"  # noqa: S101
+    assert status_len.verified is False
+    assert status_len.reason == "SECONDARY_FACTOR_FAIL"
 
     # 2. Block zero token
     status_zero = mfa.verify(user, pwd, "000000", "1.1.1.1", set())
-    assert status_zero.verified is False  # noqa: S101
-    assert status_zero.reason == "SECONDARY_FACTOR_FAIL"  # noqa: S101
+    assert status_zero.verified is False
+    assert status_zero.reason == "SECONDARY_FACTOR_FAIL"
 
 
 def test_mfa_ip_anomaly_audit(mfa: MultiFactorAuthenticator) -> None:
@@ -59,8 +59,8 @@ def test_mfa_ip_anomaly_audit(mfa: MultiFactorAuthenticator) -> None:
 
     status = mfa.verify(user, pwd, token, ip, {"127.0.0.1"})
     # It still authorizes if factors match (industrial continuity)
-    assert status.verified is True  # noqa: S101
-    assert status.reason == "VERIFIED"  # noqa: S101
+    assert status.verified is True
+    assert status.reason == "VERIFIED"
 
 
 def test_mfa_telemetry_reporting(mfa: MultiFactorAuthenticator) -> None:
@@ -74,5 +74,5 @@ def test_mfa_telemetry_reporting(mfa: MultiFactorAuthenticator) -> None:
     mfa.verify(user, "WRONG", "111222", "1.1", set())
 
     report = mfa.get_report()
-    assert report["failed_attempts"] == 1  # noqa: S101
-    assert report["success_rate"] == 0.5  # noqa: S101, PLR2004
+    assert report["failed_attempts"] == 1
+    assert report["success_rate"] == 0.5

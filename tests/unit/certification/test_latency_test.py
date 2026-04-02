@@ -16,9 +16,9 @@ def test_latency_benchmark_p99_pass(validator: LatencyBenchmarkValidator) -> Non
 
     report = validator.run_performance_audit(latencies)
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert 42.0 < report["metrics"]["p99_latency_ms"] < 60.0  # noqa: S101, PLR2004
-    assert report["metrics"]["mean_latency_ms"] == 42.18  # noqa: S101, PLR2004
+    assert report["result"] == "PASS"
+    assert 42.0 < report["metrics"]["p99_latency_ms"] < 60.0
+    assert report["metrics"]["mean_latency_ms"] == 42.18
 
 
 def test_latency_benchmark_p99_breach_fail(validator: LatencyBenchmarkValidator) -> None:
@@ -28,16 +28,16 @@ def test_latency_benchmark_p99_breach_fail(validator: LatencyBenchmarkValidator)
 
     report = validator.run_performance_audit(latencies)
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["metrics"]["p99_latency_ms"] == 55.0  # noqa: S101, PLR2004
+    assert report["result"] == "FAIL"
+    assert report["metrics"]["p99_latency_ms"] == 55.0
 
 
 def test_latency_benchmark_empty_handling(validator: LatencyBenchmarkValidator) -> None:
     """Verify that empty latency sets are handled gracefully."""
     report = validator.run_performance_audit([])
 
-    assert report["result"] == "SKIP"  # noqa: S101
-    assert report["status"] == "LATENCY_EMPTY"  # noqa: S101
+    assert report["result"] == "SKIP"
+    assert report["status"] == "LATENCY_EMPTY"
 
 
 def test_latency_benchmark_telemetry_tracking(validator: LatencyBenchmarkValidator) -> None:
@@ -46,9 +46,9 @@ def test_latency_benchmark_telemetry_tracking(validator: LatencyBenchmarkValidat
     validator.run_performance_audit([40.0, 50.0, 60.0])  # P99 ~ 59.8
 
     stats = validator.get_performance_telemetry()
-    assert stats["total_benchmark_events"] == 6  # noqa: S101, PLR2004
-    assert 59.0 < stats["peak_lifecycle_p99_ms"] < 60.0  # noqa: S101, PLR2004
-    assert stats["status"] == "PERFORMANCE_GOVERNANCE"  # noqa: S101
+    assert stats["total_benchmark_events"] == 6
+    assert 59.0 < stats["peak_lifecycle_p99_ms"] < 60.0
+    assert stats["status"] == "PERFORMANCE_GOVERNANCE"
 
 
 def test_latency_benchmark_jitter_detection(validator: LatencyBenchmarkValidator) -> None:
@@ -58,5 +58,5 @@ def test_latency_benchmark_jitter_detection(validator: LatencyBenchmarkValidator
     # High jitter
     high_jit = validator.run_performance_audit([1.0, 100.0, 1.0, 100.0])
 
-    assert low_jit["metrics"]["stdev_jit_ms"] < 1.0  # noqa: S101
-    assert high_jit["metrics"]["stdev_jit_ms"] > 40.0  # noqa: S101, PLR2004
+    assert low_jit["metrics"]["stdev_jit_ms"] < 1.0
+    assert high_jit["metrics"]["stdev_jit_ms"] > 40.0

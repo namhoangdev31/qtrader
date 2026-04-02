@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 from qtrader.audit.entropy_scanner import EntropyScanner
 
 MOCK_FILE_CONTENT = """

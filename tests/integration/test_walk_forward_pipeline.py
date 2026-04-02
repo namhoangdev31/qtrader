@@ -1,6 +1,8 @@
-import pytest
 import polars as pl
-from qtrader.ml.walk_forward import WalkForwardPipeline, PurgedKFoldCV
+import pytest
+
+from qtrader.ml.walk_forward import PurgedKFoldCV, WalkForwardPipeline
+
 
 def test_walk_forward_pipeline_splits():
     df = pl.DataFrame({

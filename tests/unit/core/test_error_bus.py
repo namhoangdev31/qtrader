@@ -1,10 +1,12 @@
 import asyncio
+
 import pytest
 
+from qtrader.core.error_bus import ErrorBus
 from qtrader.core.event import EventType
 from qtrader.core.event_bus import EventBus
-from qtrader.core.error_bus import ErrorBus
 from qtrader.monitoring.alerting import AlertSystem
+
 
 @pytest.mark.asyncio
 async def test_global_error_alert_system():

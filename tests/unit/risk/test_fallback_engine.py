@@ -1,9 +1,11 @@
 """Tests for [FAILSAFE_SYSTEM]: failure triggers fallback."""
 import asyncio
+
 import pytest
 
 from qtrader.core.event import ErrorEvent, EventType, RiskEvent
 from qtrader.core.event_bus import EventBus
+from qtrader.core.events import ErrorPayload, RiskPayload
 from qtrader.risk.fallback_engine import FallbackEngine, FallbackMode
 
 
@@ -20,8 +22,9 @@ async def test_fallback_escalation_on_errors():
 
     # Publish 2 errors → REDUCED
     for i in range(2):
-        await bus.publish(EventType.ERROR, ErrorEvent(
-            source="test", message=f"error_{i}", severity="HIGH"
+        await bus.publish(ErrorEvent(
+            source="test",
+            payload=ErrorPayload(source="test", message=f"error_{i}", severity="HIGH")
         ))
     await asyncio.sleep(0.1)
 
@@ -30,8 +33,9 @@ async def test_fallback_escalation_on_errors():
 
     # Publish 2 more → HOLD (total 4)
     for i in range(2):
-        await bus.publish(EventType.ERROR, ErrorEvent(
-            source="test", message=f"error_{i+2}", severity="HIGH"
+        await bus.publish(ErrorEvent(
+            source="test",
+            payload=ErrorPayload(source="test", message=f"error_{i+2}", severity="HIGH")
         ))
     await asyncio.sleep(0.1)
 
@@ -40,8 +44,9 @@ async def test_fallback_escalation_on_errors():
     assert engine.is_trading_allowed() is False
 
     # 1 more → EMERGENCY (total 5)
-    await bus.publish(EventType.ERROR, ErrorEvent(
-        source="test", message="error_final", severity="HIGH"
+    await bus.publish(ErrorEvent(
+        source="test",
+        payload=ErrorPayload(source="test", message="error_final", severity="HIGH")
     ))
     await asyncio.sleep(0.1)
 
@@ -57,8 +62,9 @@ async def test_critical_error_immediate_emergency():
     engine = FallbackEngine(bus)
     await engine.start()
 
-    await bus.publish(EventType.ERROR, ErrorEvent(
-        source="exchange", message="Connection lost", severity="CRITICAL"
+    await bus.publish(ErrorEvent(
+        source="exchange",
+        payload=ErrorPayload(source="exchange", message="Connection lost", severity="CRITICAL")
     ))
     await asyncio.sleep(0.1)
 
@@ -74,9 +80,16 @@ async def test_risk_event_triggers_hold():
     engine = FallbackEngine(bus)
     await engine.start()
 
-    await bus.publish(EventType.RISK, RiskEvent(
-        symbol="BTC/USD",
-        metrics={"action": "REDUCE_EXPOSURE", "drawdown": 0.08},
+    await bus.publish(RiskEvent(
+        source="test",
+        payload=RiskPayload(
+            symbol="BTC/USD",
+            risk_type="DRAWDOWN",
+            value=0.08,
+            threshold=0.1,
+            metrics={"drawdown": 0.08},
+            metadata={"action": "REDUCE_EXPOSURE"}
+        ),
     ))
     await asyncio.sleep(0.1)
 

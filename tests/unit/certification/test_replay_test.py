@@ -19,11 +19,11 @@ def test_replay_validator_deterministic_pnl_pass(
     # Expected PnL: Sum(price * 0.001) = (10 + 20 + 30) * 0.001 = 0.06
     artifact = validator.run_certification(df, expected_pnl=0.06)
 
-    assert artifact["result"] == "PASS"  # noqa: S101
-    assert (  # noqa: S101
-        artifact["metrics"]["Replayed_PnL"] == 0.06  # noqa: PLR2004
+    assert artifact["result"] == "PASS"
+    assert (
+        artifact["metrics"]["Replayed_PnL"] == 0.06
     )
-    assert artifact["metrics"]["Tick_Count"] == 3  # noqa: S101, PLR2004
+    assert artifact["metrics"]["Tick_Count"] == 3
 
 
 def test_replay_validator_fundamental_error_fail(
@@ -36,8 +36,8 @@ def test_replay_validator_fundamental_error_fail(
     # We provide expected_pnl = 0.2
     artifact = validator.run_certification(df, expected_pnl=0.2)
 
-    assert artifact["result"] == "FAIL"  # noqa: S101
-    assert artifact["metrics"]["PnL_Error"] == 0.1  # noqa: S101, PLR2004
+    assert artifact["result"] == "FAIL"
+    assert artifact["metrics"]["PnL_Error"] == 0.1
 
 
 def test_replay_validator_schema_violation_enforcement(
@@ -64,8 +64,8 @@ def test_replay_validator_sequential_ingestion_determinism() -> None:
     report2 = v2.run_certification(df, expected_pnl=0.11)
 
     # Structural values must be identical
-    assert report1["metrics"] == report2["metrics"]  # noqa: S101
-    assert report1["result"] == report2["result"]  # noqa: S101
+    assert report1["metrics"] == report2["metrics"]
+    assert report1["result"] == report2["result"]
 
 
 def test_replay_validator_telemetry_tracking(
@@ -79,6 +79,6 @@ def test_replay_validator_telemetry_tracking(
     validator.run_certification(df, expected_pnl=0.5)
 
     stats = validator.get_certification_telemetry()
-    assert stats["total_ticks"] == 2  # noqa: S101, PLR2004
-    assert stats["mismatch_failures"] == 1  # noqa: S101
-    assert stats["status"] == "CERTIFICATION"  # noqa: S101
+    assert stats["total_ticks"] == 2
+    assert stats["mismatch_failures"] == 1
+    assert stats["status"] == "CERTIFICATION"

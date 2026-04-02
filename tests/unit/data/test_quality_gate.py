@@ -1,9 +1,12 @@
-import pytest
-from unittest.mock import MagicMock
 import datetime
+from unittest.mock import MagicMock
+
+import pytest
+
 from qtrader.core.event import MarketDataEvent
-from qtrader.data.quality_gate import DataQualityGate, DataQualityError
 from qtrader.core.event_bus import EventBus
+from qtrader.data.quality_gate import DataQualityError, DataQualityGate
+
 
 @pytest.fixture
 def mock_bus():

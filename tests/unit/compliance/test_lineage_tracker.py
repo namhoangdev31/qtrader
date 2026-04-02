@@ -19,9 +19,9 @@ def test_lineage_forward_linking(tracker: LineageTracker) -> None:
 
     # Check Signal -> Order
     chain = tracker.get_forensics("O1")
-    assert chain["signal_id"] == "S1"  # noqa: S101
-    assert chain["decision_id"] == "D1"  # noqa: S101
-    assert chain["order_id"] == "O1"  # noqa: S101
+    assert chain["signal_id"] == "S1"
+    assert chain["decision_id"] == "D1"
+    assert chain["order_id"] == "O1"
 
 
 def test_lineage_backward_forensics(tracker: LineageTracker) -> None:
@@ -33,20 +33,20 @@ def test_lineage_backward_forensics(tracker: LineageTracker) -> None:
 
     # Given Fill ID, find Signal ID
     trace = tracker.get_forensics("EXECUTION_F1")
-    assert trace["signal_id"] == "ALPHA_TRIGGER_01"  # noqa: S101
-    assert trace["order_id"] == "OMS_O1"  # noqa: S101
+    assert trace["signal_id"] == "ALPHA_TRIGGER_01"
+    assert trace["order_id"] == "OMS_O1"
 
 
 def test_lineage_completeness_verification(tracker: LineageTracker) -> None:
     """Verify that only full lifecycle chains are flagged as complete."""
     # 1. Incomplete chain (Missing Position ID)
     tracker.link(signal_id="S2", decision_id="D2", order_id="O2", fill_id="F2")
-    assert tracker.is_complete("F2") is False  # noqa: S101
+    assert tracker.is_complete("F2") is False
 
     # 2. Complete chain
     tracker.link(fill_id="F2", position_id="POS_S2")
-    assert tracker.is_complete("F2") is True  # noqa: S101
-    assert tracker.is_complete("S2") is True  # noqa: S101
+    assert tracker.is_complete("F2") is True
+    assert tracker.is_complete("S2") is True
 
 
 def test_lineage_telemetry_reporting(tracker: LineageTracker) -> None:
@@ -59,13 +59,13 @@ def test_lineage_telemetry_reporting(tracker: LineageTracker) -> None:
     tracker.is_complete("A1")
 
     report = tracker.get_report()
-    assert report["total_chains"] == 2  # noqa: S101, PLR2004
-    assert report["complete_chains"] == 1  # noqa: S101
-    assert report["status"] == "LINEAGE"  # noqa: S101
+    assert report["total_chains"] == 2
+    assert report["complete_chains"] == 1
+    assert report["status"] == "LINEAGE"
 
 
 def test_lineage_non_existent_id(tracker: LineageTracker) -> None:
     """Verify that querying for a non-existent ID returns an empty structure."""
     trace = tracker.get_forensics("VOID_ID")
-    assert trace["signal_id"] is None  # noqa: S101
-    assert tracker.is_complete("VOID_ID") is False  # noqa: S101
+    assert trace["signal_id"] is None
+    assert tracker.is_complete("VOID_ID") is False

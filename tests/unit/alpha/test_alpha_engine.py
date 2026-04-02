@@ -1,8 +1,11 @@
-import pytest
-import polars as pl
 from datetime import datetime
+
+import polars as pl
+import pytest
+
 from qtrader.alpha.registry import AlphaEngine
 from qtrader.alpha.technical import MomentumAlpha
+
 
 def test_alpha_engine_initialization():
     engine = AlphaEngine(alpha_names=["momentum", "mean_reversion"])

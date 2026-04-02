@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from qtrader.core.decimal_adapter import d, math_authority
 from qtrader.core.event import (
     EventType,
     FillEvent,
@@ -110,10 +111,10 @@ class UnifiedOMS:
         filled_event = OrderFilledEvent(
             order_id=order_id,
             symbol=fill_event.symbol,
-            quantity=float(fill_event.quantity),
-            price=float(fill_event.price),
+            quantity=fill_event.quantity,
+            price=fill_event.price,
             side=fill_event.side,
-            remaining=float(order.quantity - current_fill_total)
+            remaining=order.quantity - current_fill_total
         )
         await self.event_store.record_event(filled_event)
         await self.event_bus.publish(EventType.ORDER_FILLED, filled_event)
@@ -145,20 +146,20 @@ class UnifiedOMS:
             # Update average cost (WAP)
             if new_qty != 0:
                 if (pos.quantity > 0 and quantity > 0) or (pos.quantity < 0 and quantity < 0):
-                    # Same side: update average price
+                    # Same side: update average price (WAP)
                     new_avg = ((pos.quantity * pos.average_price) + (quantity * price)) / new_qty
                 else:
                     # Closing/Reducing position: average price remains same, realized P&L updated
                     new_avg = pos.average_price
-                    realized = (price - pos.average_price) * abs(quantity) * (1 if pos.quantity > 0 else -1)
+                    realized = (price - pos.average_price) * abs(quantity) * (d(1) if pos.quantity > 0 else d(-1))
                     pos.realized_pnl += realized
             else:
-                new_avg = Decimal('0')
-                realized = (price - pos.average_price) * abs(quantity) * (1 if pos.quantity > 0 else -1)
+                new_avg = d(0)
+                realized = (price - pos.average_price) * abs(quantity) * (d(1) if pos.quantity > 0 else d(-1))
                 pos.realized_pnl += realized
                 
             pos.quantity = new_qty
-            pos.average_price = abs(new_avg)
+            pos.average_price = math_authority.to_price(abs(new_avg))
             pos.timestamp = datetime.utcnow()
             await self.state_store.set_position(pos)
         else:

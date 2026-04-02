@@ -4,7 +4,8 @@ import collections
 import statistics
 import threading
 import time
-from typing import Any, Dict, List, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Any
 
 from loguru import logger
 
@@ -16,7 +17,7 @@ class MetricsCollector:
     Enforces the single metrics registry standard.
     """
 
-    _instance: Optional[MetricsCollector] = None
+    _instance: MetricsCollector | None = None
     _lock = threading.Lock()
 
     def __init__(self, registry: Mapping[str, Any]) -> None:
@@ -24,14 +25,14 @@ class MetricsCollector:
         self.rules = registry.get("telemetry_governance", {})
         
         # State: Thread-safe metrics storage
-        self._counters: Dict[str, float] = collections.defaultdict(float)
-        self._gauges: Dict[str, float] = collections.defaultdict(float)
-        self._summaries: Dict[str, List[float]] = collections.defaultdict(list)
+        self._counters: dict[str, float] = collections.defaultdict(float)
+        self._gauges: dict[str, float] = collections.defaultdict(float)
+        self._summaries: dict[str, list[float]] = collections.defaultdict(list)
         
         self._last_flush = time.perf_counter()
 
     @classmethod
-    def get_instance(cls, registry: Optional[dict[str, Any]] = None) -> MetricsCollector:
+    def get_instance(cls, registry: dict[str, Any] | None = None) -> MetricsCollector:
         if cls._instance is None:
              with cls._lock:
                   if cls._instance is None:
@@ -60,7 +61,7 @@ class MetricsCollector:
             if len(self._summaries[name]) > 10000:
                  self._summaries[name].pop(0)
 
-    def get_stats(self, name: str) -> Optional[Dict[str, float]]:
+    def get_stats(self, name: str) -> dict[str, float] | None:
         """Calculate statistics for summaries (avg, p50, p99)."""
         with self._lock:
             values = self._summaries.get(name)
@@ -84,7 +85,7 @@ class MetricsCollector:
                 "count": n
             }
 
-    def flush_report(self) -> Dict[str, Any]:
+    def flush_report(self) -> dict[str, Any]:
         """Produce a comprehensive telemetry snapshot."""
         with self._lock:
             report = {

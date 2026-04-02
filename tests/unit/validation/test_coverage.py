@@ -21,14 +21,14 @@ async def test_coverage_enforcer_compute_success() -> None:
     event = await enforcer.enforce_coverage(PACKAGE_NAME, coverage_data, threshold=95.0)
 
     # 1. Validation of Coverage Score
-    assert event is not None  # noqa: S101
-    assert event.payload.coverage_pct == 96.0  # noqa: S101, PLR2004
-    assert event.payload.uncovered_lines == [4, 5, 22, 23]  # noqa: S101
-    assert event.payload.metadata["is_passing"]  # noqa: S101
+    assert event is not None
+    assert event.payload.coverage_pct == 96.0
+    assert event.payload.uncovered_lines == [4, 5, 22, 23]
+    assert event.payload.metadata["is_passing"]
 
     # 2. Validation of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.COVERAGE_REPORT  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.COVERAGE_REPORT
 
 
 @pytest.mark.asyncio
@@ -43,12 +43,12 @@ async def test_coverage_enforcer_violation() -> None:
     event = await enforcer.enforce_coverage(PACKAGE_NAME, coverage_data, threshold=95.0)
 
     # 1. Validation of Coverage Violation (Metadata should show is_passing=False)
-    assert event is not None  # noqa: S101
-    assert event.payload.coverage_pct == 80.0  # noqa: S101, PLR2004
-    assert not event.payload.metadata["is_passing"]  # noqa: S101
+    assert event is not None
+    assert event.payload.coverage_pct == 80.0
+    assert not event.payload.metadata["is_passing"]
 
     # 2. Status Broadcast
-    assert bus.publish.called  # noqa: S101
+    assert bus.publish.called
 
 
 @pytest.mark.asyncio
@@ -62,7 +62,7 @@ async def test_coverage_enforcer_package_failure() -> None:
 
     event = await enforcer.enforce_coverage(PACKAGE_NAME, coverage_data)
 
-    assert event is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.COVERAGE_ERROR  # noqa: S101
-    assert " zero lines" in str(bus.publish.call_args)  # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.COVERAGE_ERROR
+    assert " zero lines" in str(bus.publish.call_args)

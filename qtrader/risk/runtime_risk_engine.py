@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
-from typing import List, Optional, Union
 
 from qtrader.core.events import (
-    OrderEvent, 
-    RiskApprovedEvent, 
-    RiskRejectedEvent, 
-    RiskApprovedPayload, 
-    RiskRejectedPayload
+    OrderEvent,
+    RiskApprovedEvent,
+    RiskApprovedPayload,
+    RiskRejectedEvent,
+    RiskRejectedPayload,
 )
 from qtrader.core.state_store import SystemState
-from qtrader.risk.constraints import RiskConstraint, RiskResult
+from qtrader.risk.constraints import RiskConstraint
+from qtrader.risk.regime_adapter import RegimeAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ class RuntimeRiskEngine:
     - **Sub-ms Latency**: Designed to run entirely in-memory with pre-computed snapshots.
     """
 
-    def __init__(self, constraints: Optional[List[RiskConstraint]] = None) -> None:
+    def __init__(self, constraints: list[RiskConstraint] | None = None) -> None:
         """
         Initialize the RuntimeRiskEngine.
         
@@ -48,7 +47,7 @@ class RuntimeRiskEngine:
         """
         self._constraints.append(constraint)
 
-    def evaluate(self, order: OrderEvent, state: SystemState) -> Union[RiskApprovedEvent, RiskRejectedEvent]:
+    def evaluate(self, order: OrderEvent, state: SystemState) -> RiskApprovedEvent | RiskRejectedEvent:
         """
         Evaluate an order for risk compliance.
         
@@ -113,3 +112,31 @@ class RuntimeRiskEngine:
                     threshold=0.0
                 )
             )
+
+
+class AdvancedRiskEngine:
+    """
+    Advanced Risk Engine with regime-adaptive thresholds.
+    """
+
+    def __init__(
+        self, var_threshold: float, max_leverage: float, max_position_size: float
+    ) -> None:
+        self.base_var_threshold = var_threshold
+        self.base_max_leverage = max_leverage
+        self.base_max_position_size = max_position_size
+        self.adapter = RegimeAdapter()
+        self.set_regime(0)
+
+    def set_regime(self, regime_id: int) -> None:
+        """Update the active market regime and re-scale limits."""
+        self._current_regime_id = regime_id
+        limits = self.adapter.adjust_limits(
+            regime_id,
+            self.base_var_threshold,
+            self.base_max_leverage,
+            self.base_max_position_size,
+        )
+        self._current_var_threshold = limits["var_threshold"]
+        self._current_max_leverage = limits["max_leverage"]
+        self._current_max_position_size = limits["max_position_size"]

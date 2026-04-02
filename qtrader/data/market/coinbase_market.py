@@ -1,5 +1,7 @@
+import asyncio
 import logging
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -13,6 +15,7 @@ from tenacity import (
 )
 
 from qtrader.core.config import Config
+from qtrader.core.decimal_adapter import math_authority
 
 _LOG = logging.getLogger("qtrader.market.coinbase")
 
@@ -53,11 +56,11 @@ class CoinbaseMarketDataClient:
         before_sleep=before_sleep_log(_LOG, logging.WARNING),
         reraise=True
     )
-    def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         url = f"{self.rest_base}{path}"
         headers = self._auth_headers("GET", path)
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.get(url, params=params, headers=headers)
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.get(url, params=params, headers=headers)
             if resp.status_code == 429 or resp.status_code >= 500:
                 resp.raise_for_status()
             elif resp.status_code != 200:
@@ -65,7 +68,7 @@ class CoinbaseMarketDataClient:
             
             return resp.json()
 
-    def get_candles(
+    async def get_candles(
         self,
         product_id: str,
         granularity: str,
@@ -76,7 +79,6 @@ class CoinbaseMarketDataClient:
         Fetch OHLCV candles for a product with pagination.
         Coinbase returns max 300 candles per request.
         """
-        import time
         from datetime import datetime
 
         from qtrader.core.config import Config
@@ -112,7 +114,7 @@ class CoinbaseMarketDataClient:
                 "end": str(current_end)
             }
             try:
-                data = self._get(path, params)
+                data = await self._get(path, params)
                 batch = data.get("candles", [])
                 if not batch:
                     if current_end > chunk_start:
@@ -133,11 +135,11 @@ class CoinbaseMarketDataClient:
                 if current_end <= start_ts:
                     break
                     
-                time.sleep(0.15)
+                await asyncio.sleep(0.15)
                 
             except Exception as e:
                 _LOG.error(f"Error fetching candle batch at {current_end}: {e}")
-                time.sleep(1.0)
+                await asyncio.sleep(1.0)
                 break
 
         if not all_candles:
@@ -149,38 +151,38 @@ class CoinbaseMarketDataClient:
             .dt.replace_time_zone("UTC")
             .dt.convert_time_zone(Config.TIMEZONE)
             .alias("timestamp"),
-            pl.col("open").cast(pl.Float64),
-            pl.col("high").cast(pl.Float64),
-            pl.col("low").cast(pl.Float64),
-            pl.col("close").cast(pl.Float64),
-            pl.col("volume").cast(pl.Float64),
+            pl.col("open").cast(pl.String).map_elements(lambda x: math_authority.d(x), return_dtype=pl.Object).alias("open"),
+            pl.col("high").cast(pl.String).map_elements(lambda x: math_authority.d(x), return_dtype=pl.Object).alias("high"),
+            pl.col("low").cast(pl.String).map_elements(lambda x: math_authority.d(x), return_dtype=pl.Object).alias("low"),
+            pl.col("close").cast(pl.String).map_elements(lambda x: math_authority.d(x), return_dtype=pl.Object).alias("close"),
+            pl.col("volume").cast(pl.String).map_elements(lambda x: math_authority.d(x), return_dtype=pl.Object).alias("volume"),
         ]).select(["timestamp", "open", "high", "low", "close", "volume"])
         
         return df.sort("timestamp").unique(subset=["timestamp"])
 
-    def get_product_book(self, product_id: str, limit: int = 10) -> dict[str, Any]:
+    async def get_product_book(self, product_id: str, limit: int = 10) -> dict[str, Any]:
         """
         Fetch L2 order book depth for a product.
         """
         path = "/brokerage/product_book"
         params = {"product_id": product_id, "limit": limit}
-        data = self._get(path, params)
+        data = await self._get(path, params)
         
         pb = data.get("pricebook", {})
         
         return {
-            "bids": [{"price": float(b["price"]), "size": float(b.get("size", b.get("volume", 0)))} for b in pb.get("bids", [])],
-            "asks": [{"price": float(a["price"]), "size": float(a.get("size", a.get("volume", 0)))} for a in pb.get("asks", [])]
+            "bids": [{"price": math_authority.d(b["price"]), "size": math_authority.d(b.get("size", b.get("volume", 0)))} for b in pb.get("bids", [])],
+            "asks": [{"price": math_authority.d(a["price"]), "size": math_authority.d(a.get("size", a.get("volume", 0)))} for a in pb.get("asks", [])]
         }
 
-    def get_best_bid_ask(self, product_ids: list[str]) -> dict[str, dict[str, float]]:
+    async def get_best_bid_ask(self, product_ids: list[str]) -> dict[str, dict[str, Decimal]]:
         """
         Fetch the best bid and ask for multiple products.
-        Returns: { "BTC-USD": {"bid": 60000.0, "ask": 60001.0, "bid_size": 1.0, "ask_size": 1.0} }
+        Returns: { "BTC-USD": {"bid": Decimal("60000.0"), "ask": Decimal("60001.0"), "bid_size": Decimal("1.0"), "ask_size": Decimal("1.0")} }
         """
         path = "/brokerage/best_bid_ask"
         params = {"product_ids": product_ids}
-        data = self._get(path, params)
+        data = await self._get(path, params)
         
         pricebooks = data.get("pricebooks", [])
         result = {}
@@ -189,10 +191,10 @@ class CoinbaseMarketDataClient:
             bids = pb.get("bids", [])
             asks = pb.get("asks", [])
             
-            best_bid = float(bids[0]["price"]) if bids else 0.0
-            best_ask = float(asks[0]["price"]) if asks else 0.0
-            bid_size = float(bids[0].get("size", bids[0].get("volume", 0))) if bids else 0.0
-            ask_size = float(asks[0].get("size", asks[0].get("volume", 0))) if asks else 0.0
+            best_bid = math_authority.d(bids[0]["price"]) if bids else Decimal("0")
+            best_ask = math_authority.d(asks[0]["price"]) if asks else Decimal("0")
+            bid_size = math_authority.d(bids[0].get("size", bids[0].get("volume", 0))) if bids else Decimal("0")
+            ask_size = math_authority.d(asks[0].get("size", asks[0].get("volume", 0))) if asks else Decimal("0")
             
             result[pid] = {
                 "bid": best_bid,

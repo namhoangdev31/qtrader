@@ -1,7 +1,9 @@
-import pytest
 import numpy as np
 import polars as pl
+import pytest
+
 from qtrader.risk.factor_risk import FactorRiskEngine
+
 
 @pytest.fixture
 def engine() -> FactorRiskEngine:

@@ -1,6 +1,9 @@
-import pytest
 import logging
+
+import pytest
+
 from qtrader.analytics.budget import CloudBudgetGuard, ResourceGuardrail
+
 
 def test_cloud_budget_guard_initialization():
     guard = CloudBudgetGuard(monthly_budget=1000.0)

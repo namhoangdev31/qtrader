@@ -20,9 +20,9 @@ def test_dashboard_update_frequency_and_composition(dashboard: LiveGovernanceDas
 
     report = dashboard.update_dashboard_state(perf, risk, exec_data, alloc)
 
-    assert report["status"] == "DASHBOARD_SYNCHRONIZED"  # noqa: S101
-    assert report["metrics"]["live_pnl"] == 100.0  # noqa: S101, PLR2004
-    assert report["metrics"]["current_nav"] == 1100.0  # noqa: S101, PLR2004
+    assert report["status"] == "DASHBOARD_SYNCHRONIZED"
+    assert report["metrics"]["live_pnl"] == 100.0
+    assert report["metrics"]["current_nav"] == 1100.0
 
 
 def test_dashboard_stale_data_rejection(dashboard: LiveGovernanceDashboard) -> None:
@@ -32,7 +32,7 @@ def test_dashboard_stale_data_rejection(dashboard: LiveGovernanceDashboard) -> N
     perf = {"pnl": 100.0, "timestamp": stale_ts}
 
     report = dashboard.update_dashboard_state(perf, {}, {}, {})
-    assert report["status"] == "STALE_DATA_ARTIFACT"  # noqa: S101
+    assert report["status"] == "STALE_DATA_ARTIFACT"
 
 
 def test_dashboard_alert_trigger_logic(dashboard: LiveGovernanceDashboard) -> None:
@@ -45,10 +45,10 @@ def test_dashboard_alert_trigger_logic(dashboard: LiveGovernanceDashboard) -> No
     report = dashboard.update_dashboard_state(perf, risk, exec_data, {})
 
     alerts = report["governance_status"]["active_alerts"]
-    assert "RISK_CRITICAL: 0.90" in alerts  # noqa: S101
-    assert "EXECUTION_FAILURE: 40.00%" in alerts  # noqa: S101
-    assert "DRAWDOWN_BREACH: 15.00%" in alerts  # noqa: S101
-    assert report["governance_status"]["operating_regime"] == "CRITICAL"  # noqa: S101
+    assert "RISK_CRITICAL: 0.90" in alerts
+    assert "EXECUTION_FAILURE: 40.00%" in alerts
+    assert "DRAWDOWN_BREACH: 15.00%" in alerts
+    assert report["governance_status"]["operating_regime"] == "CRITICAL"
 
 
 def test_dashboard_telemetry_tracking(dashboard: LiveGovernanceDashboard) -> None:
@@ -58,5 +58,5 @@ def test_dashboard_telemetry_tracking(dashboard: LiveGovernanceDashboard) -> Non
     dashboard.update_dashboard_state(perf, {}, {}, {})
 
     stats = dashboard.get_dashboard_telemetry()
-    assert stats["total_refresh_cycles"] == 2  # noqa: S101, PLR2004
-    assert stats["active_alert_count"] == 0  # noqa: S101
+    assert stats["total_refresh_cycles"] == 2
+    assert stats["active_alert_count"] == 0

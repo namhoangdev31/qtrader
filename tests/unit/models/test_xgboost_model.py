@@ -1,8 +1,11 @@
-import pytest
 from unittest.mock import MagicMock
-from qtrader.models.xgboost_model import XGBoostPredictor
-import polars as pl
+
 import numpy as np
+import polars as pl
+import pytest
+
+from qtrader.models.xgboost_model import XGBoostPredictor
+
 
 def test_xgboost_model_initialization():
     model = XGBoostPredictor(model_params={"n_estimators": 100})

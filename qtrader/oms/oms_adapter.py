@@ -4,14 +4,13 @@ import asyncio
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
+from qtrader.core.execution_guard import require_initialized
 from qtrader.core.logger import logger
-from qtrader.core.state_store import Order, StateStore
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
 from qtrader.execution.multi_exchange_adapter import MultiExchangeAdapter
 from qtrader.execution.smart_router import SmartOrderRouter
 from qtrader.oms.order_management_system import UnifiedOMS
-from qtrader.core.execution_guard import require_initialized
 
 
 class OMSAdapter(ABC):

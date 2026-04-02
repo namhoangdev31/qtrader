@@ -1,15 +1,16 @@
 """Tests for [SECURITY_CORE_SYSTEM]: RBAC + JWT + Middleware."""
 import pytest
+
+from qtrader.security.jwt_auth import JWTAuthManager
+from qtrader.security.middleware import SecurityMiddleware, check_permission
 from qtrader.security.rbac import (
+    ROLE_PERMISSIONS,
     Permission,
     Role,
-    ROLE_PERMISSIONS,
-    rbac_required,
     current_user_role,
+    rbac_required,
     set_context_role,
 )
-from qtrader.security.jwt_auth import JWTAuthManager
-from qtrader.security.middleware import check_permission, SecurityMiddleware
 
 
 class TestRBACPermissions:

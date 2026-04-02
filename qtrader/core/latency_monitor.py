@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -18,16 +18,16 @@ class LatencyMonitor:
     Enforces the institutional 100ms execution budget.
     """
 
-    _instance: Optional[LatencyMonitor] = None
+    _instance: LatencyMonitor | None = None
 
     def __init__(self, budget_policy: dict[str, Any]) -> None:
         self.policy = budget_policy.get("budgets", {})
         self.rules = budget_policy.get("rules", {})
-        self._timers: Dict[str, float] = {}
+        self._timers: dict[str, float] = {}
         self._accumulated_ms: float = 0.0
 
     @classmethod
-    def get_instance(cls, budget_policy: Optional[dict[str, Any]] = None) -> LatencyMonitor:
+    def get_instance(cls, budget_policy: dict[str, Any] | None = None) -> LatencyMonitor:
         if cls._instance is None:
              if budget_policy is None:
                   # Prototype fallback

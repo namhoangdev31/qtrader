@@ -1,6 +1,9 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from qtrader.audit.float_scanner import FloatScanner
+
 
 @pytest.fixture
 def scanner():

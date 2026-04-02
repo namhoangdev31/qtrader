@@ -1,9 +1,11 @@
 import uuid
 from decimal import Decimal
+
 import pytest
-from qtrader.core.events import FillEvent, FillPayload, FeeEvent, FundingEvent
-from qtrader.portfolio.fee_engine import FeeEngine
+
+from qtrader.core.events import FeeEvent, FillEvent, FillPayload, FundingEvent
 from qtrader.portfolio.funding_engine import FundingEngine
+from qtrader.portfolio.trade_fee_engine import FeeEngine
 
 
 def test_fee_calculation_and_ledger_generation():

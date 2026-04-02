@@ -26,8 +26,8 @@ def test_rl_agent_inference_stability(execution_config: MagicMock) -> None:
     a1 = agent.act(state, deterministic=True)
     a2 = agent.act(state, deterministic=True)
 
-    assert a1 == a2  # noqa: S101
-    assert a1 in [-2, -1, 0, 1, 2]  # noqa: S101
+    assert a1 == a2
+    assert a1 in [-2, -1, 0, 1, 2]
 
 
 def test_rl_agent_learning_convergence(execution_config: MagicMock) -> None:
@@ -58,7 +58,7 @@ def test_rl_agent_learning_convergence(execution_config: MagicMock) -> None:
         p_after = probs_after[0, 2].item()
 
     # Probability should have significantly increased
-    assert p_after > p_before  # noqa: S101
+    assert p_after > p_before
 
 
 def test_rl_agent_exploration_sampling(execution_config: MagicMock) -> None:
@@ -72,18 +72,18 @@ def test_rl_agent_exploration_sampling(execution_config: MagicMock) -> None:
     agent.act(state, deterministic=False)
 
     # Buffer should be filled
-    assert len(agent._saved_log_probs) == 1  # noqa: S101
+    assert len(agent._saved_log_probs) == 1
 
     # Update should clear buffer
     agent.record_reward(1.0)
     agent.update()
 
-    assert len(agent._saved_log_probs) == 0  # noqa: S101
-    assert len(agent._rewards) == 0  # noqa: S101
+    assert len(agent._saved_log_probs) == 0
+    assert len(agent._rewards) == 0
 
 
 def test_rl_agent_empty_update_failsafe(execution_config: MagicMock) -> None:
     """Verify that update() handles empty buffers gracefully."""
     agent = RLOrderExecutionAgent(execution_config, 5)
     loss = agent.update()
-    assert loss == 0.0  # noqa: S101
+    assert loss == 0.0

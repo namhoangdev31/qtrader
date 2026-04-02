@@ -15,6 +15,7 @@ from qtrader.core.logger import log as logger
 
 if TYPE_CHECKING:
     import polars as pl
+
     from qtrader.audit.audit_store import AuditStore
     from qtrader.core.event_bus import EventBus
 

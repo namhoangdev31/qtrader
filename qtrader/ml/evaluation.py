@@ -310,10 +310,12 @@ class NestedCrossValidation:
 
 if __name__ == "__main__":
     import asyncio
+
     import polars as pl  # type: ignore[reimported]
     from sklearn.linear_model import LinearRegression
-    from qtrader.core.orchestrator import TradingOrchestrator
+
     from qtrader.core.bus import EventBus
+    from qtrader.core.orchestrator import TradingOrchestrator
 
     # 1. Mandatory Sovereign Initialization
     # Ensures deterministic seeds and audit logging for the evaluation script

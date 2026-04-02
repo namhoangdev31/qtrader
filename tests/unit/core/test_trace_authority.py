@@ -1,8 +1,11 @@
-import pytest
 import asyncio
 from uuid import UUID, uuid4
-from qtrader.core.trace_authority import TraceAuthority
+
+import pytest
+
 from qtrader.core.events import MarketEvent, MarketPayload, SignalEvent, SignalPayload
+from qtrader.core.trace_authority import TraceAuthority
+
 
 @pytest.fixture(autouse=True)
 def clear_context():

@@ -50,9 +50,9 @@ async def test_execution_benchmark_buy() -> None:
     engine = ExecutionBenchmark(bus, datalake)
     result = await engine.benchmark_trade_lifecycle(trace_id, events)
     
-    assert result is not None # noqa: S101
-    assert result.payload.vwap == 50010.0  # noqa: S101, PLR2004
-    assert result.payload.twap == pytest.approx(50026.66666, rel=1e-5) # noqa: S101
+    assert result is not None
+    assert result.payload.vwap == 50010.0
+    assert result.payload.twap == pytest.approx(50026.66666, rel=1e-5)
 
 
 @pytest.mark.asyncio
@@ -87,8 +87,8 @@ async def test_execution_benchmark_zero_volume() -> None:
     engine = ExecutionBenchmark(bus, datalake)
     result = await engine.benchmark_trade_lifecycle(trace_id, events)
     
-    assert result is not None # noqa: S101
-    assert result.payload.vwap == 50015.0  # (50010+50020)/2 # noqa: S101, PLR2004
+    assert result is not None
+    assert result.payload.vwap == 50015.0  # (50010+50020)/2
 
 
 @pytest.mark.asyncio
@@ -115,14 +115,14 @@ async def test_execution_benchmark_empty_lake_or_window() -> None:
     # Case 1: Empty market df
     datalake.load_data.return_value = pl.DataFrame()
     result = await engine.benchmark_trade_lifecycle(trace_id, events)
-    assert result is not None and result.payload.vwap == DECISION_PRICE # noqa: S101
+    assert result is not None and result.payload.vwap == DECISION_PRICE
 
     # Case 2: Window filter results in empty df
     datalake.load_data.return_value = pl.DataFrame({
         "timestamp": [1, 2], "close": [1, 2], "volume": [1, 2]
     })
     result = await engine.benchmark_trade_lifecycle(trace_id, events)
-    assert result is not None and result.payload.vwap == DECISION_PRICE # noqa: S101
+    assert result is not None and result.payload.vwap == DECISION_PRICE
 
 
 @pytest.mark.asyncio
@@ -148,8 +148,8 @@ async def test_execution_benchmark_datalake_error() -> None:
     
     engine = ExecutionBenchmark(bus, datalake)
     result = await engine.benchmark_trade_lifecycle(trace_id, events)
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
+    assert result is None
+    assert bus.publish.called
 
 
 @pytest.mark.asyncio
@@ -162,5 +162,5 @@ async def test_execution_benchmark_system_failure() -> None:
     engine = ExecutionBenchmark(bus, datalake)
     result = await engine.benchmark_trade_lifecycle(trace_id, None) # type: ignore
     
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
+    assert result is None
+    assert bus.publish.called

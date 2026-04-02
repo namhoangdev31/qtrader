@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -11,7 +11,7 @@ sys.path.append(str(root_dir))
 package_dir = root_dir / "qtrader"
 sys.path.append(str(package_dir))
 
-# Global Mocks for ML libraries to enable offline testing
+# Global Mocks for ML libraries and missing core dependencies to enable offline testing
 class MockTensor: pass
 
 ML_LIBS = {

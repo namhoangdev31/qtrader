@@ -3,10 +3,18 @@ import os
 import shutil
 import uuid
 from decimal import Decimal
+
 import pytest
+
 from qtrader.core.event_store import FileEventStore
 from qtrader.core.events import (
-    MarketEvent, MarketPayload, OrderEvent, OrderPayload, FillEvent, FillPayload, EventType
+    EventType,
+    FillEvent,
+    FillPayload,
+    MarketEvent,
+    MarketPayload,
+    OrderEvent,
+    OrderPayload,
 )
 from qtrader.oms.replay_engine import ReplayEngine, ReplayError
 

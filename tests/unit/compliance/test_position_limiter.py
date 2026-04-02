@@ -19,8 +19,8 @@ def limiter(config: LimitConfig) -> PositionLimiter:
 def test_position_limiter_symbol_limit_breach(limiter: PositionLimiter) -> None:
     """Verify that an order exceeding symbol concentration limit is blocked."""
     # Current Position: 0 | Order Size: 101 (Limit: 100)
-    assert limiter.validate_order("BTC", "BUY", 101.0, 0.0, {"BTC": 0.0}) is False  # noqa: S101
-    assert limiter.get_report()["blocked_orders_count"] == 1  # noqa: S101
+    assert limiter.validate_order("BTC", "BUY", 101.0, 0.0, {"BTC": 0.0}) is False
+    assert limiter.get_report()["blocked_orders_count"] == 1
 
 
 def test_position_limiter_aggregate_exposure_breach(limiter: PositionLimiter) -> None:
@@ -29,10 +29,10 @@ def test_position_limiter_aggregate_exposure_breach(limiter: PositionLimiter) ->
     all_positions = {"BTC": 500.0, "ETH": 450.0}
 
     # 1. Valid order: Adding 40 to SOL (Total: 990 < 1000)
-    assert limiter.validate_order("SOL", "BUY", 40.0, 0.0, all_positions) is True  # noqa: S101
+    assert limiter.validate_order("SOL", "BUY", 40.0, 0.0, all_positions) is True
 
     # 2. Invalid order: Adding 60 to SOL (Total: 1010 > 1000)
-    assert limiter.validate_order("SOL", "BUY", 60.0, 0.0, all_positions) is False  # noqa: S101
+    assert limiter.validate_order("SOL", "BUY", 60.0, 0.0, all_positions) is False
 
 
 def test_position_limiter_offsetting_rule_exception(limiter: PositionLimiter) -> None:
@@ -42,10 +42,10 @@ def test_position_limiter_offsetting_rule_exception(limiter: PositionLimiter) ->
     current_pos = 150.0
 
     # SELL (Offsetting): 150 -> 100 (Absolute magnitude decreases)
-    assert limiter.validate_order("BTC", "SELL", 50.0, current_pos, {"BTC": 150.0}) is True  # noqa: S101
+    assert limiter.validate_order("BTC", "SELL", 50.0, current_pos, {"BTC": 150.0}) is True
 
     # BUY (Increasing): 150 -> 160 (Absolute magnitude increases)
-    assert limiter.validate_order("BTC", "BUY", 10.0, current_pos, {"BTC": 150.0}) is False  # noqa: S101
+    assert limiter.validate_order("BTC", "BUY", 10.0, current_pos, {"BTC": 150.0}) is False
 
 
 def test_position_limiter_position_flip_safety(
@@ -60,11 +60,11 @@ def test_position_limiter_position_flip_safety(
     # Step 1: SELL 100 units (Net -50).
     # Magnitude shift: 50 -> 50 (|Target| is not less than |Current|).
     # So symbol limit check applies. 50 <= 100 (ALLOWED).
-    assert limiter.validate_order("BTC", "SELL", 100.0, 50.0, {"BTC": 50.0}) is True  # noqa: S101
+    assert limiter.validate_order("BTC", "SELL", 100.0, 50.0, {"BTC": 50.0}) is True
 
     # Target: To SHORT 150 units (Net -100).
     # Step 2: SELL 151 units (Net -101). (Limit: 100)
-    assert limiter.validate_order("BTC", "SELL", 151.0, 50.0, {"BTC": 50.0}) is False  # noqa: S101
+    assert limiter.validate_order("BTC", "SELL", 151.0, 50.0, {"BTC": 50.0}) is False
 
 
 def test_position_limiter_telemetry_reporting(limiter: PositionLimiter) -> None:
@@ -73,6 +73,6 @@ def test_position_limiter_telemetry_reporting(limiter: PositionLimiter) -> None:
     limiter.validate_order("BTC", "BUY", 1000.0, 0.0, {"BTC": 0.0})
 
     report = limiter.get_report()
-    assert report["blocked_orders_count"] == 1  # noqa: S101
-    assert "BTC" in report["symbols_with_breaches"]  # noqa: S101
-    assert report["status"] == "COMPLIANCE_REPORT"  # noqa: S101
+    assert report["blocked_orders_count"] == 1
+    assert "BTC" in report["symbols_with_breaches"]
+    assert report["status"] == "COMPLIANCE_REPORT"

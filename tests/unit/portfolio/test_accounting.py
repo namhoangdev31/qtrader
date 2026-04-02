@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
-from qtrader.portfolio.accounting import CapitalLedger, FeeEvent
 from qtrader.oms.order_management_system import Position
+from qtrader.portfolio.capital_ledger import CapitalLedger, FeeEvent
 
 
 def test_capital_ledger_initialization() -> None:
@@ -107,8 +109,8 @@ def test_nav_calculation() -> None:
 
     # Create positions
     positions = {
-        "BTC-USDT": Position(symbol="BTC-USDT", qty=0.1, avg_cost=30000.0),
-        "ETH-USDT": Position(symbol="ETH-USDT", qty=2.0, avg_cost=2000.0),
+        "BTC-USDT": Position(symbol="BTC-USDT", quantity=Decimal('0.1'), average_price=Decimal('30000.0')),
+        "ETH-USDT": Position(symbol="ETH-USDT", quantity=Decimal('2.0'), average_price=Decimal('2000.0')),
     }
 
     # Current prices
@@ -138,8 +140,8 @@ def test_daily_pnl_calculation() -> None:
 
     # Add positions
     positions = {
-        "BTC-USDT": Position(symbol="BTC-USDT", qty=0.1, avg_cost=30000.0),
-        "ETH-USDT": Position(symbol="ETH-USDT", qty=2.0, avg_cost=2000.0),
+        "BTC-USDT": Position(symbol="BTC-USDT", quantity=Decimal('0.1'), average_price=Decimal('30000.0')),
+        "ETH-USDT": Position(symbol="ETH-USDT", quantity=Decimal('2.0'), average_price=Decimal('2000.0')),
     }
     prices = {"BTC-USDT": 32000.0, "ETH-USDT": 2100.0}
     nav2 = ledger.calculate_nav(positions, prices)  # Should be 17400.0
@@ -173,7 +175,7 @@ def test_nav_components() -> None:
     ledger.record_cash_deposit(5000.0, "USD")
     ledger.record_fee("binance", "BTC-USDT", 10.0, "2026-03-25T10:00:00Z")
 
-    positions = {"BTC-USDT": Position(symbol="BTC-USDT", qty=0.5, avg_cost=20000.0)}
+    positions = {"BTC-USDT": Position(symbol="BTC-USDT", quantity=Decimal('0.5'), average_price=Decimal('20000.0'))}
     prices = {"BTC-USDT": 21000.0}
 
     components = ledger.get_nav_components(positions, prices)

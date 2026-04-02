@@ -21,8 +21,8 @@ def test_liquidity_model_depth_sensitivity() -> None:
     scores = model.compute_scores(market_data, side="BUY")
     
     # Binance should have a significantly higher score because its top volume has more weight
-    assert scores["Binance"] > scores["Coinbase"]  # noqa: S101
-    assert pytest.approx(sum(scores.values())) == 1.0  # noqa: S101
+    assert scores["Binance"] > scores["Coinbase"]
+    assert pytest.approx(sum(scores.values())) == 1.0
 
 
 def test_liquidity_model_normalization_integrity() -> None:
@@ -37,10 +37,10 @@ def test_liquidity_model_normalization_integrity() -> None:
     
     scores = model.compute_scores(market_data, side="BUY")
     
-    assert scores["V1"] == pytest.approx(0.5)  # noqa: S101
-    assert scores["V2"] == pytest.approx(0.3)  # noqa: S101
-    assert scores["V3"] == pytest.approx(0.2)  # noqa: S101
-    assert pytest.approx(sum(scores.values())) == 1.0  # noqa: S101
+    assert scores["V1"] == pytest.approx(0.5)
+    assert scores["V2"] == pytest.approx(0.3)
+    assert scores["V3"] == pytest.approx(0.2)
+    assert pytest.approx(sum(scores.values())) == 1.0
 
 
 def test_liquidity_model_side_separation() -> None:
@@ -56,8 +56,8 @@ def test_liquidity_model_side_separation() -> None:
     buy_scores = model.compute_scores(market_data, side="BUY")
     sell_scores = model.compute_scores(market_data, side="SELL")
     
-    assert buy_scores["V1"] > buy_scores["V2"]  # noqa: S101
-    assert sell_scores["V2"] > sell_scores["V1"]  # noqa: S101
+    assert buy_scores["V1"] > buy_scores["V2"]
+    assert sell_scores["V2"] > sell_scores["V1"]
 
 
 def test_liquidity_model_stale_data_resilience() -> None:
@@ -72,9 +72,9 @@ def test_liquidity_model_stale_data_resilience() -> None:
     
     scores = model.compute_scores(market_data, side="BUY")
     
-    assert scores["Binance"] == pytest.approx(1.0)  # noqa: S101
-    assert scores["Coinbase"] == 0.0  # noqa: S101
-    assert scores["Kraken"] == 0.0  # noqa: S101
+    assert scores["Binance"] == pytest.approx(1.0)
+    assert scores["Coinbase"] == 0.0
+    assert scores["Kraken"] == 0.0
 
 
 def test_liquidity_model_failsafe_distribution() -> None:
@@ -88,14 +88,14 @@ def test_liquidity_model_failsafe_distribution() -> None:
     
     scores = model.compute_scores(market_data, side="BUY")
     
-    assert scores["V1"] == pytest.approx(0.5)  # noqa: S101
-    assert scores["V2"] == pytest.approx(0.5)  # noqa: S101
+    assert scores["V1"] == pytest.approx(0.5)
+    assert scores["V2"] == pytest.approx(0.5)
 
 
 def test_liquidity_model_empty_market_data() -> None:
     """Verify behavior with completely empty inputs."""
     model = MultiVenueLiquidityModel()
-    assert model.compute_scores({}) == {}  # noqa: S101
+    assert model.compute_scores({}) == {}
 
 
 def test_liquidity_model_malformed_levels() -> None:
@@ -104,7 +104,7 @@ def test_liquidity_model_malformed_levels() -> None:
     # Level with only 1 element (missing size)
     market_data = {"V1": {"asks": [[100.0]]}}
     scores = model.compute_scores(market_data)
-    assert scores["V1"] == 1.0  # noqa: S101
+    assert scores["V1"] == 1.0
 
 
 def test_liquidity_model_exception_handling() -> None:
@@ -113,4 +113,4 @@ def test_liquidity_model_exception_handling() -> None:
     # Passing a non-dict to trigger Exception in _calculate_venue_liquidity
     market_data = {"V1": "NOT_A_DICT"}
     scores = model.compute_scores(market_data)  # type: ignore
-    assert scores["V1"] == 1.0  # noqa: S101
+    assert scores["V1"] == 1.0

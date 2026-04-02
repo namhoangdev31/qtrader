@@ -49,15 +49,15 @@ async def test_cost_model_compute_success(execution_config: MagicMock) -> None:
     # 4. Validation of Fees (1.0 + 0.0002 * 100 * 100 = 1.0 + 2.0 = 3.0)
     # Total => 0.0015 + 0.0005 + 10.0 + 3.0 = 13.002
 
-    assert report["total_cost"] == pytest.approx(13.002)  # noqa: S101
-    assert report["impact_cost"] == pytest.approx(0.0015)  # noqa: S101
-    assert report["timing_cost"] == pytest.approx(0.0005)  # noqa: S101
-    assert report["spread_cost"] == pytest.approx(10.0)  # noqa: S101
-    assert report["fee_cost"] == pytest.approx(3.0)  # noqa: S101
+    assert report["total_cost"] == pytest.approx(13.002)
+    assert report["impact_cost"] == pytest.approx(0.0015)
+    assert report["timing_cost"] == pytest.approx(0.0005)
+    assert report["spread_cost"] == pytest.approx(10.0)
+    assert report["fee_cost"] == pytest.approx(3.0)
 
     # Status Broadcast
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.EXECUTION_COST_REPORT  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.EXECUTION_COST_REPORT
 
 
 @pytest.mark.asyncio
@@ -70,7 +70,7 @@ async def test_cost_model_catastrophic_safety(execution_config: MagicMock) -> No
 
     # Failsafe should prevent crashes and use default liquidity (1.0)
     # Impact = 0.15 * (100 / 1.0)^2 = 1500.0
-    assert report["impact_cost"] == 1500.0  # noqa: S101, PLR2004
+    assert report["impact_cost"] == 1500.0
 
 
 @pytest.mark.asyncio
@@ -82,5 +82,5 @@ async def test_cost_model_failure_handling(execution_config: MagicMock) -> None:
     report = await model.compute(None, {"order_size": 100.0})  # type: ignore
 
     # Should return large finite cost on failure
-    assert report["total_cost"] == EXPECTED_FAIL_COST  # noqa: S101
-    assert report["impact_cost"] == 0.0  # noqa: S101
+    assert report["total_cost"] == EXPECTED_FAIL_COST
+    assert report["impact_cost"] == 0.0

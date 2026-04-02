@@ -25,13 +25,13 @@ def test_override_valid_dual_approval(override: HumanOverrideEnforcer) -> None:
 
     # 1. First Signature (TRADER)
     # Submission: Using correct simulated password/token baseline.
-    assert override.submit_approval(req_id, "trader_01_alt", Role.TRADER, "123456") is True  # noqa: S101
+    assert override.submit_approval(req_id, "trader_01_alt", Role.TRADER, "123456") is True
 
     # 2. Second Signature (RISK_MANAGER)
-    assert override.submit_approval(req_id, "risk_01", Role.RISK_MANAGER, "654321") is True  # noqa: S101
+    assert override.submit_approval(req_id, "risk_01", Role.RISK_MANAGER, "654321") is True
 
     # 3. Final Authorization Execution
-    assert override.authorize(req_id) is True  # noqa: S101
+    assert override.authorize(req_id) is True
 
 
 def test_override_self_approval_violation(override: HumanOverrideEnforcer) -> None:
@@ -40,7 +40,7 @@ def test_override_self_approval_violation(override: HumanOverrideEnforcer) -> No
     req_id = override.request_override("trader_01", "OVERRIDE_LIMIT", "Internal bypass")
 
     # Submission: TRADER trader_01 attempting to approve.
-    assert override.submit_approval(req_id, "trader_01", Role.TRADER, "123456") is False  # noqa: S101
+    assert override.submit_approval(req_id, "trader_01", Role.TRADER, "123456") is False
 
 
 def test_override_role_overlap_violation(override: HumanOverrideEnforcer) -> None:
@@ -53,10 +53,10 @@ def test_override_role_overlap_violation(override: HumanOverrideEnforcer) -> Non
     override.submit_approval(req_id, "trader_02", Role.TRADER, "222333")
 
     # Final Authorization must fail due to role overlap (Exactly 2 distinct roles required).
-    assert override.authorize(req_id) is False  # noqa: S101
+    assert override.authorize(req_id) is False
 
     report = override.get_report()
-    assert report["overrides_rejected"] == 1  # noqa: S101
+    assert report["overrides_rejected"] == 1
 
 
 def test_override_mfa_failure_rejection(override: HumanOverrideEnforcer) -> None:
@@ -64,7 +64,7 @@ def test_override_mfa_failure_rejection(override: HumanOverrideEnforcer) -> None
     req_id = override.request_override("trader_01", "DEACTIVATE_FIREWALL", "Testing")
 
     # MFA Token: 000000 (Blocked logic in mfa.py)
-    assert override.submit_approval(req_id, "risk_01", Role.RISK_MANAGER, "000000") is False  # noqa: S101
+    assert override.submit_approval(req_id, "risk_01", Role.RISK_MANAGER, "000000") is False
 
 
 def test_override_temporal_integrity_expiration(override: HumanOverrideEnforcer) -> None:
@@ -79,5 +79,5 @@ def test_override_temporal_integrity_expiration(override: HumanOverrideEnforcer)
     # 3. Simulate clock shift beyond 300s
     override._requests[req_id].requested_at = time.time() - 301.0
 
-    assert override.authorize(req_id) is False  # noqa: S101
-    assert override.get_report()["overrides_rejected"] == 1  # noqa: S101
+    assert override.authorize(req_id) is False
+    assert override.get_report()["overrides_rejected"] == 1

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID, uuid4
 
 from qtrader.core.events import FundingEvent, FundingPayload, LedgerEntryPayload
@@ -25,7 +24,7 @@ class FundingEngine:
         quantity: Decimal, 
         mark_price: Decimal, 
         funding_rate: Decimal, 
-        trace_id: Optional[UUID] = None
+        trace_id: UUID | None = None
     ) -> FundingEvent:
         """
         Compute the funding payment for a given position.

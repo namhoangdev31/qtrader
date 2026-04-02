@@ -35,8 +35,8 @@ async def test_compliance_export_csv_generation() -> None:
     filepath = await exporter.generate_report(start_ts, end_ts, format="csv")
     
     # 2. Assertions
-    assert os.path.exists(filepath) # noqa: S101
-    assert filepath.endswith(".csv") # noqa: S101
+    assert os.path.exists(filepath)
+    assert filepath.endswith(".csv")
     
     # Cleanup
     if os.path.exists(filepath):
@@ -54,12 +54,12 @@ async def test_compliance_export_formats() -> None:
     
     # Test JSON
     json_path = await exporter.generate_report(1, 10, format="json")
-    assert os.path.exists(json_path) # noqa: S101
+    assert os.path.exists(json_path)
     os.remove(json_path)
     
     # Test Parquet
     pq_path = await exporter.generate_report(1, 10, format="parquet")
-    assert os.path.exists(pq_path) # noqa: S101
+    assert os.path.exists(pq_path)
     os.remove(pq_path)
     
     # Test Unsupported
@@ -77,8 +77,8 @@ async def test_compliance_export_empty_data() -> None:
     exporter = ComplianceExporter(store, bus)
     filepath = await exporter.generate_report(1, 100)
     
-    assert filepath == "" # noqa: S101
-    assert not bus.publish.called # noqa: S101
+    assert filepath == ""
+    assert not bus.publish.called
 
 
 @pytest.mark.asyncio
@@ -93,7 +93,7 @@ async def test_compliance_export_critical_failure() -> None:
     with pytest.raises(RuntimeError, match="DuckDB Timeout"):
         await exporter.generate_report(1, 100)
         
-    assert bus.publish.called # noqa: S101
+    assert bus.publish.called
     event = bus.publish.call_args[0][0]
-    assert event.event_type == EventType.COMPLIANCE_ERROR # noqa: S101
-    assert event.payload.error_type == "EXPORT_FAILURE" # noqa: S101
+    assert event.event_type == EventType.COMPLIANCE_ERROR
+    assert event.payload.error_type == "EXPORT_FAILURE"

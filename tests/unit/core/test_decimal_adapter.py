@@ -1,6 +1,9 @@
-import pytest
 from decimal import Decimal
+
+import pytest
+
 from qtrader.core.decimal_adapter import DecimalAdapter, d
+
 
 @pytest.fixture
 def adapter():

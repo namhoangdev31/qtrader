@@ -2,11 +2,9 @@
 
 from abc import ABC, abstractmethod
 
+from qtrader.core.execution_guard import require_initialized
 from qtrader.core.logger import logger
 from qtrader.core.types import AlphaOutput, MarketData
-
-
-from qtrader.core.execution_guard import require_initialized
 
 
 class AlphaBase(ABC):
@@ -32,7 +30,6 @@ class AlphaBase(ABC):
 
 # Use the consolidated AlphaCombiner for all operations
 from qtrader.alpha.combiner import AlphaBase
-
 
 # Alias for backward compatibility
 Alpha = AlphaBase

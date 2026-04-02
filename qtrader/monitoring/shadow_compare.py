@@ -1,8 +1,7 @@
-import logging
 from datetime import datetime, timedelta
-from typing import Any
 
 from qtrader.core.logger import logger
+
 
 class ShadowCompare:
     """

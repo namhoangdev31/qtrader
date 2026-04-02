@@ -4,10 +4,11 @@ Covers: HRPOptimizer, CVaROptimizer
 Focus: weights sum to 1, all long-only non-negative, low-risk asset gets higher weight,
 concentration risk, empty input, and numerical stability.
 """
-import pytest
 import numpy as np
 import polars as pl
-from qtrader.portfolio.hrp import HRPOptimizer, CVaROptimizer
+import pytest
+
+from qtrader.portfolio.hrp import CVaROptimizer, HRPOptimizer
 
 
 # Helper: generate T×N return matrix

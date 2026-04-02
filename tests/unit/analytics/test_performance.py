@@ -1,6 +1,8 @@
-import pytest
 import polars as pl
+import pytest
+
 from qtrader.analytics.performance import PerformanceAnalytics
+
 
 def test_performance_analytics_init():
     analytics = PerformanceAnalytics(risk_free_rate=0.02)

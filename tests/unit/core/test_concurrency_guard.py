@@ -1,7 +1,10 @@
 import asyncio
-import pytest
 import time
+
+import pytest
+
 from qtrader.core.concurrency_guard import ConcurrencyGuard, concurrency_guard, safe_update
+
 
 @pytest.mark.asyncio
 async def test_concurrency_guard_serialization():
@@ -24,7 +27,9 @@ async def test_concurrency_guard_serialization():
     assert shared_state["counter"] == 10
 
 from io import StringIO
+
 from loguru import logger
+
 
 @pytest.mark.asyncio
 async def test_concurrency_guard_deadlock_detection_metrics():

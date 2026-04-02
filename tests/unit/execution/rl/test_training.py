@@ -14,14 +14,14 @@ def test_replay_buffer_capacity_fifo() -> None:
         buffer.add([float(i)], i, float(i), [float(i + 1)], False)
 
     expected_len = 10
-    assert len(buffer) == expected_len  # noqa: S101
+    assert len(buffer) == expected_len
 
     # Oldest (0-4) should be evicted. First transition should be index 5.
     sample = buffer.sample(batch_size=10)
     # Sampling is random, but we can check if 0-4 are absent if we sample all
     all_states = [s[0][0] for s in sample]
-    assert 0.0 not in all_states  # noqa: S101
-    assert 14.0 in all_states  # noqa: S101, PLR2004
+    assert 0.0 not in all_states
+    assert 14.0 in all_states
 
 
 def test_training_pipeline_episode_trajectory() -> None:
@@ -46,12 +46,12 @@ def test_training_pipeline_episode_trajectory() -> None:
     # total_reward = 1.0 + 2.0 = 3.0 (from first two steps)
     expected_reward = 3.0
     expected_buffer_len = 2
-    assert total_reward == expected_reward  # noqa: S101
-    assert len(buffer) == expected_buffer_len  # noqa: S101
+    assert total_reward == expected_reward
+    assert len(buffer) == expected_buffer_len
 
     # Verify agent was updated once
-    assert agent.update.call_count == 1  # noqa: S101
-    assert agent.record_reward.call_count == 2  # noqa: S101, PLR2004
+    assert agent.update.call_count == 1
+    assert agent.record_reward.call_count == 2
 
 
 def test_training_pipeline_convergence_tracking() -> None:
@@ -70,15 +70,15 @@ def test_training_pipeline_convergence_tracking() -> None:
     num_epochs = 5
     history = pipeline.train(dataset, n_epochs=num_epochs)
 
-    assert len(history) == num_epochs  # noqa: S101
-    assert all(h == 10.0 for h in history)  # noqa: S101, PLR2004
-    assert agent.update.call_count == num_epochs  # noqa: S101
+    assert len(history) == num_epochs
+    assert all(h == 10.0 for h in history)
+    assert agent.update.call_count == num_epochs
 
 
 def test_training_pipeline_empty_failsafe() -> None:
     """Verify behavior with empty dataset or malformed episodes."""
     pipeline = RLTrainingPipeline(MagicMock(), MagicMock())
 
-    assert pipeline.train([], n_epochs=5) == []  # noqa: S101
-    assert pipeline.run_episode([]) == 0.0  # noqa: S101
-    assert pipeline.run_episode([{"state": [0.1]}]) == 0.0  # noqa: S101
+    assert pipeline.train([], n_epochs=5) == []
+    assert pipeline.run_episode([]) == 0.0
+    assert pipeline.run_episode([{"state": [0.1]}]) == 0.0

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from qtrader.strategy.alpha_base import Alpha
+from qtrader.strategy.alpha.alpha_base import AlphaBase as Alpha
 
 
 class VolatilityAlpha(Alpha):

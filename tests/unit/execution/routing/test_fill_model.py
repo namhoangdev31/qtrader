@@ -35,8 +35,8 @@ def test_venue_fill_probability_latency_sensitivity(execution_config: MagicMock)
     )
     
     # Binance should have a higher probability due to lower latency drift
-    assert probs["Binance"] > probs["Coinbase"]  # noqa: S101
-    assert probs["Binance"] > 0.0  # noqa: S101
+    assert probs["Binance"] > probs["Coinbase"]
+    assert probs["Binance"] > 0.0
 
 
 def test_venue_fill_probability_latency_cutoff(execution_config: MagicMock) -> None:
@@ -52,7 +52,7 @@ def test_venue_fill_probability_latency_cutoff(execution_config: MagicMock) -> N
         time_horizon=0.010, market_stats=market_stats, latencies=latencies
     )
     
-    assert probs["V1"] == 0.0  # noqa: S101
+    assert probs["V1"] == 0.0
 
 
 def test_venue_fill_probability_intensity_dominance(execution_config: MagicMock) -> None:
@@ -76,7 +76,7 @@ def test_venue_fill_probability_intensity_dominance(execution_config: MagicMock)
     )
     
     # High intensity on Coinbase should overcome the 15ms latency handicap
-    assert probs["Coinbase"] > probs["Binance"]  # noqa: S101
+    assert probs["Coinbase"] > probs["Binance"]
 
 
 def test_venue_fill_probability_boundary_conditions(execution_config: MagicMock) -> None:
@@ -84,14 +84,14 @@ def test_venue_fill_probability_boundary_conditions(execution_config: MagicMock)
     model = VenueFillProbabilityModel(execution_config)
     
     # 1. Zero horizon
-    assert model.estimate_fill_probabilities(0.0, {"B": {}}, {}) == {"B": 0.0}  # noqa: S101
+    assert model.estimate_fill_probabilities(0.0, {"B": {}}, {}) == {"B": 0.0}
     
     # 2. Empty market data
-    assert model.estimate_fill_probabilities(1.0, {}, {}) == {}  # noqa: S101
+    assert model.estimate_fill_probabilities(1.0, {}, {}) == {}
     
     # 3. Missing latencies (should fallback to zero)
     market_stats = {"V1": {"intensity": 10.0, "liquidity": 100.0}}
     probs = model.estimate_fill_probabilities(
         time_horizon=1.0, market_stats=market_stats, latencies={}
     )
-    assert probs["V1"] > 0.0  # noqa: S101
+    assert probs["V1"] > 0.0

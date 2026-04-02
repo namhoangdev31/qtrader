@@ -4,10 +4,10 @@ Covers: MLflowManager (model registry, promotion, rollback, stale-model preventi
 FactorEngine (batch compute, multi-symbol, compute_latest).
 Focus: Garbage-in/garbage-out prevention, model staleness, correctness of promotion gates.
 """
-import pytest
-import polars as pl
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
+import polars as pl
+import pytest
 
 # ===========================================================================
 # MLflowManager

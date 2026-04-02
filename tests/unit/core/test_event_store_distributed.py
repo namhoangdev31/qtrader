@@ -3,9 +3,11 @@ import os
 import shutil
 import uuid
 from datetime import datetime
+
 import pytest
+
 from qtrader.core.event_store import FileEventStore
-from qtrader.core.events import MarketEvent, MarketPayload, EventType
+from qtrader.core.events import EventType, MarketEvent, MarketPayload
 
 
 @pytest.fixture

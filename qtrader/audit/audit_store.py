@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+
 import duckdb
 import polars as pl
 
@@ -40,7 +40,7 @@ class AuditStore:
         """Execute the analytical schema definition."""
         try:
             schema_file = os.path.join(os.path.dirname(__file__), "audit_schema.sql")
-            with open(schema_file, "r") as f:
+            with open(schema_file) as f:
                 self._conn.execute(f.read())
             logger.info(f"AUDIT_STORE_READY | Path: {self._db_path}")
         except Exception as e:

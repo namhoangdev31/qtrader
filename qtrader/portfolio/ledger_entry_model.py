@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import List
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
+
 from qtrader.core.events import LedgerEntryPayload
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class TransactionRecord(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     trace_id: UUID = Field(description="Correlation ID for the entire transaction")
-    entries: List[LedgerEntryPayload] = Field(description="The balanced set of debit/credit entries")
+    entries: list[LedgerEntryPayload] = Field(description="The balanced set of debit/credit entries")
     description: str = Field(default="", description="High-level description of the transaction")
 
     def validate_balance(self) -> bool:

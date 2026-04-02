@@ -1,8 +1,11 @@
-import pytest
-import polars as pl
-import numpy as np
 from datetime import datetime, timedelta
+
+import numpy as np
+import polars as pl
+import pytest
+
 from qtrader.alpha.factor_model import FactorModel
+
 
 @pytest.fixture
 def sample_features() -> pl.DataFrame:

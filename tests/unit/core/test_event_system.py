@@ -1,10 +1,19 @@
 import time
 import uuid
+
 import pytest
 from pydantic import ValidationError
-from qtrader.core.events import EventType, BaseEvent, MarketEvent, MarketPayload, OrderEvent, OrderPayload
+
 from qtrader.core.event_factory import EventFactory
 from qtrader.core.event_validator import EventValidator, SchemaError
+from qtrader.core.events import (
+    BaseEvent,
+    EventType,
+    MarketEvent,
+    MarketPayload,
+    OrderEvent,
+    OrderPayload,
+)
 
 
 def test_base_event_immutability():
@@ -107,7 +116,7 @@ def test_trace_id_propagation():
 
 def test_legacy_bridge_compatibility():
     """Verify that importing from legacy core/event.py bridge works."""
-    from qtrader.core.event import MarketDataEvent, EventType
+    from qtrader.core.event import EventType, MarketDataEvent
     from qtrader.core.events import MarketPayload
     
     payload = MarketPayload(symbol="BTC/USDT", bid=50000.0, ask=50001.0, seq_id=1)

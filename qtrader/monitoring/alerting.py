@@ -1,6 +1,4 @@
 import logging
-from typing import Any
-import asyncio
 
 from qtrader.core.event import ErrorEvent, EventType
 from qtrader.core.event_bus import EventBus

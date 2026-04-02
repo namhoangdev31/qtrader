@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Set
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -18,10 +17,10 @@ class EventIndex:
         Initialize the event index.
         """
         # Set of seen UUIDs for O(1) idempotency check
-        self._event_ids: Set[UUID] = set()
+        self._event_ids: set[UUID] = set()
         
         # Mapping from partition_key to current monotonically increasing offset
-        self._partition_offsets: Dict[str, int] = {}
+        self._partition_offsets: dict[str, int] = {}
 
     def is_duplicate(self, event_id: UUID) -> bool:
         """
@@ -57,6 +56,6 @@ class EventIndex:
         """Return the total number of unique events indexed."""
         return len(self._event_ids)
 
-    def get_partition_stats(self) -> Dict[str, int]:
+    def get_partition_stats(self) -> dict[str, int]:
         """Return a summary of offsets per partition."""
         return self._partition_offsets.copy()

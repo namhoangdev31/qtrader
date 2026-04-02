@@ -1,9 +1,12 @@
 import functools
 import json
 import os
-from typing import Any, Callable, TypeVar, Optional, Dict
+from collections.abc import Callable
+from typing import Any, Optional, TypeVar
+
 from loguru import logger
-from qtrader.core.system_state import state_manager, SystemState
+
+from qtrader.core.system_state import SystemState, state_manager
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -15,7 +18,7 @@ class ExecutionGateRegistry:
 
     def __new__(cls) -> 'ExecutionGateRegistry':
         if cls._instance is None:
-            cls._instance = super(ExecutionGateRegistry, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def log_blocked(self, module: str, function: str) -> None:

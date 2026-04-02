@@ -1,8 +1,11 @@
-import pytest
-import polars as pl
 from unittest.mock import MagicMock
+
+import polars as pl
+import pytest
+
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.registry import ModelRegistry
+
 
 def test_regime_detector_predict():
     detector = RegimeDetector(n_regimes=2)
@@ -18,7 +21,7 @@ def test_regime_detector_predict():
     assert regimes.dtype in [pl.Int32, pl.Int64, pl.Int8, pl.Int16]
 
 def test_model_registry_get_best_model():
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
     
     # Mock search_runs return value as a pandas-like object
     mock_runs = MagicMock()
@@ -38,7 +41,8 @@ def test_model_registry_get_best_model():
         assert registry.get_best_model("none") == ""
 
 def test_model_registry_load_model():
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
+
     from qtrader.ml.registry import ModelRegistry
     
     with patch("mlflow.set_tracking_uri"), \
@@ -57,7 +61,8 @@ def test_model_registry_load_model():
         assert model == mock_model
 
 def test_model_registry_prevent_stale_model():
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
+
     from qtrader.ml.registry import ModelRegistry
     # We test that the logic properly pulls the absolute latest if version isn't specified
     # Using our already-tested get_best_model mock

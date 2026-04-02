@@ -1,10 +1,13 @@
-import pytest
-import polars as pl
 from datetime import datetime
 from unittest.mock import MagicMock
+
+import polars as pl
+import pytest
+
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.integration import BacktestHarness, BacktestResult
 from qtrader.backtest.tearsheet import TearsheetGenerator, TearsheetMetrics
+
 
 def test_vectorized_engine_run():
     engine = VectorizedEngine()

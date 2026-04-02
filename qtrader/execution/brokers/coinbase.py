@@ -1,10 +1,11 @@
-import asyncio
 import logging
 import uuid
+from decimal import Decimal
 
 import aiohttp
 
 from qtrader.core.config import Config
+from qtrader.core.decimal_adapter import d
 from qtrader.core.event import FillEvent, OrderEvent
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
 from qtrader.execution.http import RetryConfig, request_json
@@ -49,10 +50,10 @@ class CoinbaseBrokerAdapter:
         self._session: aiohttp.ClientSession | None = None
 
         # Simulation state
-        self._positions: dict[str, float] = {}
+        self._positions: dict[str, Decimal] = {}
         self._orders: dict[str, OrderEvent] = {}
         self._fills: dict[str, list[FillEvent]] = {}
-        self._quotes: dict[str, dict[str, float]] = {}  # symbol -> {"bid": .., "ask": ..}
+        self._quotes: dict[str, dict[str, Decimal]] = {}  # symbol -> {"bid": .., "ask": ..}
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -79,9 +80,9 @@ class CoinbaseBrokerAdapter:
         )
         return {"Authorization": f"Bearer {token}"}
 
-    def update_quote(self, symbol: str, bid: float, ask: float) -> None:
+    def update_quote(self, symbol: str, bid: Decimal, ask: Decimal) -> None:
         """Optional helper to improve simulated fill pricing for MARKET orders."""
-        self._quotes[symbol] = {"bid": float(bid), "ask": float(ask)}
+        self._quotes[symbol] = {"bid": bid, "ask": ask}
 
     async def submit_order(self, order: OrderEvent) -> str:
         """Submit order and return broker order id (simulation/live)."""
@@ -112,7 +113,7 @@ class CoinbaseBrokerAdapter:
             raise ValueError(f"Unsupported side: {order.side}")
 
         order_type = order.order_type.upper()
-        base_size = str(float(order.quantity))
+        base_size = str(order.quantity)
         if order_type == "MARKET":
             order_config = {"market_market_ioc": {"base_size": base_size}}
         elif order_type == "LIMIT":
@@ -121,7 +122,7 @@ class CoinbaseBrokerAdapter:
             order_config = {
                 "limit_limit_gtc": {
                     "base_size": base_size,
-                    "limit_price": str(float(order.price)),
+                    "limit_price": str(order.price),
                 }
             }
         else:
@@ -202,9 +203,9 @@ class CoinbaseBrokerAdapter:
         for f in resp.get("fills") or []:
             if str(f.get("order_id") or "") != str(order_id):
                 continue
-            size = float(f.get("size") or 0.0)
-            price = float(f.get("price") or 0.0)
-            commission = float(f.get("commission") or 0.0)
+            size = d(str(f.get("size") or "0.0"))
+            price = d(str(f.get("price") or "0.0"))
+            commission = d(str(f.get("commission") or "0.0"))
             side = str(f.get("side") or "").upper() or "BUY"
             trade_id = str(f.get("trade_id") or f.get("tradeId") or uuid.uuid4())
             fills.append(
@@ -233,12 +234,12 @@ class CoinbaseBrokerAdapter:
             headers=self._auth_headers(method="GET", path=path),
             retry=self._retry,
         )
-        balances: dict[str, float] = {}
+        balances: dict[str, Decimal] = {}
         if isinstance(resp, dict):
             for acct in resp.get("accounts") or []:
                 currency = str(acct.get("currency") or "")
                 avail = acct.get("available_balance") or {}
-                value = float(avail.get("value") or 0.0)
+                value = d(str(avail.get("value") or "0.0"))
                 if currency:
                     balances[currency] = value
         return balances
@@ -249,23 +250,23 @@ class CoinbaseBrokerAdapter:
 
     def _simulate_fill(self, order: OrderEvent, broker_order_id: str) -> FillEvent:
         quote = self._quotes.get(order.symbol, {})
-        bid = float(quote.get("bid", 0.0) or 0.0)
-        ask = float(quote.get("ask", 0.0) or 0.0)
+        bid = quote.get("bid", d(0))
+        ask = quote.get("ask", d(0))
 
-        price = 0.0
+        price = d(0)
         if order.order_type.upper() == "MARKET":
             if order.side.upper() == "BUY":
-                price = float(ask or order.price or 0.0)
+                price = ask or order.price or d(0)
             else:
-                price = float(bid or order.price or 0.0)
+                price = bid or order.price or d(0)
         elif order.price is not None:
-            price = float(order.price)
-        elif bid > 0.0 and ask > 0.0:
-            price = (bid + ask) / 2.0
+            price = order.price
+        elif bid > 0 and ask > 0:
+            price = (bid + ask) / d(2)
         else:
-            price = 0.0
+            price = d(0)
 
-        commission = price * order.quantity * 0.001 if price > 0 else 0.0
+        commission = price * order.quantity * d("0.001") if price > 0 else d(0)
         return FillEvent(
             symbol=order.symbol,
             quantity=order.quantity,
@@ -277,10 +278,9 @@ class CoinbaseBrokerAdapter:
         )
 
     def _apply_simulated_position(self, fill: FillEvent) -> None:
-        # Coinbase symbols are typically like BTC-USD. Store base asset qty only.
         asset = fill.symbol.split("-")[0]
-        current = float(self._positions.get(asset, 0.0) or 0.0)
+        current = self._positions.get(asset, d(0))
         if fill.side.upper() == "BUY":
-            self._positions[asset] = current + float(fill.quantity)
+            self._positions[asset] = current + fill.quantity
         else:
-            self._positions[asset] = current - float(fill.quantity)
+            self._positions[asset] = current - fill.quantity

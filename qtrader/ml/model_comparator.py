@@ -7,7 +7,6 @@ from typing import Any, Protocol
 import numpy as np
 from scipy import stats
 
-
 _LOG = logging.getLogger("qtrader.ml.model_comparator")
 
 

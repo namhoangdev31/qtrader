@@ -11,7 +11,7 @@ def test_microprice_compute_balanced() -> None:
 
     mid = 100.5
     # (100 * 50 + 101 * 50) / 100 = 100.5
-    assert Microprice.compute(bid, ask, v_bid, v_ask) == mid  # noqa: S101
+    assert Microprice.compute(bid, ask, v_bid, v_ask) == mid
 
 
 def test_microprice_compute_bid_heavy() -> None:
@@ -22,10 +22,10 @@ def test_microprice_compute_bid_heavy() -> None:
     # (100 * 10 + 101 * 90) / 100 = (1000 + 9090) / 100 = 100.9
     micro = Microprice.compute(bid, ask, v_bid, v_ask)
     target = 100.9
-    assert micro == pytest.approx(target)  # noqa: S101
+    assert micro == pytest.approx(target)
 
     mid = 100.5
-    assert micro > mid  # noqa: S101
+    assert micro > mid
 
 
 def test_microprice_compute_ask_heavy() -> None:
@@ -36,10 +36,10 @@ def test_microprice_compute_ask_heavy() -> None:
     # (100 * 90 + 101 * 10) / 100 = (9000 + 1010) / 100 = 100.1
     micro = Microprice.compute(bid, ask, v_bid, v_ask)
     target = 100.1
-    assert micro == pytest.approx(target)  # noqa: S101
+    assert micro == pytest.approx(target)
 
     mid = 100.5
-    assert micro < mid  # noqa: S101
+    assert micro < mid
 
 
 def test_microprice_catastrophic_safety() -> None:
@@ -48,10 +48,10 @@ def test_microprice_catastrophic_safety() -> None:
     mid = 100.5
 
     # Zero volume on both sides
-    assert Microprice.compute(bid, ask, 0.0, 0.0) == mid  # noqa: S101
+    assert Microprice.compute(bid, ask, 0.0, 0.0) == mid
 
     # Extreme small volume
-    assert Microprice.compute(bid, ask, 1e-15, 1e-15) == mid  # noqa: S101
+    assert Microprice.compute(bid, ask, 1e-15, 1e-15) == mid
 
     # Malformed inputs (None causing TypeError in math logic)
-    assert Microprice.compute(bid, ask, None, 10.0) == mid  # type: ignore # noqa: S101
+    assert Microprice.compute(bid, ask, None, 10.0) == mid  # type: ignore

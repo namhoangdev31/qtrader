@@ -1,10 +1,12 @@
 import asyncio
 import time
 import uuid
+
 import pytest
+
 from qtrader.core.event_bus import EventBus
-from qtrader.core.events import MarketPayload, MarketEvent, EventType, BaseEvent
 from qtrader.core.event_store import FileEventStore
+from qtrader.core.events import BaseEvent, EventType, MarketEvent, MarketPayload
 
 
 @pytest.fixture

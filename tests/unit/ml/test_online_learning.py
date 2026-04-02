@@ -31,12 +31,12 @@ def test_replay_buffer_logic(buffer: ReplayBuffer) -> None:
     for i in range(150):
         buffer.push(np.array([float(i), 0.0]), float(i))
 
-    assert buffer.size == 100  # noqa: S101, PLR2004 (Evicted 50)
+    assert buffer.size == 100
 
     # 2. Sample batch
     x_batch, y_batch = buffer.sample(32)
-    assert x_batch.shape == (32, 2)  # noqa: S101
-    assert y_batch.shape == (32,)  # noqa: S101
+    assert x_batch.shape == (32, 2)
+    assert y_batch.shape == (32,)
 
 
 def test_learning_engine_candidate_generation(
@@ -52,9 +52,9 @@ def test_learning_engine_candidate_generation(
     candidate = engine.generate_candidate(base_model, buffer, batch_size=1)
 
     # Check that candidate evolved
-    assert not np.array_equal(candidate.coefficients, original_weights)  # noqa: S101
+    assert not np.array_equal(candidate.coefficients, original_weights)
     # Check that base_model is static
-    assert np.array_equal(base_model.coefficients, original_weights)  # noqa: S101
+    assert np.array_equal(base_model.coefficients, original_weights)
 
 
 def test_learning_engine_promotion_success(
@@ -73,8 +73,8 @@ def test_learning_engine_promotion_success(
     # Wait, the logic is Validate(theta_new) vs Validate(theta_old)
     report = engine.validate_and_promote(worse_model, base_model, (x_val, y_val))
 
-    assert report.promotion_authorized is True  # noqa: S101
-    assert report.performance_gain > 0  # noqa: S101
+    assert report.promotion_authorized is True
+    assert report.performance_gain > 0
 
 
 def test_learning_engine_rejection_on_degradation(
@@ -92,5 +92,5 @@ def test_learning_engine_rejection_on_degradation(
     # 3. Validate degraded (new) vs base (old)
     report = engine.validate_and_promote(base_model, degraded_model, (x_val, y_val))
 
-    assert report.promotion_authorized is False  # noqa: S101
-    assert report.performance_gain < 0  # noqa: S101
+    assert report.promotion_authorized is False
+    assert report.performance_gain < 0

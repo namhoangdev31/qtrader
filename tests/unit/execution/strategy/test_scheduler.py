@@ -28,10 +28,10 @@ def test_scheduler_liquidity_following(execution_config: MagicMock) -> None:
 
     schedule = scheduler.optimize_schedule(100.0, states)
 
-    assert len(schedule) == 2  # noqa: S101, PLR2004
-    assert sum(schedule) == pytest.approx(100.0)  # noqa: S101
+    assert len(schedule) == 2
+    assert sum(schedule) == pytest.approx(100.0)
     # Step 2 has 10x more liquidity -> Should have much more volume assigned.
-    assert schedule[1] > schedule[0]  # noqa: S101
+    assert schedule[1] > schedule[0]
 
 
 def test_scheduler_risk_aversion_frontloading(execution_config: MagicMock) -> None:
@@ -51,7 +51,7 @@ def test_scheduler_risk_aversion_frontloading(execution_config: MagicMock) -> No
     schedule = scheduler.optimize_schedule(100.0, states)
 
     # In uniform vol/liq, AC optimal is perfectly linear (equal slices).
-    assert schedule[0] == pytest.approx(50.0)  # noqa: S101
+    assert schedule[0] == pytest.approx(50.0)
 
     # Now introduce HIGH vol in step 2 (risk increases over time)
     # Actually, Almgren-Chriss front-loads even if vol is constant to
@@ -72,7 +72,7 @@ def test_scheduler_risk_aversion_frontloading(execution_config: MagicMock) -> No
     schedule_vol = scheduler.optimize_schedule(100.0, states_diff_vol)
 
     # Step 2 is most volatile -> We want it done (acceleration).
-    assert schedule_vol[1] > schedule_vol[0]  # noqa: S101
+    assert schedule_vol[1] > schedule_vol[0]
 
 
 def test_scheduler_catastrophic_safety(execution_config: MagicMock) -> None:
@@ -80,21 +80,21 @@ def test_scheduler_catastrophic_safety(execution_config: MagicMock) -> None:
     scheduler = ExecutionScheduler(execution_config)
 
     # 1. Zero quantity
-    assert scheduler.optimize_schedule(0.0, [{"liq": 10.0}]) == []  # noqa: S101
+    assert scheduler.optimize_schedule(0.0, [{"liq": 10.0}]) == []
 
     # 2. Empty states
-    assert scheduler.optimize_schedule(100.0, []) == []  # noqa: S101
+    assert scheduler.optimize_schedule(100.0, []) == []
 
     # 3. Single state
-    assert scheduler.optimize_schedule(100.0, [{"liquidity": 1.0}]) == [100.0]  # noqa: S101
+    assert scheduler.optimize_schedule(100.0, [{"liquidity": 1.0}]) == [100.0]
 
     # 4. Malformed states (Exception block)
     # Predicted states with missing keys
     malformed = [{"liquidity": "INVALID"}, {"none": 10}]
     # Should fallback to TWAP
     schedule = scheduler.optimize_schedule(100.0, malformed)
-    assert len(schedule) == 2  # noqa: S101, PLR2004
-    assert schedule[0] == 50.0  # noqa: S101, PLR2004
+    assert len(schedule) == 2
+    assert schedule[0] == 50.0
 
 
 def test_scheduler_zero_liquidity_floor(execution_config: MagicMock) -> None:
@@ -108,5 +108,5 @@ def test_scheduler_zero_liquidity_floor(execution_config: MagicMock) -> None:
     ]
 
     schedule = scheduler.optimize_schedule(100.0, states)
-    assert schedule[1] > schedule[0]  # noqa: S101
-    assert sum(schedule) == pytest.approx(100.0)  # noqa: S101
+    assert schedule[1] > schedule[0]
+    assert sum(schedule) == pytest.approx(100.0)

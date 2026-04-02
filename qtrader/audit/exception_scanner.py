@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -56,7 +56,7 @@ class ExceptionScanner(ast.NodeVisitor):
             except ValueError:
                 self.current_file = file_path
 
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
                 tree = ast.parse(content)
                 self.visit(tree)
@@ -162,7 +162,7 @@ class ExceptionScanner(ast.NodeVisitor):
             return True
         return False
 
-    def _get_call_name(self, node: ast.AST) -> Optional[str]:
+    def _get_call_name(self, node: ast.AST) -> str | None:
         """Extract call name from AST node."""
         if isinstance(node, ast.Name):
             return node.id
@@ -226,7 +226,6 @@ class ExceptionScanner(ast.NodeVisitor):
 
 if __name__ == "__main__":
     # Internal CLI for executing the audit.
-    import sys
     ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     scanner = ExceptionScanner(ROOT)
     
@@ -234,4 +233,4 @@ if __name__ == "__main__":
     scanner.scan_directory(os.path.join(ROOT, "qtrader"))
     
     scanner.export(os.path.join(ROOT, "qtrader/audit"))
-    logger.success(f"Audit Complete. Results written to qtrader/audit/")
+    logger.success("Audit Complete. Results written to qtrader/audit/")

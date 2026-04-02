@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, TypeVar, Generic
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar
 
 from qtrader.core.event import EventType
 from qtrader.core.event_bus import EventBus

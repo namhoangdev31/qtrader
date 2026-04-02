@@ -15,8 +15,8 @@ def test_incident_anomaly_scoring_veracity(engine: IncidentResponseEngine) -> No
     # Score = 0.4 * 0.5 + 0 + 0 = 0.2
     report = engine.evaluate_incident_state(risk_score=0.4, execution_errors=0, system_failures=0)
 
-    assert report["metrology"]["composite_anomaly_score"] == 0.2  # noqa: S101, PLR2004
-    assert report["status"] == "INCIDENT_NORMAL"  # noqa: S101
+    assert report["metrology"]["composite_anomaly_score"] == 0.2
+    assert report["status"] == "INCIDENT_NORMAL"
 
 
 def test_incident_autonomous_gating_critical(engine: IncidentResponseEngine) -> None:
@@ -25,8 +25,8 @@ def test_incident_autonomous_gating_critical(engine: IncidentResponseEngine) -> 
     # Score = (0.5 * 0.9) + (0.3 * 1.0) + (0.2 * 1.0) = 0.45 + 0.3 + 0.2 = 0.95
     report = engine.evaluate_incident_state(risk_score=0.9, execution_errors=10, system_failures=10)
 
-    assert report["metrology"]["composite_anomaly_score"] == 0.95  # noqa: S101, PLR2004
-    assert report["response"]["triggered_action_category"] == IncidentAction.EMERGENCY_HALT.value  # noqa: S101
+    assert report["metrology"]["composite_anomaly_score"] == 0.95
+    assert report["response"]["triggered_action_category"] == IncidentAction.EMERGENCY_HALT.value
 
 
 def test_incident_tiered_remediation_pause(engine: IncidentResponseEngine) -> None:
@@ -37,7 +37,7 @@ def test_incident_tiered_remediation_pause(engine: IncidentResponseEngine) -> No
     # Score = (0.5 * 0.9) + (0.3 * 1.0) + (0.2 * 0.5) = 0.45 + 0.3 + 0.1 = 0.85
     report = engine.evaluate_incident_state(risk_score=0.9, execution_errors=10, system_failures=5)
 
-    assert report["response"]["triggered_action_category"] == IncidentAction.PAUSE_STRATEGIES.value  # noqa: S101
+    assert report["response"]["triggered_action_category"] == IncidentAction.PAUSE_STRATEGIES.value
 
 
 def test_incident_telemetry_tracking(engine: IncidentResponseEngine) -> None:
@@ -46,5 +46,5 @@ def test_incident_telemetry_tracking(engine: IncidentResponseEngine) -> None:
     engine.evaluate_incident_state(risk_score=1.0, execution_errors=10, system_failures=10)  # FAIL
 
     stats = engine.get_incident_telemetry()
-    assert stats["total_incidents_triggered"] == 2  # noqa: S101, PLR2004
-    assert stats["last_incident_action"] == IncidentAction.EMERGENCY_HALT.value  # noqa: S101
+    assert stats["total_incidents_triggered"] == 2
+    assert stats["last_incident_action"] == IncidentAction.EMERGENCY_HALT.value

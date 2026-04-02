@@ -1,5 +1,6 @@
 """Tests for [LATENCY_TRACE_SYSTEM]: latency tracking + trace logs."""
 import time
+
 import pytest
 
 from qtrader.monitoring.latency_tracker import LatencyTracker

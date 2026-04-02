@@ -1,7 +1,9 @@
-import pytest
-import polars as pl
 import numpy as np
+import polars as pl
+import pytest
+
 from qtrader.portfolio.hrp import HRPOptimizer
+
 
 def test_hrp_initialization():
     hrp = HRPOptimizer()

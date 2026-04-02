@@ -1,8 +1,11 @@
-import pytest
-from unittest.mock import MagicMock
-from qtrader.oms.interface import OMSInterface
-from qtrader.core.types import OrderEvent, Side
 from dataclasses import replace
+from unittest.mock import MagicMock
+
+import pytest
+
+from qtrader.core.types import OrderEvent, Side
+from qtrader.oms.interface import OMSInterface
+
 
 class MockOMS(OMSInterface):
     def __init__(self):

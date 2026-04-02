@@ -38,19 +38,19 @@ async def test_meta_audit_logging_integrity(log_path: str, mock_store: AsyncMock
     )
 
     # 1. Verify DB persistence (mock)
-    assert mock_store.append.called  # noqa: S101
+    assert mock_store.append.called
     event = mock_store.append.call_args[0][0]
-    assert event.payload.module == "TestModule"  # noqa: S101
-    assert event.payload.metrics["sharpe"] == 2.5  # noqa: S101, PLR2004
+    assert event.payload.module == "TestModule"
+    assert event.payload.metrics["sharpe"] == 2.5
 
     # 2. Verify File persistence (JSONL)
-    assert os.path.exists(log_path)  # noqa: S101
+    assert os.path.exists(log_path)
     with open(log_path) as f:
         line = f.readline()
         record = json.loads(line)
-        assert record["module"] == "TestModule"  # noqa: S101
-        assert record["decision"] == "APPROVED"  # noqa: S101
-        assert record["metrics"]["mdd"] == 0.05  # noqa: S101, PLR2004
+        assert record["module"] == "TestModule"
+        assert record["decision"] == "APPROVED"
+        assert record["metrics"]["mdd"] == 0.05
 
 
 @pytest.mark.asyncio
@@ -73,12 +73,12 @@ async def test_meta_audit_store_failure_resilience(log_path: str) -> None:
 
     # 1. Verify DB failure tracking
     report = logger.get_audit_report()
-    assert report["store_failures"] == 1  # noqa: S101
+    assert report["store_failures"] == 1
 
     # 2. Verify local file still contains the record (Immutability)
     with open(log_path) as f:
         record = json.loads(f.readline())
-        assert record["module"] == "FailSafe"  # noqa: S101
+        assert record["module"] == "FailSafe"
 
 
 @pytest.mark.asyncio
@@ -88,8 +88,8 @@ async def test_meta_audit_report_validity(log_path: str) -> None:
     await logger.log_decision("M", "A", "E", "D", "R")
 
     report = logger.get_audit_report()
-    assert report["events_logged"] == 1  # noqa: S101
-    assert report["log_file"] == log_path  # noqa: S101
+    assert report["events_logged"] == 1
+    assert report["log_file"] == log_path
 
 
 @pytest.mark.asyncio
@@ -102,4 +102,4 @@ async def test_meta_audit_local_failure_handling(mock_store: AsyncMock) -> None:
     await logger.log_decision("M", "A", "E", "D", "R")
 
     # DB should still have been attempted
-    assert mock_store.append.called  # noqa: S101
+    assert mock_store.append.called

@@ -24,8 +24,8 @@ def test_toxic_flow_informed_scenario(execution_config: MagicMock) -> None:
 
     # τ > 0.8 (Close to 1.0)
     high_threshold = 0.8
-    assert last_score > high_threshold  # noqa: S101
-    assert last_score == pytest.approx(1.0)  # noqa: S101
+    assert last_score > high_threshold
+    assert last_score == pytest.approx(1.0)
 
 
 def test_toxic_flow_noise_scenario(execution_config: MagicMock) -> None:
@@ -42,7 +42,7 @@ def test_toxic_flow_noise_scenario(execution_config: MagicMock) -> None:
 
     # τ should be close to 0.5
     neutral = 0.5
-    assert score == pytest.approx(neutral)  # noqa: S101
+    assert score == pytest.approx(neutral)
 
 
 def test_toxic_flow_mean_reverting_scenario(execution_config: MagicMock) -> None:
@@ -56,8 +56,8 @@ def test_toxic_flow_mean_reverting_scenario(execution_config: MagicMock) -> None
 
     # τ < 0.2 (Close to 0.0)
     low_threshold = 0.2
-    assert last_score < low_threshold  # noqa: S101
-    assert last_score == pytest.approx(0.0)  # noqa: S101
+    assert last_score < low_threshold
+    assert last_score == pytest.approx(0.0)
 
 
 def test_toxic_flow_catastrophic_safety(execution_config: MagicMock) -> None:
@@ -69,17 +69,17 @@ def test_toxic_flow_catastrophic_safety(execution_config: MagicMock) -> None:
     # Window needs 10 samples before it computes
     for _ in range(10):
         predictor.update(1, 0.0)
-    assert predictor.update(1, 0.0) == neutral  # noqa: S101
+    assert predictor.update(1, 0.0) == neutral
 
     # 2. Insufficient samples
     predictor.reset()
     for _ in range(5):
         score = predictor.update(1, 0.001)
-    assert score == neutral  # noqa: S101
+    assert score == neutral
 
     # 3. Malformed inputs (None causing TypeError in math logic)
     # This should trigger the exception block in update()
-    assert predictor.update(None, 0.001) == neutral  # type: ignore # noqa: S101
+    assert predictor.update(None, 0.001) == neutral  # type: ignore
 
 
 def test_toxic_flow_reset(execution_config: MagicMock) -> None:
@@ -87,6 +87,6 @@ def test_toxic_flow_reset(execution_config: MagicMock) -> None:
     predictor = ToxicFlowPredictor(execution_config)
     predictor.update(1, 0.001)
 
-    assert len(predictor._history) > 0  # noqa: S101
+    assert len(predictor._history) > 0
     predictor.reset()
-    assert len(predictor._history) == 0  # noqa: S101
+    assert len(predictor._history) == 0

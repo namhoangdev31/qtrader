@@ -15,9 +15,9 @@ def test_engine_direct_market_pass(engine: SlippageControlEngine) -> None:
     order = {"quantity": 10.0}
     report = engine.generate_execution_plan(order, 100.0)
 
-    assert report["plan"]["selected_strategy"] == "DIRECT_MARKET"  # noqa: S101
-    assert report["plan"]["is_segmenting_active"] is False  # noqa: S101
-    assert report["metrics"]["estimated_impact_ratio"] == 0.1  # noqa: S101, PLR2004
+    assert report["plan"]["selected_strategy"] == "DIRECT_MARKET"
+    assert report["plan"]["is_segmenting_active"] is False
+    assert report["metrics"]["estimated_impact_ratio"] == 0.1
 
 
 def test_engine_vwap_routing(engine: SlippageControlEngine) -> None:
@@ -26,8 +26,8 @@ def test_engine_vwap_routing(engine: SlippageControlEngine) -> None:
     order = {"quantity": 50.0}
     report = engine.generate_execution_plan(order, 100.0)
 
-    assert report["plan"]["selected_strategy"] == "VWAP"  # noqa: S101
-    assert report["metrics"]["estimated_impact_ratio"] == 0.5  # noqa: S101, PLR2004
+    assert report["plan"]["selected_strategy"] == "VWAP"
+    assert report["metrics"]["estimated_impact_ratio"] == 0.5
 
 
 def test_engine_iceberg_segmenting(engine: SlippageControlEngine) -> None:
@@ -36,9 +36,9 @@ def test_engine_iceberg_segmenting(engine: SlippageControlEngine) -> None:
     order = {"quantity": 150.0}
     report = engine.generate_execution_plan(order, 100.0)
 
-    assert report["plan"]["selected_strategy"] == "ICEBERG_SPLIT"  # noqa: S101
-    assert report["plan"]["is_segmenting_active"] is True  # noqa: S101
-    assert report["metrics"]["estimated_impact_ratio"] == 1.5  # noqa: S101, PLR2004
+    assert report["plan"]["selected_strategy"] == "ICEBERG_SPLIT"
+    assert report["plan"]["is_segmenting_active"] is True
+    assert report["metrics"]["estimated_impact_ratio"] == 1.5
 
 
 def test_engine_low_liquidity_safety(engine: SlippageControlEngine) -> None:
@@ -47,8 +47,8 @@ def test_engine_low_liquidity_safety(engine: SlippageControlEngine) -> None:
     order = {"quantity": 10.0}
     report = engine.generate_execution_plan(order, 0.0)
 
-    assert report["plan"]["selected_strategy"] == "ICEBERG_SPLIT"  # noqa: S101
-    assert report["plan"]["operational_caution"] == "CAUTION_SIGNIFICANT_IMPACT"  # noqa: S101
+    assert report["plan"]["selected_strategy"] == "ICEBERG_SPLIT"
+    assert report["plan"]["operational_caution"] == "CAUTION_SIGNIFICANT_IMPACT"
 
 
 def test_engine_telemetry_tracking(engine: SlippageControlEngine) -> None:
@@ -57,6 +57,6 @@ def test_engine_telemetry_tracking(engine: SlippageControlEngine) -> None:
     engine.generate_execution_plan({"quantity": 50.0}, 100.0)  # R=0.5
 
     stats = engine.get_slippage_telemetry()
-    assert stats["total_plans_generated"] == 2  # noqa: S101, PLR2004
-    assert stats["avg_impact_ratio_observed"] == 0.3  # noqa: S101, PLR2004
-    assert stats["regime"] == "LIQUIDITY_ADAPTIVE"  # noqa: S101
+    assert stats["total_plans_generated"] == 2
+    assert stats["avg_impact_ratio_observed"] == 0.3
+    assert stats["regime"] == "LIQUIDITY_ADAPTIVE"

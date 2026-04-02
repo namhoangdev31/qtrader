@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -53,7 +54,7 @@ class QTraderSettings(BaseSettings):
     monthly_cloud_budget: float = 1000.0
     db_path: str = "qtrader.db"
     timezone: str = "Asia/Ho_Chi_Minh"
-    trading_symbols: List[str] = ["BTC/USDT", "ETH/USDT"]
+    trading_symbols: list[str] = ["BTC/USDT", "ETH/USDT"]
 
     # Alert Routing
     telegram_bot_token: str = ""
@@ -83,7 +84,7 @@ class QTraderSettings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60
 
     @property
-    def TRADING_SYMBOLS(self) -> List[str]:
+    def TRADING_SYMBOLS(self) -> list[str]:
         return self.trading_symbols
 
     @model_validator(mode="after")

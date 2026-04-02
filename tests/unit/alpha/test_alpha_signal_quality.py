@@ -4,11 +4,11 @@ Covers: MomentumAlpha, MeanReversionAlpha, TrendAlpha
 Focus: output correctness, floating-point precision, look-ahead bias,
 direction of signal, NaN propagation, and statelessness.
 """
-import pytest
-import polars as pl
 import numpy as np
-from qtrader.alpha.technical import MomentumAlpha, MeanReversionAlpha, TrendAlpha
+import polars as pl
+import pytest
 
+from qtrader.alpha.technical import MeanReversionAlpha, MomentumAlpha, TrendAlpha
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -32,9 +32,9 @@ def test_risk_allow_order(firewall: RiskFirewall, healthy_state: PortfolioRiskSt
     order = OrderProposal("AAPL", "BUY", 10.0, 100.0)
     result = firewall.validate_order(order, healthy_state)
 
-    assert result["decision"] == "ALLOW"  # noqa: S101
+    assert result["decision"] == "ALLOW"
     # VaR simulated: 1000 * 1.96 * 0.01 = 19.6 USD. 19.6/100000 = 0.000196
-    assert result["projected_var"] == pytest.approx(0.0002)  # noqa: S101
+    assert result["projected_var"] == pytest.approx(0.0002)
 
 
 def test_risk_var_breach(firewall: RiskFirewall, healthy_state: PortfolioRiskState) -> None:
@@ -47,8 +47,8 @@ def test_risk_var_breach(firewall: RiskFirewall, healthy_state: PortfolioRiskSta
     order = OrderProposal("BTC", "BUY", 1.5, 100_000.0)
     result = firewall.validate_order(order, healthy_state)
 
-    assert result["decision"] == "BLOCK"  # noqa: S101
-    assert result["reason"] == "VAR_LIMIT_EXCEEDED"  # noqa: S101
+    assert result["decision"] == "BLOCK"
+    assert result["reason"] == "VAR_LIMIT_EXCEEDED"
 
 
 def test_risk_drawdown_block(firewall: RiskFirewall) -> None:
@@ -64,8 +64,8 @@ def test_risk_drawdown_block(firewall: RiskFirewall) -> None:
     order = OrderProposal("EURUSD", "BUY", 100.0, 1.0)
     result = firewall.validate_order(order, dd_state)
 
-    assert result["decision"] == "BLOCK"  # noqa: S101
-    assert result["reason"] == "MAX_DRAWDOWN_EXCEEDED"  # noqa: S101
+    assert result["decision"] == "BLOCK"
+    assert result["reason"] == "MAX_DRAWDOWN_EXCEEDED"
 
 
 def test_risk_leverage_reduction(firewall: RiskFirewall, healthy_state: PortfolioRiskState) -> None:
@@ -83,8 +83,8 @@ def test_risk_leverage_reduction(firewall: RiskFirewall, healthy_state: Portfoli
     order = OrderProposal("TSLA", "BUY", 500.0, 100.0)
     result = firewall.validate_order(order, state)
 
-    assert result["decision"] == "REDUCE"  # noqa: S101
-    assert result["allowed_size"] == 200.0  # noqa: S101, PLR2004 (20k / 100)
+    assert result["decision"] == "REDUCE"
+    assert result["allowed_size"] == 200.0
 
 
 def test_risk_failsafe_mode(firewall: RiskFirewall, healthy_state: PortfolioRiskState) -> None:
@@ -100,8 +100,8 @@ def test_risk_failsafe_mode(firewall: RiskFirewall, healthy_state: PortfolioRisk
     order = OrderProposal("SPY", "BUY", 10.0, 400.0)
     result = firewall.validate_order(order, stale_state)
 
-    assert result["decision"] == "BLOCK"  # noqa: S101
-    assert result["reason"] == "STALE_TELEMETRY_OR_INSOLVENT"  # noqa: S101
+    assert result["decision"] == "BLOCK"
+    assert result["reason"] == "STALE_TELEMETRY_OR_INSOLVENT"
 
 
 def test_risk_telemetry_report(firewall: RiskFirewall, healthy_state: PortfolioRiskState) -> None:
@@ -112,5 +112,5 @@ def test_risk_telemetry_report(firewall: RiskFirewall, healthy_state: PortfolioR
     firewall.validate_order(OrderProposal("B", "S", 1000000, 1), healthy_state)
 
     report = firewall.get_risk_report()
-    assert report["allowed_orders"] == 1  # noqa: S101
-    assert report["blocked_orders"] == 1  # noqa: S101
+    assert report["allowed_orders"] == 1
+    assert report["blocked_orders"] == 1

@@ -29,8 +29,8 @@ def test_approval_happy_path(committee: StrategyApprovalSystem) -> None:
     )
 
     result = committee.evaluate(metrics)
-    assert result["decision"] == "APPROVED"  # noqa: S101
-    assert result["score"] >= 2.0  # noqa: S101, PLR2004
+    assert result["decision"] == "APPROVED"
+    assert result["score"] >= 2.0
 
 
 def test_approval_hard_rejection_sharpe(committee: StrategyApprovalSystem) -> None:
@@ -45,8 +45,8 @@ def test_approval_hard_rejection_sharpe(committee: StrategyApprovalSystem) -> No
     )
 
     result = committee.evaluate(metrics)
-    assert result["decision"] == "REJECTED"  # noqa: S101
-    assert "SHARPE_LOW" in result["reason"]  # noqa: S101
+    assert result["decision"] == "REJECTED"
+    assert "SHARPE_LOW" in result["reason"]
 
 
 def test_approval_hard_rejection_drawdown(committee: StrategyApprovalSystem) -> None:
@@ -61,8 +61,8 @@ def test_approval_hard_rejection_drawdown(committee: StrategyApprovalSystem) -> 
     )
 
     result = committee.evaluate(metrics)
-    assert result["decision"] == "REJECTED"  # noqa: S101
-    assert "MDD_HIGH" in result["reason"]  # noqa: S101
+    assert result["decision"] == "REJECTED"
+    assert "MDD_HIGH" in result["reason"]
 
 
 def test_approval_stability_formula_comparison(committee: StrategyApprovalSystem) -> None:
@@ -91,7 +91,7 @@ def test_approval_stability_formula_comparison(committee: StrategyApprovalSystem
     res_jumpy = committee.evaluate(metrics_jumpy)
 
     # S_STABLE should have a higher score due to higher Stability (1/AnnualVol)
-    assert res_stable["score"] > res_jumpy["score"]  # noqa: S101
+    assert res_stable["score"] > res_jumpy["score"]
 
 
 def test_approval_governance_report(committee: StrategyApprovalSystem) -> None:
@@ -104,8 +104,8 @@ def test_approval_governance_report(committee: StrategyApprovalSystem) -> None:
     committee.evaluate(s2)
 
     report = committee.get_approval_report()
-    assert report["approval_rate"] == 0.5  # noqa: S101, PLR2004
-    assert report["avg_approved_score"] > 0.0  # noqa: S101
+    assert report["approval_rate"] == 0.5
+    assert report["avg_approved_score"] > 0.0
 
 
 def test_approval_insufficient_score(committee: StrategyApprovalSystem) -> None:
@@ -128,5 +128,5 @@ def test_approval_insufficient_score(committee: StrategyApprovalSystem) -> None:
     )
 
     result = committee.evaluate(metrics)
-    assert result["decision"] == "REJECTED"  # noqa: S101
-    assert "INSUFFICIENT_COMPOSITE_SCORE" in result["reason"]  # noqa: S101
+    assert result["decision"] == "REJECTED"
+    assert "INSUFFICIENT_COMPOSITE_SCORE" in result["reason"]

@@ -1,8 +1,11 @@
-import pytest
 import time
 from decimal import Decimal
+
 import numpy as np
+import pytest
+
 from qtrader.execution.rl_agent import ExecutionRLAgent
+
 
 @pytest.fixture
 def agent() -> ExecutionRLAgent:

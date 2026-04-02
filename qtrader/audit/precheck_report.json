@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-04-01T10:11:33.143159+00:00",
+  "ready": false,
+  "status": "BLOCKED",
+  "failed_checks": [
+    "TraceAuthority",
+    "FloatScan"
+  ],
+  "details": [
+    {
+      "name": "ConfigManager",
+      "status": true,
+      "message": "Configuration loaded"
+    },
+    {
+      "name": "SeedManager",
+      "status": true,
+      "message": "Entropy applied"
+    },
+    {
+      "name": "TraceAuthority",
+      "status": false,
+      "message": "Trace context missing"
+    },
+    {
+      "name": "EnforcementEngine",
+      "status": true,
+      "message": "Enforcement active"
+    },
+    {
+      "name": "FloatScan",
+      "status": false,
+      "message": "Detected 701 high-risk float usages"
+    }
+  ]
+}

@@ -3,11 +3,10 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from qtrader.security.jwt_auth import get_current_active_user, TokenPayload, JWTAuthManager
-from qtrader.security.rbac import rbac_required, Permission
 from qtrader.core.logger import log
-from qtrader.core.orchestrator import TradingOrchestrator, SystemState
-from qtrader.core.events import MarketDataEvent # For type hints if needed
+from qtrader.core.orchestrator import SystemState, TradingOrchestrator
+from qtrader.security.jwt_auth import JWTAuthManager, TokenPayload, get_current_active_user
+from qtrader.security.rbac import Permission, rbac_required
 
 app = FastAPI(title="QTrader HFT API", version="0.4.1")
 # The orchestrator will be injected into app.state during initialization
@@ -39,10 +38,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 
+from typing import Any
+
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, Body, status
+from fastapi import Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from typing import Any, Dict
 
 
 class QTraderAPI:
@@ -86,7 +86,7 @@ async def startup_event() -> None:
 # --- Authentication ---
 
 @app.post("/token")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Dict[str, str]:
+async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> dict[str, str]:
     """Issue a JWT access token for valid credentials."""
     # Placeholder: In production, verify against DB (e.g. asyncpg)
     # We use username as subject and mock role for now
@@ -102,7 +102,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Dict[str, s
 # --- Public / Health ---
 
 @app.get("/ping")
-async def ping() -> Dict[str, str]:
+async def ping() -> dict[str, str]:
     """Public health check."""
     return {"status": "PONG"}
 
@@ -111,7 +111,7 @@ async def ping() -> Dict[str, str]:
 
 @app.get("/status")
 @rbac_required(Permission.READ)
-async def get_status(user: TokenPayload = Depends(get_current_active_user)) -> Dict[str, Any]:
+async def get_status(user: TokenPayload = Depends(get_current_active_user)) -> dict[str, Any]:
     """Retrieve system health and fund status. Required: READ."""
     orch: TradingOrchestrator = app.state.orchestrator
     _logger.debug("Status request", sub=user["sub"])
@@ -129,9 +129,9 @@ async def get_status(user: TokenPayload = Depends(get_current_active_user)) -> D
 @app.post("/orders/place")
 @rbac_required(Permission.EXECUTE)
 async def place_order(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     user: TokenPayload = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Place a manual trade override. Required: EXECUTE."""
     orch: TradingOrchestrator = app.state.orchestrator
     symbol = payload.get("symbol")
@@ -160,7 +160,7 @@ async def place_order(
 async def emergency_halt(
     reason: str = Body(..., embed=True),
     user: TokenPayload = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Trigger a global manual emergency halt. Required: MANAGE."""
     orch: TradingOrchestrator = app.state.orchestrator
     _logger.critical("MANUAL GLOBAL HALT", sub=user["sub"], reason=reason)
@@ -172,7 +172,7 @@ async def emergency_halt(
 
 @app.get("/audit/history")
 @rbac_required(Permission.READ)
-async def get_audit_history(user: TokenPayload = Depends(get_current_active_user)) -> Dict[str, Any]:
+async def get_audit_history(user: TokenPayload = Depends(get_current_active_user)) -> dict[str, Any]:
     """Retrieve trading audit logs. Required: READ."""
     return {
         "logs": [

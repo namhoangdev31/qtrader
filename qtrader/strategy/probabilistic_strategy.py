@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from decimal import Decimal
 
 import polars as pl
 
+from qtrader.core.container import container
+from qtrader.core.execution_guard import require_initialized
 from qtrader.core.types import SignalEvent, ValidatedFeatures
 from qtrader.strategy.base import BaseStrategy
-from qtrader.core.execution_guard import require_initialized
 
-_LOG = logging.getLogger("qtrader.strategy.probabilistic")
+_LOG = container.get("logger")
 
 
 class ProbabilisticStrategy(BaseStrategy):

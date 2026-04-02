@@ -16,9 +16,9 @@ def test_scaling_engine_growth_pass(scaling_engine: CapitalScalingEngine) -> Non
 
     report = scaling_engine.evaluate_scaling_readiness(current_cap, metrics, target_growth=0.05)
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["applied_growth_rate"] == 0.05  # noqa: S101, PLR2004
-    assert report["metrics"]["new_scaled_capital"] == 105_000.0  # noqa: S101, PLR2004
+    assert report["result"] == "PASS"
+    assert report["metrics"]["applied_growth_rate"] == 0.05
+    assert report["metrics"]["new_scaled_capital"] == 105_000.0
 
 
 def test_scaling_engine_drawdown_gating(scaling_engine: CapitalScalingEngine) -> None:
@@ -28,8 +28,8 @@ def test_scaling_engine_drawdown_gating(scaling_engine: CapitalScalingEngine) ->
 
     report = scaling_engine.evaluate_scaling_readiness(current_cap, metrics, target_growth=0.05)
 
-    assert report["metrics"]["applied_growth_rate"] == 0.0  # noqa: S101
-    assert report["readiness_trace"]["rejection_reason"] == "PORTFOLIO_IN_DRAWDOWN"  # noqa: S101
+    assert report["metrics"]["applied_growth_rate"] == 0.0
+    assert report["readiness_trace"]["rejection_reason"] == "PORTFOLIO_IN_DRAWDOWN"
 
 
 def test_scaling_engine_volatility_breach_gating(scaling_engine: CapitalScalingEngine) -> None:
@@ -43,8 +43,8 @@ def test_scaling_engine_volatility_breach_gating(scaling_engine: CapitalScalingE
 
     report = scaling_engine.evaluate_scaling_readiness(current_cap, metrics, target_growth=0.05)
 
-    assert report["metrics"]["applied_growth_rate"] == 0.0  # noqa: S101
-    assert report["readiness_trace"]["rejection_reason"] == "VOLATILITY_ABOVE_THRESHOLD"  # noqa: S101
+    assert report["metrics"]["applied_growth_rate"] == 0.0
+    assert report["readiness_trace"]["rejection_reason"] == "VOLATILITY_ABOVE_THRESHOLD"
 
 
 def test_scaling_engine_max_growth_cap_enforcement(scaling_engine: CapitalScalingEngine) -> None:
@@ -54,7 +54,7 @@ def test_scaling_engine_max_growth_cap_enforcement(scaling_engine: CapitalScalin
 
     report = scaling_engine.evaluate_scaling_readiness(current_cap, metrics, target_growth=0.10)
 
-    assert report["metrics"]["applied_growth_rate"] == 0.05  # noqa: S101, PLR2004
+    assert report["metrics"]["applied_growth_rate"] == 0.05
 
 
 def test_scaling_engine_global_capacity_limit(scaling_engine: CapitalScalingEngine) -> None:
@@ -65,8 +65,8 @@ def test_scaling_engine_global_capacity_limit(scaling_engine: CapitalScalingEngi
 
     report = scaling_engine.evaluate_scaling_readiness(current_cap, metrics, target_growth=0.05)
 
-    assert report["metrics"]["applied_growth_rate"] == 0.0  # noqa: S101
-    assert report["readiness_trace"]["rejection_reason"] == "GLOBAL_CAPACITY_LIMIT_REACHED"  # noqa: S101
+    assert report["metrics"]["applied_growth_rate"] == 0.0
+    assert report["readiness_trace"]["rejection_reason"] == "GLOBAL_CAPACITY_LIMIT_REACHED"
 
 
 def test_scaling_engine_telemetry_tracking(scaling_engine: CapitalScalingEngine) -> None:
@@ -78,6 +78,6 @@ def test_scaling_engine_telemetry_tracking(scaling_engine: CapitalScalingEngine)
     scaling_engine.evaluate_scaling_readiness(current_cap, metrics, target_growth=0.05)
 
     stats = scaling_engine.get_scaling_telemetry()
-    assert stats["total_scaling_events"] == 2  # noqa: S101, PLR2004
-    assert stats["cumulative_scaled_growth"] == pytest.approx(0.1)  # noqa: S101
-    assert stats["status"] == "SCALING_GOVERNANCE"  # noqa: S101
+    assert stats["total_scaling_events"] == 2
+    assert stats["cumulative_scaled_growth"] == pytest.approx(0.1)
+    assert stats["status"] == "SCALING_GOVERNANCE"

@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from decimal import Decimal
-from typing import Any
 
 from qtrader.core.event import EventType, FillEvent, TradingHaltEvent
 from qtrader.core.state_store import StateStore
@@ -75,7 +74,7 @@ class ReconciliationEngine:
             try:
                 balances = await adapter.get_balance()
                 # Assuming crypto where asset name is position
-                asset = symbol.split('/')[0].split('-')[0]
+                asset = symbol.split('/', maxsplit=1)[0].split('-', maxsplit=1)[0]
                 return Decimal(str(balances.get(asset, 0)))
             except Exception as e:
                 self._log.error(f"Failed to fetch exchange position from {name}: {e}")

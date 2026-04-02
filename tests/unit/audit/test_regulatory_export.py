@@ -41,16 +41,16 @@ def test_regulatory_export_csv_transformation(exporter: RegulatoryExporter) -> N
     report = exporter.export_audit_trail(data, ExportFormat.CSV, RegulatorTarget.SEC)
 
     # 1. Structural Verification
-    assert report["status"] == "EXPORT_COMPLETE"  # noqa: S101
-    assert report["regulator"] == "SEC"  # noqa: S101
+    assert report["status"] == "EXPORT_COMPLETE"
+    assert report["regulator"] == "SEC"
 
     # 2. Artifact Verification (CSV Header + Rows)
     artifact = report["payload"]
-    assert "id,timestamp,symbol,price,qty" in artifact  # noqa: S101
-    assert "BTC/USD" in artifact  # noqa: S101
+    assert "id,timestamp,symbol,price,qty" in artifact
+    assert "BTC/USD" in artifact
 
     # 3. Integrity Signature
-    assert len(report["integrity_signature"]) == 64  # noqa: S101, PLR2004
+    assert len(report["integrity_signature"]) == 64
 
 
 def test_regulatory_export_schema_compliance_enforcement(
@@ -82,8 +82,8 @@ def test_regulatory_export_json_format_verification(
 
     # Verify JSON structure
     parsed = json.loads(report["payload"])
-    assert parsed[0]["id"] == "E4"  # noqa: S101
-    assert parsed[0]["symbol"] == "XRP/USD"  # noqa: S101
+    assert parsed[0]["id"] == "E4"
+    assert parsed[0]["symbol"] == "XRP/USD"
 
 
 def test_regulatory_export_cryptographic_signature_integrity(
@@ -107,7 +107,7 @@ def test_regulatory_export_cryptographic_signature_integrity(
     # The artifact itself must re-generate the same signature with the same secret
     secret = b"SEC_FINRA_OVERSIGHT_KEY"
     expected_sig = hmac.new(secret, report["payload"].encode(), hashlib.sha256).hexdigest()
-    assert original_sig == expected_sig  # noqa: S101
+    assert original_sig == expected_sig
 
 
 def test_regulatory_export_telemetry_tracking(exporter: RegulatoryExporter) -> None:
@@ -130,6 +130,6 @@ def test_regulatory_export_telemetry_tracking(exporter: RegulatoryExporter) -> N
         exporter.export_audit_trail([{"id": "E6"}], ExportFormat.JSON, RegulatorTarget.SEC)
 
     stats = exporter.get_export_telemetry()
-    assert stats["success_count"] == 1  # noqa: S101
-    assert stats["violation_count"] == 1  # noqa: S101
-    assert stats["status"] == "AUDIT"  # noqa: S101
+    assert stats["success_count"] == 1
+    assert stats["violation_count"] == 1
+    assert stats["status"] == "AUDIT"

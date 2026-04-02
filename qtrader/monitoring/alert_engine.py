@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import collections
 import time
-from typing import Any, Dict, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from loguru import logger
 
@@ -16,17 +16,17 @@ class AlertEngine:
     Triggers immediate human or automated incident response.
     """
 
-    _instance: Optional[AlertEngine] = None
+    _instance: AlertEngine | None = None
 
     def __init__(self, rules_policy: Mapping[str, Any]) -> None:
         self.rules = rules_policy.get("rules", {})
         self.channels = rules_policy.get("channels", {})
         self._metrics_collector = MetricsCollector.get_instance()
-        self._alert_history: Dict[str, float] = {}
+        self._alert_history: dict[str, float] = {}
         self._cooldown_sec = 60.0 # Prevent alert fatigue
 
     @classmethod
-    def get_instance(cls, rules_policy: Optional[dict[str, Any]] = None) -> AlertEngine:
+    def get_instance(cls, rules_policy: dict[str, Any] | None = None) -> AlertEngine:
         if cls._instance is None:
              if rules_policy is None:
                   # Prototype fallback
@@ -34,7 +34,7 @@ class AlertEngine:
              cls._instance = AlertEngine(rules_policy)
         return cls._instance
 
-    def check_alerts(self) -> List[str]:
+    def check_alerts(self) -> list[str]:
         """
         Scan current metrics snapshot against threshold rules.
         Returns: list of triggered alert names.
@@ -61,7 +61,7 @@ class AlertEngine:
         
         return triggered
 
-    def _get_metric_value(self, report: dict[str, Any], metric: str, stat: str) -> Optional[float]:
+    def _get_metric_value(self, report: dict[str, Any], metric: str, stat: str) -> float | None:
         """Heuristically navigate the nested metrics report."""
         if stat == "value":
              # Counters or Gauges

@@ -1,8 +1,11 @@
-import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from qtrader.core.config_loader import ConfigLoader, QTraderConfig
 from qtrader.core.dynamic_config_manager import DynamicConfigManager
+
 
 @pytest.fixture
 def mock_config_bus():

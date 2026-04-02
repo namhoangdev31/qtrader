@@ -17,7 +17,7 @@ def test_monitor_happy_path(engine: MonitoringEngine) -> None:
         pnl_real=1000.0, pnl_expected=1000.0, latency_ms=25.0, slippage_bps=5.0, fill_rate=0.98
     )
     alerts = engine.monitor(metrics)
-    assert len(alerts) == 0  # noqa: S101
+    assert len(alerts) == 0
 
 
 def test_monitor_pnl_drift(engine: MonitoringEngine) -> None:
@@ -30,7 +30,7 @@ def test_monitor_pnl_drift(engine: MonitoringEngine) -> None:
         fill_rate=0.98,
     )
     alerts = engine.monitor(metrics)
-    assert any("PNL_DRIFT" in a for a in alerts)  # noqa: S101
+    assert any("PNL_DRIFT" in a for a in alerts)
 
 
 def test_monitor_latency_hard_limit(engine: MonitoringEngine) -> None:
@@ -43,7 +43,7 @@ def test_monitor_latency_hard_limit(engine: MonitoringEngine) -> None:
         fill_rate=0.98,
     )
     alerts = engine.monitor(metrics)
-    assert any("LATENCY_HARD_LIMIT" in a for a in alerts)  # noqa: S101
+    assert any("LATENCY_HARD_LIMIT" in a for a in alerts)
 
 
 def test_monitor_latency_statistical_anomaly(engine: MonitoringEngine) -> None:
@@ -60,8 +60,8 @@ def test_monitor_latency_statistical_anomaly(engine: MonitoringEngine) -> None:
     metrics = SystemMetrics(1000.0, 1000.0, 80.0, 5.0, 0.98)
     alerts = engine.monitor(metrics)
 
-    assert any("LATENCY_STAT_ANOMALY" in a for a in alerts)  # noqa: S101
-    assert any("LATENCY_HARD_LIMIT" in a for a in alerts)  # noqa: S101
+    assert any("LATENCY_STAT_ANOMALY" in a for a in alerts)
+    assert any("LATENCY_HARD_LIMIT" in a for a in alerts)
 
 
 def test_monitor_execution_degradation(engine: MonitoringEngine) -> None:
@@ -74,8 +74,8 @@ def test_monitor_execution_degradation(engine: MonitoringEngine) -> None:
     a1 = engine.monitor(m1)
     a2 = engine.monitor(m2)
 
-    assert any("SLIPPAGE_SPIKE" in a for a in a1)  # noqa: S101
-    assert any("FILL_RATE_DROP" in a for a in a2)  # noqa: S101
+    assert any("SLIPPAGE_SPIKE" in a for a in a1)
+    assert any("FILL_RATE_DROP" in a for a in a2)
 
 
 def test_monitor_health_reporting(engine: MonitoringEngine) -> None:
@@ -85,5 +85,5 @@ def test_monitor_health_reporting(engine: MonitoringEngine) -> None:
     engine.monitor(SystemMetrics(1000.0, 1000.0, 100.0, 5.0, 0.98))  # Latency
 
     report = engine.get_health_report()
-    assert report["alert_count"] == 2  # noqa: S101, PLR2004
-    assert report["anomaly_rate"] == 1.0  # noqa: S101
+    assert report["alert_count"] == 2
+    assert report["anomaly_rate"] == 1.0

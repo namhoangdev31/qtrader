@@ -4,51 +4,41 @@ This module is the single source of truth for the event-driven pipeline,
 coordinating market data, alpha generation, feature validation, 
 strategy, risk, and execution.
 """
-
-
 import asyncio
 import os
-import time
+import uuid
+from collections.abc import Mapping
+from datetime import datetime, timezone
 from decimal import Decimal
-from enum import Enum, auto
-from typing import Any,  Mapping, Optional, Sequence
+from typing import Any
 
-
+from qtrader.core.container import container
+from qtrader.core.enforcement_engine import enforcement_engine, guard
+from qtrader.core.event_store import FileEventStore
+from qtrader.core.events import (
+    BaseEvent,
+    EventType,
+    MarketEvent,
+    SignalEvent,
+    SignalPayload,
+    SystemEvent,
+    SystemPayload,
+    FeatureEvent,
+    FeaturePayload,
+    ValidatedFeatureEvent,
+    OrderEvent,
+    OrderPayload,
+    FillEvent,
+    FillPayload,
+    RiskPayload,
+)
 from qtrader.core.types import (
     AllocationWeights,
     EventBusProtocol,
     MarketData,
 )
-
-import uuid
-from typing import Mapping
-from datetime import datetime, timezone
-from qtrader.core.events import (
-    BaseEvent, 
-    SystemEvent, 
-    SystemPayload, 
-    MarketEvent, 
-    SignalEvent,
-    EventType
-)
 from qtrader.system.pipeline_validator import PipelineValidator
 
-
-# Phase -1 Authorities
-from qtrader.core.config_manager import ConfigManager
-from qtrader.core.config_enforcer import ConfigEnforcer
-from qtrader.core.seed_manager import SeedManager
-from qtrader.core.logger import QTraderLogger
-from qtrader.core.trace_authority import TraceAuthority
-from qtrader.core.fail_fast_engine import FailFastEngine
-from qtrader.monitoring.metrics_collector import MetricsCollector
-from qtrader.core.decimal_adapter import math_authority, d
-from qtrader.monitoring.alert_engine import AlertEngine
-
-
-
-
-# Try to import MLflowManager, but don't fail if not available
 try:
     from qtrader.ml.mlflow_manager import MLflowManager
     MLFLOW_MANAGER_AVAILABLE = True
@@ -57,25 +47,36 @@ except ImportError:
     MLflowManager = None  # type: ignore
 from loguru import logger
 
-from qtrader.analytics.drift_detector import DriftDetector
+from qtrader.alerts.alert_engine import alert_engine
+from qtrader.analytics.drift import DriftMonitor
+from qtrader.core.config import settings
+from qtrader.core.config_manager import ConfigManager
+from qtrader.core.decimal_adapter import math_authority
+from qtrader.core.execution_wrapper import execution_wrapper
+from qtrader.core.logger import log_event
+from qtrader.core.metrics import metrics
+from qtrader.core.post_execution_validator import PostExecutionValidator
+from qtrader.core.pre_execution_validator import PreExecutionValidator
 from qtrader.core.resource_monitor import ResourceMonitor
-from qtrader.execution.shadow_engine import ShadowEngine
+from qtrader.core.runtime_gatekeeper import runtime_gatekeeper
 from qtrader.core.state_store import Position, StateStore
+from qtrader.core.system_state import SystemState, state_manager
+from qtrader.core.trace_authority import TraceAuthority
 from qtrader.execution.latency_model import LatencyModel
 from qtrader.execution.orderbook_enhanced import OrderbookEnhanced
 from qtrader.execution.shadow_engine import ShadowEngine
 from qtrader.execution.slippage_model import SlippageModel
+from qtrader.metrics.telemetry_pipeline import telemetry_pipeline
 from qtrader.ml.meta_online import OnlineMetaLearner
 from qtrader.monitoring.feedback.feedback_engine import FeedbackEngine
 from qtrader.oms.oms_adapter import OMSAdapter
+from qtrader.portfolio.allocator import AllocatorBase
 from qtrader.risk.network_kill_switch import NetworkKillSwitch
-from qtrader.risk.portfolio.allocator import AllocatorBase
 from qtrader.risk.runtime import RuntimeRiskEngine
 from qtrader.strategy.alpha.alpha_base import AlphaBase
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.validation.feature_validator import FeatureValidator
-from qtrader.core.system_state import SystemState, state_manager
 
 
 class TradingOrchestrator:
@@ -141,21 +142,35 @@ class TradingOrchestrator:
 
         self.feedback_engine = FeedbackEngine(event_bus=event_bus)
         self.meta_learner = OnlineMetaLearner()
-        self.drift_detector = DriftDetector()
-        
-        # Authority Initialization
-        from qtrader.core.config import settings
+        self.drift_detector = DriftMonitor()
+        self.config_manager = container.get("config")
+        self.seed_manager = container.get("seed")
+        self.trace_authority = container.get("trace")
+        self.fail_fast_engine = container.get("failfast")
+        self.math_authority = container.get("decimal")
+        self.qlogger = container.get("logger")
         self.settings = settings
+        self.post_validator = PostExecutionValidator()
+        self.event_store = event_store or FileEventStore(base_path="data/event_store")
+        self.event_bus = event_bus
+        if hasattr(self.event_bus, "_event_store"):
+            self.event_bus._event_store = self.event_store # type: ignore
+        self.fail_fast_engine._orchestrator = self
 
-        # Shadow System & Resource Governance
-        self.shadow_engine = ShadowEngine(config=settings.model_dump() if hasattr(settings, "model_dump") else {})
-        self.resource_monitor = ResourceMonitor()
-        self.seed_manager = SeedManager.from_config(
-            strategy_id="QTrader-V1",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            simulate_mode=settings.simulate_mode
-        )
-        self.fail_fast_engine = FailFastEngine(global_orchestrator=self)
+        self.max_drawdown = Decimal('0.20')  # Fallback
+        self.max_var = Decimal('0.05')       # Fallback
+        self.max_leverage = Decimal('5.0')   # Fallback
+        
+        initial_config = {
+            "max_drawdown": float(self.max_drawdown),
+            "max_var": float(self.max_var),
+            "max_leverage": float(self.max_leverage),
+            "alpha_decay_ms": 1000,
+            "execution_priority": "balanced"
+        }
+        # Update config via manager instead of re-instantiating
+        for k, v in initial_config.items():
+            asyncio.create_task(self.config_manager.update(k, v))
         
         trading_symbols = settings.TRADING_SYMBOLS
 
@@ -177,7 +192,9 @@ class TradingOrchestrator:
         }
         self.shadow_engine = ShadowEngine(shadow_config)
         self.resource_monitor = ResourceMonitor()
-        self.network_kill_switch = NetworkKillSwitch(oms_adapter=oms_adapter, logger_instance=logger)
+        # Engage with compatible logger type
+        import logging
+        self.network_kill_switch = NetworkKillSwitch(oms_adapter=oms_adapter, logger_instance=logging.getLogger("kill_switch"))
         if MLFLOW_MANAGER_AVAILABLE:
             self.mlflow_manager = MLflowManager(
                 tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"),
@@ -188,9 +205,7 @@ class TradingOrchestrator:
             self.mlflow_manager = None
         self._local_feedback_count = 0 
 
-        self.max_drawdown = Decimal('0.20')  # 20%
-        self.max_var = Decimal('0.05')       # 5% VaR
-        self.max_leverage = Decimal('5.0')   # 5x leverage
+        # Static thresholds are now managed via ConfigManager in __init__
 
         # Register event handlers
         self._register_handlers()
@@ -212,38 +227,72 @@ class TradingOrchestrator:
         Steps: Load Config -> Apply Seeds -> Init Logger -> Init Trace -> Init FailFast.
         """
         try:
-            logger.info("ORCHESTRATOR_BOOT | Sequence initiated (S=INIT).")
+            log_event(module="orchestrator", action="ORCHESTRATOR_BOOT", status="SUCCESS", message="Sequence initiated (S=INIT)")
             
             # 2. Entropy Authority (Freezing randomness)
             self.seed_manager.apply_global()
             
             # 3. Trace Authority (Agnostic context start)
-            TraceAuthority.start_trace()
+            self.trace_authority.start_trace()
             
-            # 4. Architectural Validation
+            # 4. Phase -1.5 Architectural & System Readiness Validation
+            validator = PreExecutionValidator()
+            if not validator.validate(seed_manager=self.seed_manager):
+                raise RuntimeError("System pre-execution validation failed. Check qtrader/audit/precheck_report.json")
+            
+            # 5. Architectural Validation (Legacy)
             self.validate()
             
-            state_manager.set_state(SystemState.READY)
-            self._state = SystemState.READY
-
+            # 5. State Recovery (G7)
+            asyncio.create_task(self.recover_state())
             
-            # 5. Forensic Boot Log
+            # Use pydantic model for state change if possible, or just set
+            self._state = SystemState.READY
+            
+            # 6. Forensic Boot Log
             self._write_boot_log(start_time=self._boot_time, status="SUCCESS")
             
-            logger.info("ORCHESTRATOR_BOOT | System is READY.")
+            log_event(module="orchestrator", action="ORCHESTRATOR_BOOT", status="SUCCESS", message="System is READY")
 
             
         except Exception as e:
             state_manager.set_state(SystemState.ERROR)
             self._state = SystemState.ERROR
-            logger.critical(f"ORCHESTRATOR_BOOT_FAILURE | Hard stop initiated: {e}")
+            log_event(module="orchestrator", action="ORCHESTRATOR_BOOT", status="FAILURE", level="CRITICAL", error=str(e))
             raise RuntimeError(f"System initialization failed: {e}")
+
+    async def recover_state(self) -> None:
+        """
+        Sovereign Recovery Sequence (G7): Rebuild state from EventStore.
+        Replays Fill and Risk events to synchronize StateStore.
+        """
+        logger.info("ORCHESTRATOR_RECOVERY | Initiating state reconstruction...")
+        try:
+            # 1. Retrieve all relevant events for reconstruction
+            events = await self.event_store.get_events()
+            recovery_count = 0
+            
+            for event in events:
+                if event.event_type == EventType.FILL:
+                    # Manually trigger fill handler WITHOUT publishing to bus (avoiding loops)
+                    await self.handle_fills(event.model_dump())
+                    recovery_count += 1
+                elif event.event_type == EventType.RISK:
+                    # Sync risk metrics if needed
+                    pass
+            
+            logger.info(f"ORCHESTRATOR_RECOVERY | Reconstructed {recovery_count} state-changing events.")
+            
+        except Exception as e:
+            logger.error(f"ORCHESTRATOR_RECOVERY_FAILURE | {e}")
+            # Recovery failure is non-terminal but degraded
+            pass
 
     def validate(self) -> None:
         """Mandatory POST-INIT check to ensure 100% compliance."""
         if not self.settings:
             raise RuntimeError("Configuration settings not available.")
-        if not self.seed_manager.is_applied:
+        if not self.seed_manager.is_applied():
             raise RuntimeError("Global seed not applied.")
         logger.info("ORCHESTRATOR_VALIDATION | Post-init compliance 100%.")
 
@@ -256,7 +305,7 @@ class TradingOrchestrator:
             "boot_duration_ms": (asyncio.get_event_loop().time() - start_time) * 1000,
             "status": status,
             "config_checksum": ConfigManager.get_checksum() if hasattr(ConfigManager, "get_checksum") else "N/A",
-            "seed_applied": self.seed_manager.is_applied,
+            "seed_applied": self.seed_manager.is_applied(),
             "authorities_initialized": [
                 "ConfigManager", "SeedManager", "TraceAuthority", "FailFastEngine"
             ]
@@ -318,9 +367,11 @@ class TradingOrchestrator:
         traceability and partition requirements.
         """
         if not event.trace_id:
-            event = event.model_copy(update={"trace_id": uuid.uuid4()})
+            # We can't mutate frozen models, use model_copy
+            new_trace = uuid.uuid4()
+            event = event.model_copy(update={"trace_id": new_trace})
             
-        return await self.event_bus.publish(event.event_type, event)
+        return await self.event_bus.publish(event)
 
     async def ingest_raw_data(self, raw_data: dict[str, Any]) -> MarketEvent | None:
         """
@@ -354,9 +405,9 @@ class TradingOrchestrator:
                     return None
             
             if self.event_store:
-                await self.event_store.record_event(event)
+                await self.event_store.append(event)
             
-            await self.event_bus.publish(EventType.MARKET_DATA, event)
+            await self.event_bus.publish(event)
             return event
 
         except Exception as e:
@@ -381,13 +432,17 @@ class TradingOrchestrator:
         )
         
         if not is_valid:
-            rejected = DataRejectedEvent(
-                symbol=symbol,
+            # Construct authoritative SystemEvent for rejection
+            rejected = SystemEvent(
+                source="DataQualityGate",
                 trace_id=event.trace_id,
-                reason="Outlier/Cross-exchange deviation",
-                value=float(event.close)
+                payload=SystemPayload(
+                    action="DATA_REJECTED",
+                    reason=f"Outlier/Deviation | Value: {event.payload.bid}",
+                    metadata={"symbol": symbol}
+                )
             )
-            await self.event_bus.publish(EventType.DATA_REJECTED, rejected)
+            await self.event_bus.publish(rejected)
             
         return is_valid
 
@@ -409,14 +464,14 @@ class TradingOrchestrator:
             await self.halt_core("SHUTDOWN_SIGNAL")
 
     async def _periodic_check(self) -> None:
-        """Periodic tasks: Risk check, Rebalance, Heartbeat."""
+        """Periodic tasks: Risk check, Rebalance, Heartbeat, Alerting."""
+        await alert_engine.check_metrics()
         current_ts = asyncio.get_event_loop().time()
         
         if self.hft_optimizer:
             self.hft_optimizer.check_and_update_safety_mode()
             
         await self.event_bus.publish(
-            EventType.HEARTBEAT, 
             SystemEvent(
                 trace_id=uuid.uuid4(),
                 source="UnifiedOrchestrator",
@@ -464,481 +519,441 @@ class TradingOrchestrator:
 
     async def halt_core(self, reason: str) -> None:
         """Emergency shutdown of all components."""
-        logger.critical(f"SYSTEM_ORCHESTRATOR_HALT | Initiating shutdown for: {reason}")
+        log_event(module="orchestrator", action="SYSTEM_HALT", status="SUCCESS", message=f"Initiating shutdown for: {reason}")
         state_manager.set_state(SystemState.SHUTDOWN)
         self._state = SystemState.SHUTDOWN
         
         # Shutdown infrastructure
         await self._stop_components()
-        await self.event_bus.shutdown()
+        await self.event_bus.stop()
         
-        logger.info(f"SYSTEM_ORCHESTRATOR_HALT | Shutdown complete (Reason: {reason})")
+        # 3. Post-Execution Validation (Phase -1.5 G7 P3)
+        await self.post_validator.validate(self.event_store, self.state_store)
+        
+        log_event(module="orchestrator", action="SYSTEM_HALT", status="SUCCESS", message=f"Shutdown complete (Reason: {reason})")
 
     async def _start_components(self) -> None:
         """Start background components."""
         await self.shadow_engine.start()
         await self.resource_monitor.start_monitoring()
+        await telemetry_pipeline.start()
         logger.info("Background components started")
 
     async def _stop_components(self) -> None:
         """Stop background components."""
         await self.shadow_engine.stop()
         await self.resource_monitor.stop_monitoring()
+        await telemetry_pipeline.stop()
         logger.info("Background components stopped")
 
+    @guard(enforcement_engine)
+    @execution_wrapper(source="handle_market_data")
     async def handle_market_data(self, market_data: MarketData) -> None:
         """Reactive alpha generation gate."""
+        await runtime_gatekeeper.check_event(market_data)
         if self._state != SystemState.RUNNING:
             return
             
-        trace_id = TraceAuthority.propagate(market_data)
+        trace_id = market_data.trace_id or self.trace_authority.propagate(market_data)
         log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            # 1. Decimal Normalization (Numerical Integrity Gate)
-            market_data.close = math_authority.d(market_data.close)
-            market_data.volume = math_authority.d(market_data.volume)
-            
-            log.info(f"Handling market data for {market_data.symbol} - Input: close={market_data.close}, volume={market_data.volume}")
-            features = {}
-            for alpha in self.alpha_modules:
-                alpha_output = await alpha.generate(market_data)
-                if hasattr(alpha_output, 'alpha_values') and isinstance(alpha_output.alpha_values, dict):
-                    features.update(alpha_output.alpha_values)
-                else:
-                    log.warning(f"Alpha module {alpha.name} returned unexpected output: {type(alpha_output)}")
-            
-            features_data = {
-                "features": features,
-                "timestamp": datetime.utcnow(),
-                "source_market_data": market_data,
-                "symbol": market_data.symbol,
-                "trace_id": trace_id
-            }
-            await self.event_bus.publish(EventType.FEATURES, features_data)
-            log.info(f"Published FEATURES for {market_data.symbol} - Output: {len(features)} features computed")
-        except Exception as e:
-            # 2. Fail-Fast Enforcement (Sovereign Gate)
-            await self.fail_fast_engine.handle_error(source="handle_market_data", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_market_data latency: {latency*1000:.2f}ms")
+        start_time = asyncio.get_event_loop().time()
+        await metrics.increment("throughput")
+        
+        # 0. Config Gate (Control Vector Injection)
+        alpha_decay = self.config_manager.get("alpha_decay_ms", 1000)
+        
+        # 1. Decimal Normalization (Numerical Integrity Gate)
+        market_data.close = self.math_authority.d(market_data.close)
+        market_data.volume = self.math_authority.d(market_data.volume)
+        
+        log_event(
+            module="orchestrator",
+            action="MARKET_DATA_RECEIVED",
+            status="SUCCESS",
+            metadata={"symbol": market_data.symbol, "close": str(market_data.close), "volume": str(market_data.volume)}
+        )
+        features = {}
+        for alpha in self.alpha_modules:
+            alpha_output = await alpha.generate(market_data)
+            if hasattr(alpha_output, 'alpha_values') and isinstance(alpha_output.alpha_values, dict):
+                features.update(alpha_output.alpha_values)
+            else:
+                log.warning(f"Alpha module {alpha.name} returned unexpected output: {type(alpha_output)}")
+        
+        # Normalization and publication of Features
+        feature_event = FeatureEvent(
+            source="AlphaEnsemble",
+            trace_id=trace_id,
+            payload=FeaturePayload(
+                symbol=market_data.symbol,
+                features=features,
+                metadata={"module_count": len(self.alpha_modules)}
+            )
+        )
+        await self.event_bus.publish(feature_event)
+        
+        log_event(
+            module="orchestrator",
+            action="FEATURES_PUBLISHED",
+            status="SUCCESS",
+            metadata={"symbol": market_data.symbol, "feature_count": len(features)}
+        )
+        latency = (asyncio.get_event_loop().time() - start_time) * 1000
+        await metrics.observe("latency", latency)
 
+    @execution_wrapper(source="handle_features")
     async def handle_features(self, features_data: dict[str, Any]) -> None:
+        await runtime_gatekeeper.check({"stage": "features", "trace_id": features_data.get("trace_id")})
         trace_id = features_data.get("trace_id", TraceAuthority.generate())
         log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            if await self._is_kill_switch_active():
-                log.warning("Kill switch active, skipping feature validation")
-                return
-            log.debug(f"Handling features - Input: {len(features_data.get('features', {}))} features")
-            features = features_data.get("features", {})
-            validated = await self.feature_validator.validate(features)
-            if validated is None:
-                log.warning("Feature validation failed")
-                return
-            validated_features_data = {
-                "features": validated,
-                "timestamp": datetime.utcnow(),
-                "source_features": features,
-                "trace_id": trace_id
-            }
-            await self.event_bus.publish(EventType.VALIDATED_FEATURES, validated_features_data)
-            log.info(f"Published VALIDATED_FEATURES - Output: {len(validated.features)} validated features")
-        except Exception as e:
-            # Sovereign Gate
-            await self.fail_fast_engine.handle_error(source="handle_features", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_features latency: {latency*1000:.2f}ms")
-
-    async def handle_validated_features(self, validated_features_data: dict[str, Any]) -> None:
-        trace_id = validated_features_data.get("trace_id", TraceAuthority.generate())
-        log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            if await self._is_kill_switch_active():
-                log.warning("Kill switch active, skipping signal generation")
-                return
-            validated_features_obj = validated_features_data.get("features")
-            if validated_features_obj is None:
-                log.warning("No features in validated_features_data")
-                return
-            ensemble_signal = await self.ensemble_strategy.generate_signal(validated_features_obj)
-            
-            # Numeric Normalization
-            signals_data = {
-                "signal": {
-                    "signal_type": ensemble_signal.signal_type,
-                    "strength": float(math_authority.to_price(ensemble_signal.strength))
-                },
-                "timestamp": datetime.utcnow(),
-                "source_strategy": "ensemble",
-                "trace_id": trace_id
-            }
-            await self.event_bus.publish(EventType.SIGNALS, signals_data)
-            log.info(f"Published SIGNALS - Output: ensemble signal {ensemble_signal.signal_type} with strength {ensemble_signal.strength}")
-        except Exception as e:
-            await self.fail_fast_engine.handle_error(source="handle_validated_features", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_validated_features latency: {latency*1000:.2f}ms")
-
-    async def handle_signals(self, signals_data: dict[str, Any]) -> None:
-        trace_id = signals_data.get("trace_id", TraceAuthority.generate())
-        log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            if await self._is_kill_switch_active():
-                log.warning("Kill switch active, skipping signal processing")
-                return
-            
-            signal_info = signals_data.get("signal")
-            if not signal_info:
-                log.warning("No signal in signals data")
-                return
-            
-            symbol = signals_data.get("symbol", "UNKNOWN")
-            
-            # Numeric Normalization
-            signal_event = SignalEvent(
-                symbol=symbol,
-                signal_type=signal_info.get("signal_type", "UNKNOWN"),
-                strength=math_authority.to_price(signal_info.get("strength", 0)),
-                timestamp=signals_data.get("timestamp", datetime.utcnow()),
-                trace_id=trace_id,
-                metadata={}
+        if await self._is_kill_switch_active():
+            log.warning("Kill switch active, skipping feature validation")
+            return
+        # Multi-control Vector Injection
+        validation_mode = self.config_manager.get("feature_validation_mode", "strict")
+        log.debug(f"Handling features (mode: {validation_mode})")
+        
+        features = features_data.payload.features
+        validated = await self.feature_validator.validate(features)
+        
+        if validated is None:
+            log_event(
+                module="orchestrator",
+                action="FEATURE_VALIDATION",
+                status="FAILURE",
+                level="WARNING",
+                message="Feature validation failed"
             )
+            return
             
-            log.info(f"Processing signal: {signal_event.signal_type} with strength {signal_event.strength}")
+        validated_event = ValidatedFeatureEvent(
+            source="FeatureValidator",
+            trace_id=trace_id,
+            payload=FeaturePayload(
+                symbol=features_data.payload.symbol,
+                features=validated,
+                metadata={"validation_mode": validation_mode}
+            )
+        )
+        await self.event_bus.publish(validated_event)
+        
+        log_event(
+            module="orchestrator",
+            action="VALIDATED_FEATURES_PUBLISHED",
+            status="SUCCESS",
+            metadata={"feature_count": len(validated)}
+        )
+
+    @execution_wrapper(source="handle_validated_features")
+    async def handle_validated_features(self, validated_event: ValidatedFeatureEvent) -> None:
+        await runtime_gatekeeper.check_event(validated_event)
+        trace_id = validated_event.trace_id
+        log = logger.bind(trace_id=trace_id)
+        if await self._is_kill_switch_active():
+            log.warning("Kill switch active, skipping signal generation")
+            return
             
-            last_ts = await self.state_store.get_last_signal_timestamp()
-            if last_ts and last_ts == signal_event.timestamp:
-                log.warning("Duplicate signal detected, skipping")
-                return
-            await self.state_store.set_last_signal_timestamp(signal_event.timestamp)
+        features_obj = validated_event.payload.features
+        # 3. Control Vector Injection
+        strategy_v = self.config_manager.get("ensemble_strategy_version", 1)
+        ensemble_signal = await self.ensemble_strategy.generate_signal(features_obj)
+        
+        # Unified Signal Publication
+        signal_event = SignalEvent(
+            source="EnsembleStrategy",
+            trace_id=trace_id,
+            payload=SignalPayload(
+                symbol=validated_event.payload.symbol,
+                signal_type=ensemble_signal.signal_type,
+                strength=math_authority.to_price(ensemble_signal.strength),
+                metadata={"strategy_version": strategy_v}
+            )
+        )
+        await self.event_bus.publish(signal_event)
+        log.info(f"Published SIGNAL - Output: {ensemble_signal.signal_type} @ {ensemble_signal.strength}")
+
+    @execution_wrapper(source="handle_signals")
+    async def handle_signals(self, signal_event: SignalEvent) -> None:
+        await runtime_gatekeeper.check_event(signal_event)
+        trace_id = signal_event.trace_id
+        log = logger.bind(trace_id=trace_id)
+        if await self._is_kill_switch_active():
+            log.warning("Kill switch active, skipping signal processing")
+            return
+        
+        symbol = signal_event.payload.symbol
+        
+        log.info(f"Processing signal: {signal_event.payload.signal_type} with strength {signal_event.payload.strength}")
+        
+        # set_last_signal_timestamp expects datetime in some versions
+        await self.state_store.set_last_signal_timestamp(datetime.fromtimestamp(signal_event.timestamp / 1_000_000, tz=timezone.utc))
  
-            allocation_weights = await self.portfolio_allocator.allocate(signal_event)
-            if allocation_weights is None:
-                log.debug("No allocation computed")
-                return
+        allocation_weights = await self.portfolio_allocator.allocate(signal_event)
+        if allocation_weights is None:
+            log.debug("No allocation computed")
+            return
+        
+        risk_metrics = await self.runtime_risk_engine.evaluate_risk(
+            allocation_weights=allocation_weights
+        )
+        
+        # Dynamic Config Check (Dynamic Threshold Enforcement)
+        max_var = math_authority.d(self.config_manager.get("max_var", self.max_var))
+        max_drawdown = math_authority.d(self.config_manager.get("max_drawdown", self.max_drawdown))
+        max_leverage = math_authority.d(self.config_manager.get("max_leverage", self.max_leverage))
+        
+        if (risk_metrics.portfolio_var > max_var or 
+            risk_metrics.max_drawdown > max_drawdown or 
+            risk_metrics.leverage > max_leverage):
+            log.warning(f"Risk check failed, blocking order. Reason: VaR={risk_metrics.portfolio_var} > {max_var}")
             
-            # Numeric Normalization via math_authority
-            allocation_dict = {k: float(math_authority.to_price(v)) for k, v in allocation_weights.weights.items()}
-            
-            risk_metrics = await self.runtime_risk_engine.evaluate_risk(
-                allocation_weights=allocation_weights
-            )
-            if (risk_metrics.portfolio_var > self.max_var or 
-                risk_metrics.max_drawdown > self.max_drawdown or 
-                risk_metrics.leverage > self.max_leverage):
-                log.warning(f"Risk check failed, blocking order. Reason: VaR={risk_metrics.portfolio_var} > {self.max_var} or Drawdown={risk_metrics.max_drawdown} > {self.max_drawdown} or Leverage={risk_metrics.leverage} > {self.max_leverage}")
-                await self.event_bus.publish(EventType.RISK_ALERT, {
-                    "allocation": allocation_dict,
-                    "risk_metrics": risk_metrics,
-                    "timestamp": datetime.utcnow(),
-                    "reason": "Risk limits exceeded",
-                    "trace_id": trace_id
-                })
-                return
-            
-            await self.state_store.set_last_approved_risk_metrics({
-                "portfolio_var": float(math_authority.to_price(risk_metrics.portfolio_var)),
-                "max_drawdown": float(math_authority.to_price(risk_metrics.max_drawdown)),
-                "leverage": float(math_authority.to_price(risk_metrics.leverage))
-            })
-            log.info(f"Risk check passed. VaR={risk_metrics.portfolio_var}, Drawdown={risk_metrics.max_drawdown}, Leverage={risk_metrics.leverage}")
-            
-            await self.event_bus.publish(EventType.ORDERS, {
-                "allocation": allocation_dict,
-                "timestamp": datetime.utcnow(),
-                "source_ensemble": signal_info,
-                "trace_id": trace_id
-            })
-            log.info(f"Published ORDERS - Output: {len(allocation_dict)} allocations")
-        except Exception as e:
-            await self.fail_fast_engine.handle_error(source="handle_signals", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_signals latency: {latency*1000:.2f}ms")
-
-    async def handle_orders(self, orders_data: dict[str, Any]) -> None:
-        trace_id = orders_data.get("trace_id", TraceAuthority.generate())
-        log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            if await self._is_kill_switch_active():
-                log.warning("Kill switch active, skipping order submission")
-                return
-            log.debug(f"Handling orders - Input: {len(orders_data.get('allocation', {}))} allocations")
-            allocation_dict = orders_data.get("allocation", {})
-            if not allocation_dict:
-                log.warning("No allocation in orders data")
-                return
-            
-            risk_data = await self.state_store.get_last_approved_risk_metrics()
-            if not risk_data:
-                log.warning("No approved risk metrics available in StateStore for order")
-                return
-            
-            from qtrader.core.types import RiskMetrics
-            # Numeric Normalization
-            risk_metrics = RiskMetrics(
-                portfolio_var=math_authority.to_price(risk_data["portfolio_var"]),
-                max_drawdown=math_authority.to_price(risk_data["max_drawdown"]),
-                leverage=math_authority.to_price(risk_data["leverage"]),
-                timestamp=datetime.utcnow()
-            )
-            allocation_weights = AllocationWeights(
-                timestamp=orders_data.get("timestamp", datetime.utcnow()),
-                weights={k: math_authority.to_price(v) for k, v in allocation_dict.items()},
-                trace_id=trace_id
-            )
-            order_event = await self.oms_adapter.create_order(
-                allocation_weights=allocation_weights,
-                risk_metrics=risk_metrics
-            )
-            log.info(f"Sent order via OMS adapter: {order_event}")
-        except Exception as e:
-            await self.fail_fast_engine.handle_error(source="handle_orders", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_orders latency: {latency*1000:.2f}ms")
-
-    async def handle_fills(self, fill_data: dict[str, Any]) -> None:
-        trace_id = fill_data.get("trace_id", TraceAuthority.generate())
-        log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            log.debug(f"Handling fills - Input: symbol={fill_data.get('symbol')}, quantity={fill_data.get('quantity')}, price={fill_data.get('price')}")
-            symbol = fill_data.get("symbol")
-            quantity = fill_data.get("quantity")
-            price = fill_data.get("price")
-            if symbol is None or quantity is None or price is None:
-                log.warning("Invalid fill data")
-                return
-            
-            # Numeric Normalization
-            quantity_dec = math_authority.to_qty(quantity)
-            price_dec = math_authority.to_price(price)
-            
-            # Update positions
-            current_position = await self.state_store.get_position(symbol)
-            if current_position:
-                new_quantity = current_position.quantity + quantity_dec
-                new_cost = current_position.quantity * current_position.average_price + quantity_dec * price_dec
-                new_avg_price = new_cost / new_quantity if new_quantity != 0 else Decimal('0')
-                updated_position = Position(
-                    symbol=symbol,
-                    quantity=new_quantity,
-                    average_price=new_avg_price
+            await self.event_bus.publish(
+                SystemEvent(
+                    source="RiskEngine",
+                    trace_id=trace_id,
+                    payload=SystemPayload(
+                        action="RISK_REJECTED",
+                        reason=f"VaR={risk_metrics.portfolio_var} > {max_var}",
+                        metadata={"symbol": symbol}
+                    )
                 )
-                await self.state_store.set_position(updated_position)
-            else:
-                new_position = Position(
-                    symbol=symbol,
-                    quantity=quantity_dec,
-                    average_price=price_dec
-                )
-                await self.state_store.set_position(new_position)
+            )
+            return
+        
+        await self.state_store.set_last_approved_risk_metrics({
+            "portfolio_var": risk_metrics.portfolio_var,
+            "max_drawdown": risk_metrics.max_drawdown,
+            "leverage": risk_metrics.leverage
+        })
+        
+        # Publish Authoritative OrderEvent
+        for target_symbol, weight in allocation_weights.weights.items():
+            if weight == 0: continue
             
-            if self.state_store:
-                await self.state_store.update_performance(symbol, quantity_dec, price_dec)
+            # Simple mapping: BUY if weight > 0, SELL if weight < 0 (simplified for refactor)
+            action = "BUY" if weight > 0 else "SELL"
+            qty = math_authority.to_qty(abs(weight) * 100) # Dummy multiplier for logic
             
-            from qtrader.core.types import FillEvent
-            fill_event = FillEvent(
-                order_id=fill_data.get("order_id", f"orchestrator_{datetime.utcnow().timestamp()}"),
-                symbol=symbol,
-                timestamp=fill_data.get("timestamp", datetime.utcnow()),
-                side=fill_data.get("side", "BUY"),
-                quantity=quantity_dec,
-                price=price_dec,
-                commission=Decimal('0'),
+            order_event = OrderEvent(
+                source="PortfolioAllocator",
                 trace_id=trace_id,
-                metadata={}
+                payload=OrderPayload(
+                    order_id=str(uuid.uuid4()),
+                    symbol=target_symbol,
+                    action=action,
+                    quantity=qty,
+                    metadata={"risk_metrics": risk_metrics.model_dump() if hasattr(risk_metrics, 'model_dump') else {}}
+                )
             )
-            await self.feedback_engine.process_fill(fill_event)
-        except Exception as e:
-            await self.fail_fast_engine.handle_error(source="handle_fills", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_fills latency: {latency*1000:.2f}ms")
+            await self.event_bus.publish(order_event)
+            
+        log.info(f"Published ORDERS for {len(allocation_weights.weights)} targets")
 
+    @execution_wrapper(source="handle_orders")
+    async def handle_orders(self, order_event: OrderEvent) -> None:
+        await runtime_gatekeeper.check_event(order_event)
+        trace_id = order_event.trace_id
+        log = logger.bind(trace_id=trace_id)
+        if await self._is_kill_switch_active():
+            log.warning("Kill switch active, skipping order submission")
+            return
+            
+        execution_priority = self.config_manager.get("execution_priority", "balanced")
+        log.debug(f"Handling order {order_event.payload.order_id} (priority: {execution_priority})")
+        
+        risk_data = await self.state_store.get_last_approved_risk_metrics()
+        if not risk_data:
+            log.warning("No approved risk metrics available in StateStore for order")
+            return
+        
+        from qtrader.core.types import RiskMetrics
+        risk_metrics = RiskMetrics(
+            portfolio_var=math_authority.d(risk_data["portfolio_var"]),
+            portfolio_volatility=Decimal('0'), # Fallback
+            max_drawdown=math_authority.d(risk_data["max_drawdown"]),
+            leverage=math_authority.d(risk_data["leverage"]),
+            timestamp=datetime.now(timezone.utc),
+            trace_id=str(trace_id)
+        )
+        allocation_weights = AllocationWeights(
+            timestamp=datetime.now(timezone.utc),
+            weights={order_event.payload.symbol: order_event.payload.quantity},
+            trace_id=str(trace_id)
+        )
+        
+        # OMS Adapter integration
+        await self.oms_adapter.create_order(
+            allocation_weights=allocation_weights,
+            risk_metrics=risk_metrics
+        )
+        log.info(f"Sent order via OMS adapter: {order_event.payload.order_id}")
+
+    @execution_wrapper(source="handle_fills")
+    async def handle_fills(self, fill_event: FillEvent) -> None:
+        await runtime_gatekeeper.check_event(fill_event)
+        trace_id = fill_event.trace_id
+        log = logger.bind(trace_id=trace_id)
+        
+        symbol = fill_event.payload.symbol
+        quantity_dec = fill_event.payload.quantity
+        price_dec = fill_event.payload.price
+        
+        # Update positions
+        current_position = await self.state_store.get_position(symbol)
+        if current_position:
+            new_quantity = current_position.quantity + quantity_dec
+            new_cost = current_position.quantity * current_position.average_price + quantity_dec * price_dec
+            new_avg_price = new_cost / new_quantity if new_quantity != 0 else Decimal('0')
+            updated_position = Position(
+                symbol=symbol,
+                quantity=new_quantity,
+                average_price=new_avg_price
+            )
+            await self.state_store.set_position(updated_position)
+        else:
+            new_position = Position(
+                symbol=symbol,
+                quantity=quantity_dec,
+                average_price=price_dec
+            )
+            await self.state_store.set_position(new_position)
+        
+        if self.state_store:
+            await self.state_store.update_performance_metrics(symbol, quantity_dec, price_dec)
+        
+        await self.feedback_engine.process_fill(fill_event)
+
+    @execution_wrapper(source="handle_risk_alert")
     async def handle_risk_alert(self, alert_data: dict[str, Any]) -> None:
+        await runtime_gatekeeper.check({"stage": "risk_alert", "trace_id": alert_data.get("trace_id")})
         trace_id = alert_data.get("trace_id", TraceAuthority.generate())
         log = logger.bind(trace_id=trace_id)
-        start_time = time.time()
-        try:
-            log.warning(f"Risk alert received: {alert_data}")
-            _ = await self.network_kill_switch.engage_hard_kill(reason="Risk limits exceeded")
-        except Exception as e:
-            await self.fail_fast_engine.handle_error(source="handle_risk_alert", error=e)
-        finally:
-            latency = time.time() - start_time
-            log.debug(f"handle_risk_alert latency: {latency*1000:.2f}ms")
+        log.warning(f"Risk alert received: {alert_data}")
+        _ = await self.network_kill_switch.engage_hard_kill(reason="Risk limits exceeded")
 
+    @execution_wrapper(source="_handle_feedback_update")
     async def _handle_feedback_update(self, data: dict[str, Any]) -> None:
+        await runtime_gatekeeper.check({"stage": "feedback_update", "trace_id": data.get("trace_id")})
         """Handle feedback updates from the feedback engine."""
-        try:
-            logger.debug("Handling feedback update")
-            regime = "default"
-            meta_result = self.meta_learner.update(feedback=data, regime=regime)
-            logger.info(f"Updated meta-learner for regime {regime}")
+        logger.debug("Handling feedback update")
+        regime = "default"
+        meta_result = self.meta_learner.update(feedback=data, regime=regime)
+        logger.info(f"Updated meta-learner for regime {regime}")
+        
+        if meta_result:
+            if hasattr(self.ensemble_strategy, 'meta_learning_engine') and self.ensemble_strategy.meta_learning_engine:
+                strategy_scores = data.get('strategy_scores', {})
+                feature_scores = data.get('feature_scores', {})
+                
+                strategy_performance = {}
+                for strategy_name, score in strategy_scores.items():
+                    strategy_performance[strategy_name] = {
+                        'sharpe': float(score),
+                        'pnl_mean': 0.01,  # Small positive return
+                        'drawdown': 0.001, # Small drawdown
+                        'hit_ratio': 0.5   # Neutral hit ratio
+                    }
+                
+                feature_performance = {}
+                for feature_name, ic in feature_scores.items():
+                    feature_performance[feature_name] = (float(ic), 0.1)
+                
+                self.ensemble_strategy.meta_learning_engine.update(
+                    strategy_performance=strategy_performance,
+                    feature_performance=feature_performance,
+                    regime=regime,
+                    regime_prob=1.0  # Assume 100% probability for default regime
+                )
+                logger.debug("Updated ensemble strategy's meta-learning engine")
+            else:
+                strategy_weights = meta_result.get('strategy_weights', {})
+                if strategy_weights and hasattr(self.ensemble_strategy, '_strategy_weights'):
+                    logger.debug(f"Setting ensemble strategy weights: {strategy_weights}")
+                    logger.info(f"Would set ensemble strategy weights: {strategy_weights}")
             
-            if meta_result:
-                if hasattr(self.ensemble_strategy, 'meta_learning_engine') and self.ensemble_strategy.meta_learning_engine:
-                    strategy_scores = data.get('strategy_scores', {})
-                    feature_scores = data.get('feature_scores', {})
+            risk_multiplier = meta_result.get('risk_multiplier', 1.0)
+            await self.state_store.set_current_risk_multiplier(Decimal(str(risk_multiplier)))
+            if hasattr(self.portfolio_allocator, 'set_risk_multiplier'):
+                self.portfolio_allocator.set_risk_multiplier(risk_multiplier)
+                logger.debug(f"Set allocator risk multiplier to {risk_multiplier}")
+            
+            try:
+                if hasattr(self.feedback_engine, '_feature_data') and self.feedback_engine._feature_data:
+                    window_size = 100
                     
-                    strategy_performance = {}
-                    for strategy_name, score in strategy_scores.items():
-                        strategy_performance[strategy_name] = {
-                            'sharpe': float(score),
-                            'pnl_mean': 0.01,  # Small positive return
-                            'drawdown': 0.001, # Small drawdown
-                            'hit_ratio': 0.5   # Neutral hit ratio
-                        }
+                    reference_data = {}  # feature_name -> list of values
+                    live_data = {}       # feature_name -> list of values
                     
-                    feature_performance = {}
-                    for feature_name, ic in feature_scores.items():
-                        feature_performance[feature_name] = (float(ic), 0.1)
-                    
-                    self.ensemble_strategy.meta_learning_engine.update(
-                        strategy_performance=strategy_performance,
-                        feature_performance=feature_performance,
-                        regime=regime,
-                        regime_prob=1.0  # Assume 100% probability for default regime
-                    )
-                    logger.debug("Updated ensemble strategy's meta-learning engine")
-                else:
-                    strategy_weights = meta_result.get('strategy_weights', {})
-                    if strategy_weights and hasattr(self.ensemble_strategy, '_strategy_weights'):
-                        logger.debug(f"Setting ensemble strategy weights: {strategy_weights}")
-                        logger.info(f"Would set ensemble strategy weights: {strategy_weights}")
-                
-                risk_multiplier = meta_result.get('risk_multiplier', 1.0)
-                await self.state_store.set_current_risk_multiplier(Decimal(str(risk_multiplier)))
-                if hasattr(self.portfolio_allocator, 'set_risk_multiplier'):
-                    self.portfolio_allocator.set_risk_multiplier(risk_multiplier)
-                    logger.debug(f"Set allocator risk multiplier to {risk_multiplier}")
-                
-                try:
-                    if hasattr(self.feedback_engine, '_feature_data') and self.feedback_engine._feature_data:
-                        window_size = 100
-                        
-                        reference_data = {}  # feature_name -> list of values
-                        live_data = {}       # feature_name -> list of values
-                        
-                        for feature_name, feature_deque in self.feedback_engine._feature_data.items():
-                            if len(feature_deque) >= 2:
-                                feature_values = [item[0] for item in feature_deque]
-                                
-                                if len(feature_values) >= window_size * 2:
-                                    reference_vals = feature_values[:-window_size]  # Older data
-                                    live_vals = feature_values[-window_size:]       # Recent data
-                                elif len(feature_values) >= window_size:
-                                    split_point = len(feature_values) // 2
-                                    reference_vals = feature_values[:split_point]
-                                    live_vals = feature_values[split_point:split_point + window_size]
-                                else:
-                                    continue
-                                
-                                if len(reference_vals) > 0 and len(live_vals) > 0:
-                                    reference_data[feature_name] = reference_vals
-                                    live_data[feature_name] = live_vals
-                        
-                        if reference_data and live_data:
-                            min_ref_len = min(len(vals) for vals in reference_data.values()) if reference_data else 0
-                            min_live_len = min(len(vals) for vals in live_data.values()) if live_data else 0
+                    for feature_name, feature_deque in self.feedback_engine._feature_data.items():
+                        if len(feature_deque) >= 2:
+                            feature_values = [item[0] for item in feature_deque]
                             
-                            if min_ref_len > 0 and min_live_len > 0:
-                                ref_data_truncated = {
-                                    feat: vals[:min_ref_len] for feat, vals in reference_data.items()
-                                }
-                                live_data_truncated = {
-                                    feat: vals[:min_live_len] for feat, vals in live_data.items()
-                                }
-                                
-                                # Create DataFrames
-                                import polars as pl
-                                reference_df = pl.DataFrame(ref_data_truncated)
-                                live_df = pl.DataFrame(live_data_truncated)
-                                
-                                # Get column names
-                                columns = list(reference_data.keys())
-                                
-                                # Run drift detection
-                                drift_result = self.drift_detector.detect_drift(
-                                    train_data=reference_df,
-                                    live_data=live_df,
-                                    columns=columns
-                                )
-                                
-                                # Log results
-                                if drift_result.get("drift_alert", False):
-                                    logger.warning(
-                                        f"Drift detected! Severity: {drift_result.get('severity', 'UNKNOWN')}. "
-                                        f"Features checked: {len(columns)}. "
-                                        f"Drift details: {drift_result.get('feature_drift', {})}"
-                                    )
-                                else:
-                                    logger.debug(
-                                        f"No significant drift detected. "
-                                        f"Features checked: {len(columns)}. "
-                                        f"Max PSI: {max([drift_result.get('feature_drift', {}).get(f, {}).get('psi', 0) for f in columns], default=0):.4f}"
-                                    )
+                            if len(feature_values) >= window_size * 2:
+                                reference_vals = feature_values[:-window_size]  # Older data
+                                live_vals = feature_values[-window_size:]       # Recent data
+                            elif len(feature_values) >= window_size:
+                                split_point = len(feature_values) // 2
+                                reference_vals = feature_values[:split_point]
+                                live_vals = feature_values[split_point:split_point + window_size]
                             else:
-                                logger.debug("Insufficient data for drift detection after truncation")
-                        else:
-                            logger.debug("Insufficient feature data for drift detection")
-                    else:
-                        logger.debug("Feature data not available in feedback engine for drift detection")
-                except Exception as e:
-                    logger.error(f"Error updating drift detector: {e}", exc_info=True)
-                
-                logger.debug("Feedback update processed")
-                
-                if self.mlflow_manager and self.mlflow_manager.is_enabled():
-                    self._local_feedback_count += 1
-                    if self._local_feedback_count % 10 == 0:
-                        try:
-                            strategy_name = data.get('strategy_name', 'unknown')
-                            parameters = {
-                                "strategy_name": strategy_name,
-                                "regime": regime,
-                                "feedback_timestamp": datetime.utcnow().isoformat(),
-                            }
-                            for key, value in data.items():
-                                if isinstance(value, (str, int, float, bool)) and key not in ['strategy_name', 'regime']:
-                                    parameters[key] = value
-                                elif isinstance(value, dict):
-                                    pass
-                            metrics = {}
-                            for metric_key in ['sharpe', 'drawdown', 'hit_rate', 'pnl']:
-                                if metric_key in data:
-                                    metrics[metric_key] = float(data[metric_key])
-                            if not metrics:
-                                metrics['feedback_value'] = 1.0  # Placeholder
+                                continue
                             
-                            artifacts = {
-                                "feedback_data": data
-                            }
+                            if len(reference_vals) > 0 and len(live_vals) > 0:
+                                reference_data[feature_name] = reference_vals
+                                live_data[feature_name] = live_vals
+                    
+                    if reference_data and live_data:
+                        min_ref_len = min(len(vals) for vals in reference_data.values()) if reference_data else 0
+                        min_live_len = min(len(vals) for vals in live_data.values()) if live_data else 0
+                        
+                        target_len = min(min_ref_len, min_live_len)
+                        
+                        if target_len >= 2:
+                            final_ref_data = {k: v[:target_len] for k, v in reference_data.items()}
+                            final_live_data = {k: v[:target_len] for k, v in live_data.items()}
                             
-                            asyncio.create_task(
-                                self.mlflow_manager.log_run(
-                                    strategy_name=strategy_name,
-                                    parameters=parameters,
-                                    metrics=metrics,
-                                    artifacts=artifacts,
-                                    run_name=f"feedback_{strategy_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                                    run_type="feedback"
-                                )
+                            # Use the existing drift_detector logic
+                            import polars as pl
+                            reference_df = pl.DataFrame(final_ref_data)
+                            live_df = pl.DataFrame(final_live_data)
+                            columns = list(final_ref_data.keys())
+                            
+                            drift_result = self.drift_detector.detect_drift(
+                                train_data=reference_df,
+                                live_data=live_df,
+                                columns=columns
                             )
-                        except Exception as e:
-                            logger.error(f"Failed to log feedback update to MLflow: {e}")
-        except Exception as e:
-            logger.error(f"Error handling feedback update: {e}", exc_info=True)
+                            
+                            if drift_result.get("drift_alert", False):
+                                logger.warning(f"Drift detected! Severity: {drift_result.get('severity')}")
+                                await self.event_bus.publish(
+                                    SystemEvent(
+                                        source="DriftMonitor",
+                                        payload=SystemPayload(
+                                            action="DRIFT_ALERT",
+                                            reason=str(drift_result.get('severity', 'UNKNOWN')),
+                                            metadata=drift_result
+                                        )
+                                    )
+                                )
+            except Exception as e:
+                logger.error(f"Error checking for drift in feedback update: {e}")
+            
+            if self.mlflow_manager and self.mlflow_manager.is_enabled():
+                self._local_feedback_count += 1
+                if self._local_feedback_count % 10 == 0:
+                    try:
+                        strategy_name = data.get('strategy_name', 'unknown')
+                        asyncio.create_task(
+                            self.mlflow_manager.log_run(
+                                strategy_name=strategy_name,
+                                run_name=f"feedback_{strategy_name}_{datetime.utcnow().timestamp()}",
+                                metrics={"sharpe": float(data.get("sharpe", 0))},
+                                parameters={} 
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to log feedback to MLflow: {e}")
 
 
 

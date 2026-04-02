@@ -1,11 +1,13 @@
 import time
-import pytest
+from io import StringIO
 from unittest.mock import MagicMock, patch
+
+import pytest
+from loguru import logger
+
 from qtrader.monitoring.alert_engine import AlertEngine
 from qtrader.monitoring.metrics_collector import MetricsCollector
 
-from io import StringIO
-from loguru import logger
 
 @pytest.fixture
 def alert_engine():

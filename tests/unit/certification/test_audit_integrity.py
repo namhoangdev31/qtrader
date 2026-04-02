@@ -21,9 +21,9 @@ def test_audit_integrity_pass(validator: AuditIntegrityValidator) -> None:
 
     report = validator.run_integrity_audit(expected, stored)
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["completeness_ratio"] == 1.0  # noqa: S101
-    assert report["metrics"]["tamper_breach_detected"] is False  # noqa: S101
+    assert report["result"] == "PASS"
+    assert report["metrics"]["completeness_ratio"] == 1.0
+    assert report["metrics"]["tamper_breach_detected"] is False
 
 
 def test_audit_integrity_completeness_breach_fail(validator: AuditIntegrityValidator) -> None:
@@ -37,9 +37,9 @@ def test_audit_integrity_completeness_breach_fail(validator: AuditIntegrityValid
 
     report = validator.run_integrity_audit(expected, stored)
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["metrics"]["completeness_ratio"] == 0.666667  # noqa: S101, PLR2004
-    assert report["metrics"]["missing_event_count"] == 1  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["metrics"]["completeness_ratio"] == 0.666667
+    assert report["metrics"]["missing_event_count"] == 1
 
 
 def test_audit_integrity_tamper_detection_fail(validator: AuditIntegrityValidator) -> None:
@@ -52,8 +52,8 @@ def test_audit_integrity_tamper_detection_fail(validator: AuditIntegrityValidato
 
     report = validator.run_integrity_audit(expected, stored)
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["metrics"]["tamper_breach_detected"] is True  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["metrics"]["tamper_breach_detected"] is True
 
 
 def test_audit_integrity_audit_telemetry(validator: AuditIntegrityValidator) -> None:
@@ -63,14 +63,14 @@ def test_audit_integrity_audit_telemetry(validator: AuditIntegrityValidator) -> 
     validator.run_integrity_audit([{"id": 1}], [])
 
     stats = validator.get_audit_telemetry()
-    assert stats["cumulative_missing_logs"] == 1  # noqa: S101
-    assert stats["lifecycle_integrity_score"] == 0.5  # noqa: S101, PLR2004
-    assert stats["status"] == "AUDIT_GOVERNANCE"  # noqa: S101
+    assert stats["cumulative_missing_logs"] == 1
+    assert stats["lifecycle_integrity_score"] == 0.5
+    assert stats["status"] == "AUDIT_GOVERNANCE"
 
 
 def test_audit_integrity_empty_handling(validator: AuditIntegrityValidator) -> None:
     """Verify that zero events result in a PASS/1.0 score."""
     report = validator.run_integrity_audit([], [])
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["completeness_ratio"] == 1.0  # noqa: S101
+    assert report["result"] == "PASS"
+    assert report["metrics"]["completeness_ratio"] == 1.0

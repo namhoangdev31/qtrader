@@ -3,10 +3,10 @@ Level 2 Critical Tests: Feature Base Contract
 Covers: BaseFeature validate_inputs(), Feature Protocol compliance,
 missing columns, below-min-periods, and statelessness.
 """
-import pytest
 import polars as pl
-from qtrader.features.base import BaseFeature, Feature
+import pytest
 
+from qtrader.features.base import BaseFeature, Feature
 
 # ---------------------------------------------------------------------------
 # Concrete stub for testing BaseFeature mixin

@@ -5,8 +5,9 @@ from typing import Any
 
 from loguru import logger
 
-from qtrader.core.event import EventType, FillEvent, OrderEvent, RiskEvent, DriftEvent
 from qtrader.core.bus import EventBus
+from qtrader.core.event import DriftEvent, EventType, FillEvent, OrderEvent, RiskEvent
+
 from .metrics import MetricsAggregator
 
 

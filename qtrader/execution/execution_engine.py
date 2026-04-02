@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any
 
 from qtrader.core.logger import logger
-from qtrader.core.state_store import StateStore, Position
+from qtrader.core.state_store import Position, StateStore
 from qtrader.core.types import FillEvent, LoggerProtocol, OrderEvent
 
 from .orderbook_simulator import OrderbookSimulator
@@ -362,7 +362,7 @@ class ExecutionEngine:
             if attempt <= self.max_retry_attempts:
                 self.logger.warning(f"Order send failed (attempt {attempt}), scheduling retry via event: {result}")
                 if self._event_bus:
-                    from qtrader.core.event import RetryOrderEvent, EventType
+                    from qtrader.core.event import EventType, RetryOrderEvent
                     retry_event = RetryOrderEvent(order=order, attempt=attempt + 1)
                     await self._event_bus.publish(EventType.RETRY_ORDER, retry_event)
                 return False, None
@@ -376,7 +376,7 @@ class ExecutionEngine:
             self.logger.error(f"Unexpected error executing order (attempt {attempt}): {e}", exc_info=True)
             if attempt <= self.max_retry_attempts:
                 if self._event_bus:
-                    from qtrader.core.event import RetryOrderEvent, EventType
+                    from qtrader.core.event import EventType, RetryOrderEvent
                     await self._event_bus.publish(EventType.RETRY_ORDER, RetryOrderEvent(order=order, attempt=attempt + 1))
             elif self.enable_failover_queue and self.failover_queue is not None:
                 await self.failover_queue.put((order, datetime.utcnow()))

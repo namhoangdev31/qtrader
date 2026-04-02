@@ -19,8 +19,8 @@ def test_monitor_slippage_buy_adverse(monitor: LiveExecutionMonitor) -> None:
     fill = {"price": 101.0, "quantity": 10}
 
     report = monitor.update_metrics(order, fill)
-    assert report["metrics"]["absolute_execution_slippage"] == -1.0  # noqa: S101
-    assert report["forensics"]["slippage_bps"] == -100.0  # noqa: S101, PLR2004
+    assert report["metrics"]["absolute_execution_slippage"] == -1.0
+    assert report["forensics"]["slippage_bps"] == -100.0
 
 
 def test_monitor_slippage_sell_adverse(monitor: LiveExecutionMonitor) -> None:
@@ -31,8 +31,8 @@ def test_monitor_slippage_sell_adverse(monitor: LiveExecutionMonitor) -> None:
     fill = {"price": 99.0, "quantity": 10}
 
     report = monitor.update_metrics(order, fill)
-    assert report["metrics"]["absolute_execution_slippage"] == -1.0  # noqa: S101
-    assert report["forensics"]["slippage_bps"] == -100.0  # noqa: S101, PLR2004
+    assert report["metrics"]["absolute_execution_slippage"] == -1.0
+    assert report["forensics"]["slippage_bps"] == -100.0
 
 
 def test_monitor_latency_calibration(monitor: LiveExecutionMonitor) -> None:
@@ -42,7 +42,7 @@ def test_monitor_latency_calibration(monitor: LiveExecutionMonitor) -> None:
     fill = {"timestamp": t_now + 0.05}  # 50ms latency
 
     report = monitor.update_metrics(order, fill)
-    assert report["metrics"]["recorded_latency_ms"] == pytest.approx(50.0)  # noqa: S101
+    assert report["metrics"]["recorded_latency_ms"] == pytest.approx(50.0)
 
 
 def test_monitor_partial_fill_rate(monitor: LiveExecutionMonitor) -> None:
@@ -52,7 +52,7 @@ def test_monitor_partial_fill_rate(monitor: LiveExecutionMonitor) -> None:
     fill = {"quantity": 50.0}
 
     report = monitor.update_metrics(order, fill)
-    assert report["metrics"]["strategy_level_fill_rate"] == 0.5  # noqa: S101, PLR2004
+    assert report["metrics"]["strategy_level_fill_rate"] == 0.5
 
 
 def test_monitor_telemetry_tracking(monitor: LiveExecutionMonitor) -> None:
@@ -70,7 +70,7 @@ def test_monitor_telemetry_tracking(monitor: LiveExecutionMonitor) -> None:
     monitor.update_metrics(order2, fill2)
 
     stats = monitor.get_execution_telemetry("STRAT_C")
-    assert stats["avg_slippage_observed"] == -0.5  # noqa: S101, PLR2004
-    assert stats["avg_latency_observed_ms"] == 15.0  # noqa: S101, PLR2004
-    assert stats["cumulative_fill_rate_pct"] == 100.0  # noqa: S101, PLR2004
-    assert stats["total_execution_events"] == 2  # noqa: S101, PLR2004
+    assert stats["avg_slippage_observed"] == -0.5
+    assert stats["avg_latency_observed_ms"] == 15.0
+    assert stats["cumulative_fill_rate_pct"] == 100.0
+    assert stats["total_execution_events"] == 2

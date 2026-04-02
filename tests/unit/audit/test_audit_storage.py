@@ -20,12 +20,12 @@ def test_audit_storage_immutability_and_integrity(manager: AuditStorageManager) 
     record_id = manager.append(topic, payload)
 
     # 2. Verify Integrity
-    assert manager.verify_integrity(record_id) is True  # noqa: S101
+    assert manager.verify_integrity(record_id) is True
 
     # 3. Quaternary Integrity: SHA-256 matches
     report = manager.query_range(topic, 0.0, 1e12)
-    assert report[0]["record_id"] == record_id  # noqa: S101
-    assert report[0]["payload"] == payload  # noqa: S101
+    assert report[0]["record_id"] == record_id
+    assert report[0]["payload"] == payload
 
 
 def test_audit_storage_tamper_detection(manager: AuditStorageManager) -> None:
@@ -40,7 +40,7 @@ def test_audit_storage_tamper_detection(manager: AuditStorageManager) -> None:
     manager._storage[record_id].payload_json = '{"user": "trader_01", "limit_breached": 0}'
 
     # Re-compute should fail
-    assert manager.verify_integrity(record_id) is False  # noqa: S101
+    assert manager.verify_integrity(record_id) is False
 
 
 def test_audit_storage_retention_expiry_enforcement(
@@ -54,8 +54,8 @@ def test_audit_storage_retention_expiry_enforcement(
 
     # Attempt immediate maintenance: Should delete 0 records (within retention)
     deleted = manager.perform_retention_maintenance()
-    assert deleted == 0  # noqa: S101
-    assert record_id in manager._storage  # noqa: S101
+    assert deleted == 0
+    assert record_id in manager._storage
 
 
 def test_audit_storage_point_in_time_query(manager: AuditStorageManager) -> None:
@@ -69,12 +69,12 @@ def test_audit_storage_point_in_time_query(manager: AuditStorageManager) -> None
 
     # 1. Full Range
     all_signals = manager.query_range(topic, 0.0, time.time())
-    assert len(all_signals) == 2  # noqa: S101, PLR2004
+    assert len(all_signals) == 2
 
     # 2. Windowed Range (Signals after mid_point)
     late_signals = manager.query_range(topic, mid_point, time.time())
-    assert len(late_signals) == 1  # noqa: S101
-    assert late_signals[0]["payload"]["id"] == "S2"  # noqa: S101
+    assert len(late_signals) == 1
+    assert late_signals[0]["payload"]["id"] == "S2"
 
 
 def test_audit_storage_telemetry_reporting(manager: AuditStorageManager) -> None:
@@ -83,6 +83,6 @@ def test_audit_storage_telemetry_reporting(manager: AuditStorageManager) -> None
     manager.verify_integrity(next(iter(manager._storage.keys())))
 
     report = manager.get_audit_report()
-    assert report["total_records"] == 1  # noqa: S101
-    assert report["integrity_verifications"] == 1  # noqa: S101
-    assert report["status"] == "STORED"  # noqa: S101
+    assert report["total_records"] == 1
+    assert report["integrity_verifications"] == 1
+    assert report["status"] == "STORED"

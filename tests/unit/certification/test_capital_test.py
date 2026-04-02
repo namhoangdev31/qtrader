@@ -20,9 +20,9 @@ def test_capital_validator_safe_preservation_pass(validator: CapitalPreservation
         scenario=SolvencyScenario.CONTINUOUS_LOSSES,
     )
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["percentage_depletion"] == 0.12  # noqa: S101, PLR2004
-    assert report["metrics"]["gating_violated"] is False  # noqa: S101
+    assert report["result"] == "PASS"
+    assert report["metrics"]["percentage_depletion"] == 0.12
+    assert report["metrics"]["gating_violated"] is False
 
 
 def test_capital_validator_solvency_breach_fail(validator: CapitalPreservationValidator) -> None:
@@ -34,8 +34,8 @@ def test_capital_validator_solvency_breach_fail(validator: CapitalPreservationVa
         initial_capital=initial, current_capital=current, scenario=SolvencyScenario.FLASH_CRASH
     )
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["metrics"]["gating_violated"] is True  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["metrics"]["gating_violated"] is True
 
 
 def test_capital_validator_slippage_spike_pass(validator: CapitalPreservationValidator) -> None:
@@ -47,7 +47,7 @@ def test_capital_validator_slippage_spike_pass(validator: CapitalPreservationVal
         initial_capital=initial, current_capital=current, scenario=SolvencyScenario.SLIPPAGE_SPIKE
     )
 
-    assert report["result"] == "PASS"  # noqa: S101
+    assert report["result"] == "PASS"
 
 
 def test_capital_validator_solvency_telemetry(validator: CapitalPreservationValidator) -> None:
@@ -57,15 +57,15 @@ def test_capital_validator_solvency_telemetry(validator: CapitalPreservationVali
     validator.validate_preservation(100.0, 80.0, SolvencyScenario.CONTINUOUS_LOSSES)  # 20% (Breach)
 
     stats = validator.get_solvency_telemetry()
-    assert stats["peak_drawdown_observed"] == 0.2  # noqa: S101, PLR2004
-    assert stats["worst_case_loss"] == 0.2  # noqa: S101, PLR2004
-    assert stats["status"] == "CAPITAL_SOLVENCY"  # noqa: S101
+    assert stats["peak_drawdown_observed"] == 0.2
+    assert stats["worst_case_loss"] == 0.2
+    assert stats["status"] == "CAPITAL_SOLVENCY"
 
 
 def test_capital_validator_artifact_integrity(validator: CapitalPreservationValidator) -> None:
     """Verify that the capital test artifact includes structural performance metadata."""
     report = validator.validate_preservation(1000.0, 900.0, SolvencyScenario.FLASH_CRASH)
 
-    assert "scenario" in report["certification"]  # noqa: S101
-    assert report["certification"]["scenario"] == "FLASH_CRASH"  # noqa: S101
-    assert "real_sim_duration_ms" in report["certification"]  # noqa: S101
+    assert "scenario" in report["certification"]
+    assert report["certification"]["scenario"] == "FLASH_CRASH"
+    assert "real_sim_duration_ms" in report["certification"]

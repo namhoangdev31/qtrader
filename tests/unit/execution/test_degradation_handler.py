@@ -15,8 +15,8 @@ def test_handler_nominal_operation(handler: ExecutionDegradationHandler) -> None
     metrics = {"slippage_bps": 0.0, "cumulative_fill_rate": 1.0, "recorded_latency_ms": 0.0}
     report = handler.evaluate_execution_health(metrics)
 
-    assert report["triggered_action"] == "NORMAL_OPERATIONS"  # noqa: S101
-    assert report["metrics"]["composite_degradation_score"] == 0.0  # noqa: S101
+    assert report["triggered_action"] == "NORMAL_OPERATIONS"
+    assert report["metrics"]["composite_degradation_score"] == 0.0
 
 
 def test_handler_size_reduction_trigger(handler: ExecutionDegradationHandler) -> None:
@@ -26,8 +26,8 @@ def test_handler_size_reduction_trigger(handler: ExecutionDegradationHandler) ->
     metrics = {"slippage_bps": -20.0, "cumulative_fill_rate": 1.0, "recorded_latency_ms": 0.0}
     report = handler.evaluate_execution_health(metrics)
 
-    assert report["triggered_action"] == "REDUCE_SIZE"  # noqa: S101
-    assert report["metrics"]["composite_degradation_score"] == 0.5  # noqa: S101, PLR2004
+    assert report["triggered_action"] == "REDUCE_SIZE"
+    assert report["metrics"]["composite_degradation_score"] == 0.5
 
 
 def test_handler_terminal_strategy_pause(handler: ExecutionDegradationHandler) -> None:
@@ -37,8 +37,8 @@ def test_handler_terminal_strategy_pause(handler: ExecutionDegradationHandler) -
     metrics = {"slippage_bps": -40.0, "cumulative_fill_rate": 0.0, "recorded_latency_ms": 1000.0}
     report = handler.evaluate_execution_health(metrics)
 
-    assert report["triggered_action"] == "PAUSE_STRATEGY"  # noqa: S101
-    assert report["metrics"]["composite_degradation_score"] >= 1.0  # noqa: S101
+    assert report["triggered_action"] == "PAUSE_STRATEGY"
+    assert report["metrics"]["composite_degradation_score"] >= 1.0
 
 
 def test_handler_latency_dominant_degradation(handler: ExecutionDegradationHandler) -> None:
@@ -48,7 +48,7 @@ def test_handler_latency_dominant_degradation(handler: ExecutionDegradationHandl
     metrics = {"slippage_bps": 0.0, "cumulative_fill_rate": 1.0, "recorded_latency_ms": 400.0}
     report = handler.evaluate_execution_health(metrics)
 
-    assert report["triggered_action"] == "DELAY_EXECUTION"  # noqa: S101
+    assert report["triggered_action"] == "DELAY_EXECUTION"
 
 
 def test_handler_telemetry_tracking(handler: ExecutionDegradationHandler) -> None:
@@ -60,6 +60,6 @@ def test_handler_telemetry_tracking(handler: ExecutionDegradationHandler) -> Non
     handler.evaluate_execution_health(m_high)  # D=0.5
 
     stats = handler.get_degradation_telemetry()
-    assert stats["peak_degradation_captured"] == 0.5  # noqa: S101, PLR2004
-    assert stats["triggered_actions_summary"]["REDUCE_SIZE"] == 1  # noqa: S101
-    assert stats["governance_regime"] == "REBUILDING_LIQUIDITY"  # noqa: S101
+    assert stats["peak_degradation_captured"] == 0.5
+    assert stats["triggered_actions_summary"]["REDUCE_SIZE"] == 1
+    assert stats["governance_regime"] == "REBUILDING_LIQUIDITY"

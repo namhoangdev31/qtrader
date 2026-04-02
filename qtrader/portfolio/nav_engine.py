@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Dict, Optional
 from uuid import UUID, uuid4
 
-from qtrader.core.events import NAVEvent, NAVPayload, EventType
-from qtrader.core.state_store import SystemState, Position
+from qtrader.core.events import NAVEvent, NAVPayload
+from qtrader.core.state_store import SystemState
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class NAVEngine:
     NAV = Cash + PortfolioMarketValue - CumulativeFees
     """
 
-    def compute(self, state: SystemState, mark_prices: Dict[str, Decimal], trace_id: Optional[UUID] = None) -> NAVEvent:
+    def compute(self, state: SystemState, mark_prices: dict[str, Decimal], trace_id: UUID | None = None) -> NAVEvent:
         """
         Compute the latest NAV and PnL breakdown for the given system state.
         

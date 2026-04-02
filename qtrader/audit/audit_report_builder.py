@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
+
 
 class DecisionAuditReport(BaseModel):
     """
@@ -22,7 +24,7 @@ class DecisionAuditReport(BaseModel):
     execution_outcome: str = "COMPLETED"
     pnl: float = 0.0
     
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AuditReportBuilder:
@@ -39,7 +41,7 @@ class AuditReportBuilder:
         self._deviation = 0.0
         self._outcome = "INCOMPLETE"
         self._pnl = 0.0
-        self._meta: Dict[str, Any] = {}
+        self._meta: dict[str, Any] = {}
 
     def set_symbols(self, symbol: str) -> AuditReportBuilder:
         self._symbol = symbol

@@ -1,11 +1,14 @@
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from qtrader.core.event import EventType, NormalizedTimestampEvent
+from qtrader.core.event_bus import EventBus
 from qtrader.data.market.clock_sync import ClockSync
 from qtrader.oms.event_store import EventStore
-from qtrader.core.event_bus import EventBus
+
 
 @pytest.fixture
 def mock_store():

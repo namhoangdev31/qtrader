@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
-from qtrader.core.events import ConfigChangeEvent, ConfigChangePayload, EventType
 from qtrader.core.event_store import BaseEventStore
+from qtrader.core.events import ConfigChangeEvent, ConfigChangePayload
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ class ConfigManager:
 
     def __init__(
         self, 
-        initial_config: Optional[Dict[str, Any]] = None, 
-        event_store: Optional[BaseEventStore] = None
+        initial_config: dict[str, Any] | None = None, 
+        event_store: BaseEventStore | None = None
     ) -> None:
         """
         Initialize the ConfigManager.
@@ -36,7 +36,7 @@ class ConfigManager:
         """
         self._current_version = 1
         # Mapping of Version -> Full Config Snapshot
-        self._history: Dict[int, Dict[str, Any]] = {
+        self._history: dict[int, dict[str, Any]] = {
             1: initial_config or {}
         }
         self._event_store = event_store
@@ -44,6 +44,13 @@ class ConfigManager:
     def get_current_version(self) -> int:
         """Return the current system configuration version."""
         return self._current_version
+
+    def is_loaded(self) -> bool:
+        """
+        Check if the configuration has been loaded into memory.
+        Returns True if at least one version snapshot exists.
+        """
+        return self._current_version >= 1 and len(self._history) > 0
 
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -55,7 +62,7 @@ class ConfigManager:
         """
         return self._history[self._current_version].get(key, default)
 
-    async def update(self, key: str, value: Any, trace_id: Optional[UUID] = None) -> ConfigChangeEvent:
+    async def update(self, key: str, value: Any, trace_id: UUID | None = None) -> ConfigChangeEvent:
         """
         Update a configuration parameter and increment the system-wide version.
         
@@ -102,7 +109,7 @@ class ConfigManager:
         logger.info(f"CONFIG_UPDATED | Version: {new_version} | Key: {key} -> {value}")
         return event
 
-    async def rollback(self, version: int, trace_id: Optional[UUID] = None) -> ConfigChangeEvent:
+    async def rollback(self, version: int, trace_id: UUID | None = None) -> ConfigChangeEvent:
         """
         Revert the entire system configuration to a previous version snapshot.
         

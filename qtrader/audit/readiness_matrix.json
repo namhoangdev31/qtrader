@@ -1,0 +1,7 @@
+{
+  "config_loaded": true,
+  "seed_applied": true,
+  "trace_ready": false,
+  "enforcement_active": true,
+  "no_float_critical_path": false
+}

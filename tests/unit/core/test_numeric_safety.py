@@ -1,8 +1,11 @@
-import pytest
-from qtrader.core.decimal_adapter import math_authority
-from qtrader.core.types import MarketData
-from qtrader.core.orchestrator import TradingOrchestrator
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from qtrader.core.decimal_adapter import math_authority
+from qtrader.core.orchestrator import TradingOrchestrator
+from qtrader.core.types import MarketData
+
 
 @pytest.fixture
 def mock_orchestrator():
@@ -38,7 +41,7 @@ async def test_numeric_integrity_violation(mock_orchestrator):
     )
     
     # Setting orchestrator to RUNNING to allow execution
-    from qtrader.core.system_state import state_manager, SystemState
+    from qtrader.core.system_state import SystemState, state_manager
     state_manager.set_state(SystemState.RUNNING)
     
     # We expect FailFastEngine to intercept the TypeError

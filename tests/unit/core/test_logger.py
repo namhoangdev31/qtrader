@@ -1,7 +1,10 @@
 import json
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from qtrader.core.logger import QTraderLogger
+
 
 @pytest.fixture
 def mock_trace():

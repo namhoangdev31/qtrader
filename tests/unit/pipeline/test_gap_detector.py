@@ -1,10 +1,13 @@
-import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
-from qtrader.core.event import EventType, MarketDataEvent, GapDetectedEvent
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from qtrader.core.event import EventType, GapDetectedEvent, MarketDataEvent
+from qtrader.core.event_bus import EventBus
 from qtrader.data.pipeline.gap_detector import GapDetector
 from qtrader.oms.event_store import EventStore
-from qtrader.core.event_bus import EventBus
+
 
 @pytest.fixture
 def mock_store():

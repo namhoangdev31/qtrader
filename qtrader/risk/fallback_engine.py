@@ -13,9 +13,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from decimal import Decimal
 from enum import Enum, auto
-from typing import Any
 
 from qtrader.core.event import ErrorEvent, EventType, RiskEvent
 from qtrader.core.event_bus import EventBus
@@ -97,7 +95,7 @@ class FallbackEngine:
         self.state.consecutive_errors += 1
         self._last_error_time = asyncio.get_event_loop().time()
 
-        error_summary = f"[{event.source}] {event.message} (severity={event.severity})"
+        error_summary = f"[{event.payload.source}] {event.payload.message} (severity={event.payload.severity})"
         self.state.error_log.append(error_summary)
         # Keep log bounded
         if len(self.state.error_log) > 100:
@@ -108,7 +106,7 @@ class FallbackEngine:
         )
 
         # Escalation logic
-        if event.severity == "CRITICAL":
+        if event.payload.severity == "CRITICAL":
             await self._transition(FallbackMode.EMERGENCY, error_summary)
         elif self.state.consecutive_errors >= self.ERROR_THRESHOLD_EMERGENCY:
             await self._transition(FallbackMode.EMERGENCY, error_summary)
@@ -119,7 +117,7 @@ class FallbackEngine:
 
     async def _on_risk(self, event: RiskEvent) -> None:
         """Handle a risk event: immediate escalation to HOLD or EMERGENCY."""
-        action = event.metrics.get("action", "REDUCE_EXPOSURE")
+        action = event.payload.metadata.get("action", "REDUCE_EXPOSURE")
         reason = f"Risk breach on {event.symbol}: {action}"
         _LOG.warning(f"FallbackEngine risk event: {reason}")
 

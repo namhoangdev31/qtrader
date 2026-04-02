@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from qtrader.core.event import (
+from qtrader.core.events import (
     EventType,
     FillEvent,
     OrderEvent,
     SignalEvent,
+    BaseEvent,
 )
 
 if TYPE_CHECKING:
@@ -99,7 +100,7 @@ class ConfigProtocol(Protocol):
 
 
 class EventBusProtocol(Protocol):
-    async def publish(self, event_type: EventType, data: Any) -> None: ...
+    async def publish(self, event: BaseEvent) -> bool: ...
     def subscribe(self, event_type: EventType, callback: Any) -> None: ...
     def unsubscribe(self, event_type: EventType, callback: Any) -> None: ...
     async def start(self) -> None: ...

@@ -1,8 +1,11 @@
-import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from qtrader.core.errors import CriticalError, FatalError, RecoverableError
 from qtrader.core.fail_fast_engine import FailFastEngine
-from qtrader.core.errors import RecoverableError, CriticalError, FatalError
+
 
 @pytest.fixture
 def mock_orchestrator():

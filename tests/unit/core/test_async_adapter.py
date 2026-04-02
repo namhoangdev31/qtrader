@@ -1,7 +1,10 @@
 import asyncio
+
 import aiohttp
 import pytest
+
 from qtrader.core.async_adapter import AsyncAdapter, async_authority, get_session, spawn_task
+
 
 @pytest.mark.asyncio
 async def test_async_adapter_singleton_session():
@@ -41,6 +44,7 @@ async def test_async_adapter_run_task_failure():
 
 
 from unittest.mock import MagicMock
+
 
 @pytest.mark.asyncio
 async def test_async_adapter_background_task_done_callback():

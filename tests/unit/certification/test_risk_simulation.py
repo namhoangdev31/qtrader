@@ -17,9 +17,9 @@ def test_risk_stress_validator_breach_halt_pass(validator: RiskStressValidator) 
         detection_latency_ms=250.0,  # Under 1s
     )
 
-    assert report["result"] == "CORRECT"  # noqa: S101
-    assert report["metrics"]["breach_triggered"] is True  # noqa: S101
-    assert report["metrics"]["terminal_system_state"] == "HALTED"  # noqa: S101
+    assert report["result"] == "CORRECT"
+    assert report["metrics"]["breach_triggered"] is True
+    assert report["metrics"]["terminal_system_state"] == "HALTED"
 
 
 def test_risk_stress_validator_latency_threshold_fail(validator: RiskStressValidator) -> None:
@@ -30,7 +30,7 @@ def test_risk_stress_validator_latency_threshold_fail(validator: RiskStressValid
         detection_latency_ms=1500.0,  # Exceeds 1s
     )
 
-    assert report["result"] == "FAIL"  # noqa: S101
+    assert report["result"] == "FAIL"
 
 
 def test_risk_stress_validator_non_breach_continuity(validator: RiskStressValidator) -> None:
@@ -41,9 +41,9 @@ def test_risk_stress_validator_non_breach_continuity(validator: RiskStressValida
         detection_latency_ms=10.0,
     )
 
-    assert report["result"] == "CORRECT"  # noqa: S101
-    assert report["metrics"]["breach_triggered"] is False  # noqa: S101
-    assert report["metrics"]["terminal_system_state"] == "OPEN"  # noqa: S101
+    assert report["result"] == "CORRECT"
+    assert report["metrics"]["breach_triggered"] is False
+    assert report["metrics"]["terminal_system_state"] == "OPEN"
 
 
 def test_risk_stress_validator_defensive_telemetry(validator: RiskStressValidator) -> None:
@@ -60,15 +60,15 @@ def test_risk_stress_validator_defensive_telemetry(validator: RiskStressValidato
     )
 
     stats = validator.get_defensive_telemetry()
-    assert stats["lifecycle_stresses"] == 2  # noqa: S101, PLR2004
-    assert stats["incorrect_response_count"] == 1  # noqa: S101
-    assert stats["status"] == "DEFENSIVE_CERTIFICATION"  # noqa: S101
+    assert stats["lifecycle_stresses"] == 2
+    assert stats["incorrect_response_count"] == 1
+    assert stats["status"] == "DEFENSIVE_CERTIFICATION"
 
 
 def test_risk_stress_validator_artifact_integrity(validator: RiskStressValidator) -> None:
     """Verify that the risk test artifact includes structural performance metadata."""
     report = validator.run_stress_test(StressScenario.LIQUIDITY_COLLAPSE, simulated_risk_value=0.3)
 
-    assert "scenario" in report["certification"]  # noqa: S101
-    assert report["certification"]["scenario"] == "LIQUIDITY_COLLAPSE"  # noqa: S101
-    assert "real_sim_duration_ms" in report["certification"]  # noqa: S101
+    assert "scenario" in report["certification"]
+    assert report["certification"]["scenario"] == "LIQUIDITY_COLLAPSE"
+    assert "real_sim_duration_ms" in report["certification"]

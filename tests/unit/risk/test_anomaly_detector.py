@@ -19,8 +19,8 @@ def test_univariate_zscore_spike(detector: AnomalyDetector) -> None:
 
     # 2. Z = (25 - 10.5) / 0.5 = 29 >> 3.0
     result = detector.evaluate_univariate("pnl", 25.0)
-    assert result["anomaly"] == True  # noqa: S101, E712
-    assert result["score"] > 3.0  # noqa: S101, PLR2004
+    assert result["anomaly"] == True  # noqa: E712
+    assert result["score"] > 3.0
 
 
 def test_univariate_normal_data(detector: AnomalyDetector) -> None:
@@ -29,7 +29,7 @@ def test_univariate_normal_data(detector: AnomalyDetector) -> None:
         detector.evaluate_univariate("latency", 10.0 + (i % 2))
 
     result = detector.evaluate_univariate("latency", 10.5)
-    assert result["anomaly"] == False  # noqa: S101, E712
+    assert result["anomaly"] == False  # noqa: E712
 
 
 def test_multivariate_iforest_anomaly(detector: AnomalyDetector) -> None:
@@ -43,9 +43,9 @@ def test_multivariate_iforest_anomaly(detector: AnomalyDetector) -> None:
     # Vector: [0.0, 500.0, 0.1]
     result = detector.evaluate_multivariate([0.0, 500.0, 0.1])
 
-    assert result["status"] == "ANALYSIS"  # noqa: S101
-    assert result["anomaly"] == True  # noqa: S101, E712
-    assert result["score"] > 0.0  # noqa: S101
+    assert result["status"] == "ANALYSIS"
+    assert result["anomaly"] == True  # noqa: E712
+    assert result["score"] > 0.0
 
 
 def test_detector_warm_up_phase(detector: AnomalyDetector) -> None:
@@ -53,12 +53,12 @@ def test_detector_warm_up_phase(detector: AnomalyDetector) -> None:
     # Univariate (min 30)
     for _ in range(10):
         res = detector.evaluate_univariate("test", 1.0)
-        assert res["status"] == "WARM_UP"  # noqa: S101
+        assert res["status"] == "WARM_UP"
 
     # Multivariate (min 100)
     for _ in range(50):
         res = detector.evaluate_multivariate([1.0, 2.0])
-        assert res["status"] == "WARM_UP"  # noqa: S101
+        assert res["status"] == "WARM_UP"
 
 
 def test_anomaly_summary_report(detector: AnomalyDetector) -> None:
@@ -74,5 +74,5 @@ def test_anomaly_summary_report(detector: AnomalyDetector) -> None:
     detector.evaluate_multivariate([500.0, 500.0])
 
     report = detector.get_anomaly_report()
-    assert report["total_anomalies"] == 2  # noqa: S101, PLR2004
-    assert report["anomaly_rate"] > 0.0  # noqa: S101
+    assert report["total_anomalies"] == 2
+    assert report["anomaly_rate"] > 0.0

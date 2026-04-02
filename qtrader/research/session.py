@@ -51,7 +51,7 @@ class AnalystSession:
     # Data Loading
     # ──────────────────────────────────────────────────────────────────
 
-    def load_ohlcv(
+    async def load_ohlcv(
         self,
         symbol: str,
         timeframe: str,
@@ -65,10 +65,10 @@ class AnalystSession:
                 return self._load_from_duckdb(symbol, timeframe, filter_sql)
             except (FileNotFoundError, RuntimeError, ValueError) as exc:
                 self._log.warning("DuckDB load failed (%s). Falling back to datalake.", exc)
-                return self.load_from_datalake(symbol, timeframe, days=days)
-        return self.load_from_datalake(symbol, timeframe, days=days)
+                return await self.load_from_datalake(symbol, timeframe, days=days)
+        return await self.load_from_datalake(symbol, timeframe, days=days)
 
-    def load_from_datalake(self, symbol: str, timeframe: str, days: int | None = None) -> pl.DataFrame:
+    async def load_from_datalake(self, symbol: str, timeframe: str, days: int | None = None) -> pl.DataFrame:
         """Load OHLCV from UniversalDataLake/DataLake fallback."""
         try:
             return self._load_from_universal(symbol, timeframe)
@@ -83,7 +83,7 @@ class AnalystSession:
                 if days is None:
                     days = 365 if self.role == RoleContext.RESEARCHER else 7
                 
-                return self.load_live_ohlcv(symbol, timeframe, days=days)
+                return await self.load_live_ohlcv(symbol, timeframe, days=days)
 
     def sample_ohlcv(self, symbol: str = "AAPL", days: int = 5) -> pl.DataFrame:
         """Generate synthetic OHLCV for quick analysis (no data source required)."""
@@ -95,7 +95,7 @@ class AnalystSession:
             self._log.error("generate_synthetic_data function missing. Return empty df.")
             return pl.DataFrame()
 
-    def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
+    async def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
         """Load real Coinbase REST API data and persist it to the DataLake."""
         from datetime import datetime, timedelta
 
@@ -114,7 +114,7 @@ class AnalystSession:
         client = CoinbaseMarketDataClient()
         end_dt = datetime.now(Config.tz)
         start_dt = end_dt - timedelta(days=days)
-        df = client.get_candles(symbol, granularity, start=start_dt, end=end_dt)
+        df = await client.get_candles(symbol, granularity, start=start_dt, end=end_dt)
         if not df.is_empty():
             self._log.info(f"Loaded {len(df)} live candles for {symbol} ({granularity})")
             
@@ -131,18 +131,18 @@ class AnalystSession:
             df = self.sample_ohlcv(symbol, days)
         return df
 
-    def get_live_orderbook(self, symbol: str, limit: int = 20) -> dict[str, Any]:
+    async def get_live_orderbook(self, symbol: str, limit: int = 20) -> dict[str, Any]:
         """Fetch the live L2 orderbook from Coinbase."""
         from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
         client = CoinbaseMarketDataClient()
-        return client.get_product_book(symbol, limit)
+        return await client.get_product_book(symbol, limit)
 
-    def run_paper_simulation(self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7) -> Any:
+    async def run_paper_simulation(self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7) -> Any:
         """Run a strategy logic function against live data to compute expected EV."""
         from qtrader.analytics.ev_calculator import EVCalculator
         from qtrader.execution.paper_engine import PaperTradingEngine
         
-        df = self.load_live_ohlcv(symbol, timeframe, days)
+        df = await self.load_live_ohlcv(symbol, timeframe, days)
         engine = PaperTradingEngine(starting_capital=10000.0)
         
         # applying strategy
