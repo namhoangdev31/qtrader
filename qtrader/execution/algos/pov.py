@@ -1,7 +1,6 @@
 """Percentage of Volume (POV) execution algorithm."""
 
 from __future__ import annotations
-from loguru import logger
 
 import logging
 from dataclasses import dataclass

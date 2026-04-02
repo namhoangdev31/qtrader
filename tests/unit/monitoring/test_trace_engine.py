@@ -1,8 +1,11 @@
 import time
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from qtrader.monitoring.trace_engine import TraceEngine, TraceNode
+
 from qtrader.core.trace_authority import TraceAuthority
+from qtrader.monitoring.trace_engine import TraceEngine, TraceNode
+
 
 @pytest.fixture
 def engine():

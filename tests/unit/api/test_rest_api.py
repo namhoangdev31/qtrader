@@ -1,6 +1,9 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from qtrader.api.api import QTraderAPI
+
 
 def test_api_initialization():
     api = QTraderAPI(host="localhost", port=8000)

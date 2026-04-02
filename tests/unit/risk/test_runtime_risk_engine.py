@@ -1,9 +1,15 @@
 import uuid
 from decimal import Decimal
+
 import pytest
+
 from qtrader.core.events import OrderEvent, OrderPayload, RiskApprovedEvent, RiskRejectedEvent
-from qtrader.core.state_store import SystemState, Position, RiskState
-from qtrader.risk.constraints import MaxExposureConstraint, MaxLeverageConstraint, VaRLimitConstraint
+from qtrader.core.state_store import Position, RiskState, SystemState
+from qtrader.risk.constraints import (
+    MaxExposureConstraint,
+    MaxLeverageConstraint,
+    VaRLimitConstraint,
+)
 from qtrader.risk.runtime_risk_engine import RuntimeRiskEngine
 
 

@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Dict, List, Optional
-from uuid import UUID
 
-from qtrader.core.events import LedgerEntryEvent, LedgerEntryPayload, EventType
 from qtrader.core.event_store import BaseEventStore
+from qtrader.core.events import LedgerEntryEvent
 from qtrader.portfolio.ledger_entry_model import TransactionRecord
 
 logger = logging.getLogger(__name__)

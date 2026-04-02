@@ -23,9 +23,9 @@ def test_reallocator_performance_scoring_veracity(reallocator: DynamicReallocati
     report = reallocator.recalculate_allocation(current_weights, metrics, max_shift=0.5)
 
     # Weight increased for S1, decreased for S2.
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["updated_distribution"]["S1"] > 0.5  # noqa: S101, PLR2004
-    assert report["updated_distribution"]["S2"] < 0.5  # noqa: S101, PLR2004
+    assert report["result"] == "PASS"
+    assert report["updated_distribution"]["S1"] > 0.5
+    assert report["updated_distribution"]["S2"] < 0.5
 
 
 def test_reallocator_strict_shift_gating(reallocator: DynamicReallocationEngine) -> None:
@@ -41,8 +41,8 @@ def test_reallocator_strict_shift_gating(reallocator: DynamicReallocationEngine)
 
     # S1 should be ~0.6, S2 ~0.4.
     s1_w = report["updated_distribution"]["S1"]
-    assert 0.59 < s1_w < 0.61  # noqa: S101, PLR2004
-    assert report["metrics"]["cycle_reallocation_rate"] == pytest.approx(0.2)  # noqa: S101
+    assert 0.59 < s1_w < 0.61
+    assert report["metrics"]["cycle_reallocation_rate"] == pytest.approx(0.2)
     # Note: total shift (sum of |delta|) is 0.2 (0.1 from S1, -0.1 from S2).
 
 
@@ -54,7 +54,7 @@ def test_reallocator_normalization_integrity(reallocator: DynamicReallocationEng
     report = reallocator.recalculate_allocation(current_weights, metrics, max_shift=0.1)
 
     final_weights = report["updated_distribution"]
-    assert sum(final_weights.values()) == pytest.approx(1.0)  # noqa: S101
+    assert sum(final_weights.values()) == pytest.approx(1.0)
 
 
 def test_reallocator_drawdown_penalty(reallocator: DynamicReallocationEngine) -> None:
@@ -69,16 +69,16 @@ def test_reallocator_drawdown_penalty(reallocator: DynamicReallocationEngine) ->
     report = reallocator.recalculate_allocation(current_weights, metrics, max_shift=0.5)
 
     # S2 score should be 0.0 (clamped). S1 score > 0.
-    assert report["updated_distribution"]["S1"] > 0.5  # noqa: S101, PLR2004
-    assert report["updated_distribution"]["S2"] < 0.5  # noqa: S101, PLR2004
+    assert report["updated_distribution"]["S1"] > 0.5
+    assert report["updated_distribution"]["S2"] < 0.5
 
 
 def test_reallocator_empty_handling(reallocator: DynamicReallocationEngine) -> None:
     """Verify that empty metrics result in SKIP status."""
     report = reallocator.recalculate_allocation({}, {})
 
-    assert report["result"] == "SKIP"  # noqa: S101
-    assert report["status"] == "REALLOCATE_EMPTY"  # noqa: S101
+    assert report["result"] == "SKIP"
+    assert report["status"] == "REALLOCATE_EMPTY"
 
 
 def test_reallocator_telemetry_tracking(reallocator: DynamicReallocationEngine) -> None:
@@ -90,6 +90,6 @@ def test_reallocator_telemetry_tracking(reallocator: DynamicReallocationEngine) 
     reallocator.recalculate_allocation(current_weights, metrics, max_shift=0.1)
 
     stats = reallocator.get_reallocation_telemetry()
-    assert stats["total_optimization_cycles"] == 2  # noqa: S101, PLR2004
-    assert stats["cumulative_capital_shift"] == pytest.approx(0.4)  # noqa: S101
-    assert stats["status"] == "REALLOCATE_GOVERNANCE"  # noqa: S101
+    assert stats["total_optimization_cycles"] == 2
+    assert stats["cumulative_capital_shift"] == pytest.approx(0.4)
+    assert stats["status"] == "REALLOCATE_GOVERNANCE"

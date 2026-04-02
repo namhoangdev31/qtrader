@@ -1,7 +1,9 @@
-import pytest
-import numpy as np
 from unittest.mock import MagicMock
-from qtrader.ml.model_comparator import ModelComparator, ComparisonResult
+
+import numpy as np
+import pytest
+
+from qtrader.ml.model_comparator import ComparisonResult, ModelComparator
 
 
 @pytest.fixture
@@ -26,9 +28,9 @@ def test_comparison_significance_promotion(comparator: ModelComparator) -> None:
     new_model.predict.return_value = y_val + np.random.normal(0, 0.5, 100)
     
     result = comparator.compare(old_model, new_model, x_val, y_val)
-    assert result.decision == "PROMOTE"  # noqa: S101
-    assert result.is_statistically_significant is True  # noqa: S101
-    assert result.mse_delta > 0  # noqa: S101
+    assert result.decision == "PROMOTE"
+    assert result.is_statistically_significant is True
+    assert result.mse_delta > 0
 
 
 def test_comparison_not_significant_rejection(comparator: ModelComparator) -> None:
@@ -45,8 +47,8 @@ def test_comparison_not_significant_rejection(comparator: ModelComparator) -> No
     new_model.predict.return_value = preds + np.random.normal(0, 0.001, 100) # Negligible noise
     
     result = comparator.compare(old_model, new_model, x_val, y_val)
-    assert result.decision == "REJECT"  # noqa: S101
-    assert result.is_statistically_significant is False  # noqa: S101
+    assert result.decision == "REJECT"
+    assert result.is_statistically_significant is False
 
 
 def test_comparison_sharpe_degradation_rejection(comparator: ModelComparator) -> None:
@@ -70,9 +72,9 @@ def test_comparison_sharpe_degradation_rejection(comparator: ModelComparator) ->
     result = comparator.compare(old_model, new_model, x_val, target_y)
     
     # It will be statistically significant for MSE (since new matches Y perfectly)
-    assert result.is_statistically_significant is True  # noqa: S101
+    assert result.is_statistically_significant is True
     # But Sharpe degraded drastically (Old: high, New: 0)
-    assert result.decision == "REJECT"  # noqa: S101
+    assert result.decision == "REJECT"
 
 
 def test_comparison_telemetry(comparator: ModelComparator) -> None:
@@ -87,5 +89,5 @@ def test_comparison_telemetry(comparator: ModelComparator) -> None:
     comparator.compare(m, m, x_val, y_val)
     
     report = comparator.get_comparison_report()
-    assert report["total_comparisons"] == 1  # noqa: S101
-    assert report["promotion_rate"] == 0.0  # noqa: S101
+    assert report["total_comparisons"] == 1
+    assert report["promotion_rate"] == 0.0

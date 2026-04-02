@@ -1,6 +1,8 @@
 import os
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from qtrader.core.config_enforcer import ConfigEnforcer, ConfigViolationError
 
 MOCK_BAD_EXEC = """

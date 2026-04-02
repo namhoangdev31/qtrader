@@ -1,8 +1,11 @@
 import random
+
 import numpy as np
-import torch
 import pytest
+import torch
+
 from qtrader.core.seed_manager import SeedManager
+
 
 def test_seed_manager_consistency():
     # Identical inputs must yield identical global seeds

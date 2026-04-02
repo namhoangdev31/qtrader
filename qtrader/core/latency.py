@@ -2,9 +2,10 @@
 import asyncio
 import logging
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, TypeVar, ParamSpec
-from dataclasses import dataclass, field
+from typing import Any, ParamSpec, TypeVar
 
 log = logging.getLogger("qtrader.core.latency")
 

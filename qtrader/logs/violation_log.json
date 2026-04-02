@@ -1,0 +1,79 @@
+[
+  {
+    "timestamp": "2026-04-01T03:28:35Z",
+    "constraint_id": "C4",
+    "message": "Floating point value detected in event field: price",
+    "context": {
+      "symbol": "BTC_USDT",
+      "value": 50000.0,
+      "module": "qtrader.core.orchestrator"
+    },
+    "action": "BLOCK_SYSTEM_HALT"
+  },
+  {
+    "timestamp": "2026-04-01T03:33:51.774890",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:33:51.790779",
+    "constraint_id": "C4",
+    "message": "Floating point value detected in event field: price",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:33:51.795995",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:34:42.070187",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:34:42.086599",
+    "constraint_id": "C4",
+    "message": "Floating point value detected in event field: price",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:34:42.093030",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:35:55.103646",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:35:55.119093",
+    "constraint_id": "C4",
+    "message": "Floating point value detected in event field: price",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T03:35:55.125871",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T10:12:44.463162",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-01T10:13:33.802700",
+    "constraint_id": "C3",
+    "message": "Missing trace_id in execution context",
+    "context": {}
+  }
+]

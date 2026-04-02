@@ -1,12 +1,17 @@
 import asyncio
-import pytest
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from qtrader.core.event import EventType, OrderEvent, RetryOrderEvent
 from qtrader.core.event_bus import EventBus
-from qtrader.execution.execution_engine import ExecutionEngine, ExchangeAdapter, SimulatedExchangeAdapter
+from qtrader.execution.execution_engine import (
+    ExchangeAdapter,
+    ExecutionEngine,
+    SimulatedExchangeAdapter,
+)
 
 
 class MockFailingExchange(ExchangeAdapter):

@@ -17,8 +17,8 @@ def test_allocation_normalization_rich(allocator: CapitalAllocator) -> None:
     scores = [1.0] * 40
     weights = allocator.allocate(scores)
 
-    assert sum(weights) == pytest.approx(1.0)  # noqa: S101
-    assert all(w == 0.025 for w in weights)  # noqa: S101, PLR2004
+    assert sum(weights) == pytest.approx(1.0)
+    assert all(w == 0.025 for w in weights)
 
 
 def test_allocation_individual_cap_redistribution(allocator: CapitalAllocator) -> None:
@@ -28,9 +28,9 @@ def test_allocation_individual_cap_redistribution(allocator: CapitalAllocator) -
     weights = allocator.allocate(scores)
 
     # S0 must be capped at 5%
-    assert weights[0] == pytest.approx(0.05)  # noqa: S101
-    assert sum(weights) == pytest.approx(1.0)  # noqa: S101
-    assert weights[1] == pytest.approx(0.95 / 39)  # noqa: S101
+    assert weights[0] == pytest.approx(0.05)
+    assert sum(weights) == pytest.approx(1.0)
+    assert weights[1] == pytest.approx(0.95 / 39)
 
 
 def test_allocation_correlation_penalty_diversified(allocator: CapitalAllocator) -> None:
@@ -45,9 +45,9 @@ def test_allocation_correlation_penalty_diversified(allocator: CapitalAllocator)
 
     weights = allocator.allocate(scores, corr_matrix=corr_matrix)
 
-    assert weights[2] > weights[0]  # noqa: S101
-    assert weights[2] > weights[1]  # noqa: S101
-    assert sum(weights) == pytest.approx(1.0)  # noqa: S101
+    assert weights[2] > weights[0]
+    assert weights[2] > weights[1]
+    assert sum(weights) == pytest.approx(1.0)
 
 
 def test_allocation_under_utilization_scenario(allocator: CapitalAllocator) -> None:
@@ -56,24 +56,24 @@ def test_allocation_under_utilization_scenario(allocator: CapitalAllocator) -> N
     scores = [10.0] * 10
     weights = allocator.allocate(scores)
 
-    assert sum(weights) == pytest.approx(0.5)  # noqa: S101
-    assert all(w == 0.05 for w in weights)  # noqa: S101, PLR2004
+    assert sum(weights) == pytest.approx(0.5)
+    assert all(w == 0.05 for w in weights)
 
 
 def test_allocation_edge_cases(allocator: CapitalAllocator) -> None:
     """Verify robustness against zero-scores or missing data."""
     # 1. Zero scores
     weights_zero = allocator.allocate([0.0, 0.0])
-    assert weights_zero == [0.05, 0.05]  # noqa: S101
+    assert weights_zero == [0.05, 0.05]
 
     # 2. Empty input
-    assert allocator.allocate([]) == []  # noqa: S101
+    assert allocator.allocate([]) == []
 
     # 3. Correlation weight collapse
     scores = [1.0, 1.0]
     corr_matrix = pl.DataFrame({"S0": [1.0, 1.0], "S1": [1.0, 1.0]})
     weights_corr = allocator.allocate(scores, corr_matrix=corr_matrix)
-    assert weights_corr[0] == 0.05  # noqa: S101, PLR2004
+    assert weights_corr[0] == 0.05
 
 
 def test_allocation_hhi_telemetry(allocator: CapitalAllocator) -> None:
@@ -82,8 +82,8 @@ def test_allocation_hhi_telemetry(allocator: CapitalAllocator) -> None:
     allocator.allocate(scores)
 
     report = allocator.get_allocation_report()
-    assert report["hhi_index"] == pytest.approx(0.01)  # noqa: S101
-    assert report["concentration_status"] == "DIVERSIFIED"  # noqa: S101
+    assert report["hhi_index"] == pytest.approx(0.01)
+    assert report["concentration_status"] == "DIVERSIFIED"
 
 
 def test_allocation_convergence_and_empty_under(allocator: CapitalAllocator) -> None:
@@ -110,5 +110,5 @@ def test_allocation_convergence_and_empty_under(allocator: CapitalAllocator) -> 
 
     scores = [1.01] + [1.0] * 19
     weights = allocator.allocate(scores)
-    assert all(w == pytest.approx(0.05) for w in weights)  # noqa: S101
-    assert sum(weights) == pytest.approx(1.0)  # noqa: S101
+    assert all(w == pytest.approx(0.05) for w in weights)
+    assert sum(weights) == pytest.approx(1.0)

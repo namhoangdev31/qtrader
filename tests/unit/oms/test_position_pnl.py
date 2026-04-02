@@ -3,8 +3,9 @@ Level 1 Critical Tests for OMS Position/P&L accounting (rust_core + Python integ
 Covers: partial fill, realized/unrealized P&L, position flip, multi-symbol isolation.
 These tests use the Rust-backed OMS types via the Python OMS interface contract.
 """
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 
 # -------------------------------------------------------------------------------------
@@ -223,7 +224,6 @@ def test_account_equity_drawdown_from_peak():
     peak = 0.0
     for p in prices:
         eq = acct.equity({"BTC": p})
-        if eq > peak:
-            peak = eq
+        peak = max(peak, eq)
         dd = (peak - eq) / peak if peak > 0 else 0.0
         assert dd >= 0.0, f"Negative drawdown at price {p}"

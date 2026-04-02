@@ -1,0 +1,34 @@
+{
+  "authorities": {
+    "Config": {
+      "interface": "ConfigManager",
+      "module": "qtrader.core.config_manager",
+      "responsibility": "Dynamic Parameter Enforcement"
+    },
+    "Trace": {
+      "interface": "TraceAuthority",
+      "module": "qtrader.core.trace_authority",
+      "responsibility": "Context-aware Correlation"
+    },
+    "FailFast": {
+      "interface": "FailFastEngine",
+      "module": "qtrader.core.fail_fast_engine",
+      "responsibility": "Deterministic Recovery"
+    },
+    "Logger": {
+      "interface": "QTraderLogger",
+      "module": "qtrader.core.logger",
+      "responsibility": "Structured Audit Trail"
+    },
+    "Decimal": {
+      "interface": "DecimalAdapter",
+      "module": "qtrader.core.decimal_adapter",
+      "responsibility": "Financial Precision Authority"
+    }
+  },
+  "constraints": [
+    "A ⊆ Dep(M) for all module M",
+    "No static/direct bypass of A allowed",
+    "Dependency violation count MUST be monitored"
+  ]
+}

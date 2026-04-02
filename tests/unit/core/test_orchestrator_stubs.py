@@ -10,13 +10,22 @@ except ImportError:
     mock_torch.Tensor = MockTensor
     sys.modules["torch"] = mock_torch
 
-import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from qtrader.core.orchestrator import TradingOrchestrator
-from qtrader.core.types import AllocationWeights, EventType, Position
+from qtrader.core.state_store import Position
+from qtrader.core.types import AllocationWeights, EventType
+
+
+@pytest.fixture(autouse=True)
+def mock_create_task():
+    with patch("qtrader.core.orchestrator.asyncio.create_task"):
+        yield
 
 @pytest.mark.asyncio
 async def test_rebalance_logic():
@@ -52,7 +61,8 @@ async def test_rebalance_logic():
     # Target ETH = 40,000 / 2000 = 20 qty (Delta = +20)
     weights = AllocationWeights(
         timestamp=datetime.utcnow(),
-        weights={"BTCUSDT": Decimal("0.6"), "ETHUSDT": Decimal("0.4")}
+        weights={"BTCUSDT": Decimal("0.6"), "ETHUSDT": Decimal("0.4")},
+        trace_id="test-trace"
     )
     
     # Mock price for ETH

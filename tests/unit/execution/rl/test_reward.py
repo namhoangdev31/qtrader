@@ -29,7 +29,7 @@ def test_execution_reward_cost_monotonicity(execution_config: MagicMock) -> None
     r_low = model.compute(res_low, market_state)
 
     # Cost should be more negative in the High-Cost scenario
-    assert r_high < r_low  # noqa: S101
+    assert r_high < r_low
 
 
 def test_execution_reward_fill_bonus(execution_config: MagicMock) -> None:
@@ -48,8 +48,8 @@ def test_execution_reward_fill_bonus(execution_config: MagicMock) -> None:
 
     # Reward difference should be equal to the fill bonus (beta * 0.5)
     # beta = 100.0, so difference = 50.0
-    assert r_full - r_half == pytest.approx(50.0)  # noqa: S101
-    assert r_full == pytest.approx(100.0)  # noqa: S101
+    assert r_full - r_half == pytest.approx(50.0)
+    assert r_full == pytest.approx(100.0)
 
 
 def test_execution_reward_toxicity_penalty(execution_config: MagicMock) -> None:
@@ -66,8 +66,8 @@ def test_execution_reward_toxicity_penalty(execution_config: MagicMock) -> None:
 
     # Final reward: R = -0 + (100 * 1.0) - (50 * toxicity)
     # R_clean = 100.0, R_toxic = 50.0
-    assert r_toxic < r_clean  # noqa: S101
-    assert r_toxic == pytest.approx(50.0)  # noqa: S101
+    assert r_toxic < r_clean
+    assert r_toxic == pytest.approx(50.0)
 
 
 def test_execution_reward_failsafe_recovery(execution_config: MagicMock) -> None:
@@ -77,13 +77,13 @@ def test_execution_reward_failsafe_recovery(execution_config: MagicMock) -> None
     # 1. Zero order value: Should not divide by zero
     res_zero = {"total_cost": 1.0, "order_value": 0.0, "filled_qty": 1.0}
     r_zero = model.compute(res_zero, {})
-    assert r_zero >= 0.0  # noqa: S101 (Only fill bonus R=100)
+    assert r_zero >= 0.0
 
     # 2. Extreme results: Should clip reward at 1000.0
     # Cost = 1,000,000 (bps = -1,000,000)
     res_extreme = {"total_cost": 100.0, "order_value": 0.1, "filled_qty": 0.0}
     r_extreme = model.compute(res_extreme, {})
-    assert r_extreme == -1000.0  # noqa: S101, PLR2004
+    assert r_extreme == -1000.0
 
     # 3. Malformed result (None): Error handling
-    assert model.compute(None, None) == 0.0  # type: ignore # noqa: S101
+    assert model.compute(None, None) == 0.0  # type: ignore

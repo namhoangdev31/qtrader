@@ -24,9 +24,9 @@ def test_meta_governance_ranking_priority(engine: MetaGovernanceEngine) -> None:
     pool = [s1, s2, s3]
     curated = engine.curate(pool)
 
-    assert len(curated) == 2  # noqa: S101, PLR2004
-    assert curated[0].strategy_id == "S1"  # noqa: S101
-    assert curated[1].strategy_id == "S2"  # noqa: S101
+    assert len(curated) == 2
+    assert curated[0].strategy_id == "S1"
+    assert curated[1].strategy_id == "S2"
 
 
 def test_meta_governance_correlation_diversity(engine: MetaGovernanceEngine) -> None:
@@ -39,8 +39,8 @@ def test_meta_governance_correlation_diversity(engine: MetaGovernanceEngine) -> 
     pool = [s1, s2]
     curated = engine.curate(pool)
 
-    assert len(curated) == 1  # noqa: S101
-    assert curated[0].strategy_id == "S1"  # noqa: S101
+    assert len(curated) == 1
+    assert curated[0].strategy_id == "S1"
 
 
 def test_meta_governance_daily_quota(engine: MetaGovernanceEngine) -> None:
@@ -54,17 +54,17 @@ def test_meta_governance_daily_quota(engine: MetaGovernanceEngine) -> None:
     ]
 
     curated = engine.curate(pool)
-    assert len(curated) == 3  # noqa: S101, PLR2004
+    assert len(curated) == 3
 
 
 def test_meta_governance_empty_pool(engine: MetaGovernanceEngine) -> None:
     """Verify that an empty pool results in an empty curated set."""
-    assert not engine.curate([])  # noqa: S101
+    assert not engine.curate([])
 
 
 def test_meta_governance_single_member_stats(engine: MetaGovernanceEngine) -> None:
     """Verify statistics for a single-member set."""
     s1 = StrategyCandidate("S1", "x", pl.Series([1.0, 2.0]), 2.0)
     curated = engine.curate([s1])
-    assert len(curated) == 1  # noqa: S101
-    assert engine.get_governance_report()["mean_diversity_score"] == 0.0  # noqa: S101
+    assert len(curated) == 1
+    assert engine.get_governance_report()["mean_diversity_score"] == 0.0

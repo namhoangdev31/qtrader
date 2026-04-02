@@ -52,17 +52,17 @@ async def test_approval_pipeline_successful_decision() -> None:
     event = await pipeline.evaluate_strategy(sandbox_report, risk_event)
 
     # 1. Verification of the Decision
-    assert event is not None  # noqa: S101
-    assert event.payload.approved  # noqa: S101
-    assert event.payload.strategy_id == STRATEGY_ID  # noqa: S101
+    assert event is not None
+    assert event.payload.approved
+    assert event.payload.strategy_id == STRATEGY_ID
 
     # 2. Verification of FSM Transition
-    assert fsm.transition.called  # noqa: S101
+    assert fsm.transition.called
     fsm.transition.assert_called_with(STRATEGY_ID, "APPROVED", reason="PIPELINE_APPROVAL_GRANTED")
 
     # 3. Verification of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.STRATEGY_APPROVAL  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.STRATEGY_APPROVAL
 
 
 @pytest.mark.asyncio
@@ -98,9 +98,9 @@ async def test_approval_pipeline_fsm_failure() -> None:
 
     event = await pipeline.evaluate_strategy(sandbox_report, risk_event)
 
-    assert event is not None  # noqa: S101
-    assert not event.payload.approved  # noqa: S101
-    assert event.payload.reason == "FSM_TRANSITION_FAILURE"  # noqa: S101
+    assert event is not None
+    assert not event.payload.approved
+    assert event.payload.reason == "FSM_TRANSITION_FAILURE"
 
 
 @pytest.mark.asyncio
@@ -134,10 +134,10 @@ async def test_approval_pipeline_rejection_low_pnl() -> None:
 
     event = await pipeline.evaluate_strategy(sandbox_report, risk_event)
 
-    assert event is not None  # noqa: S101
-    assert not event.payload.approved  # noqa: S101
-    assert "INSUFFICIENT_PNL" in event.payload.reason  # noqa: S101
-    assert not fsm.transition.called  # noqa: S101
+    assert event is not None
+    assert not event.payload.approved
+    assert "INSUFFICIENT_PNL" in event.payload.reason
+    assert not fsm.transition.called
 
 
 @pytest.mark.asyncio
@@ -171,9 +171,9 @@ async def test_approval_pipeline_rejection_high_risk() -> None:
 
     event = await pipeline.evaluate_strategy(sandbox_report, risk_event)
 
-    assert event is not None  # noqa: S101
-    assert not event.payload.approved  # noqa: S101
-    assert "EXCESSIVE_RISK" in event.payload.reason  # noqa: S101
+    assert event is not None
+    assert not event.payload.approved
+    assert "EXCESSIVE_RISK" in event.payload.reason
 
 
 @pytest.mark.asyncio
@@ -191,7 +191,7 @@ async def test_approval_pipeline_system_failure() -> None:
 
     event = await pipeline.evaluate_strategy(Crasher(), MagicMock())  # type: ignore
 
-    assert event is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.APPROVAL_ERROR  # noqa: S101
-    assert "SYSTEM_CRASH" in str(bus.publish.call_args)  # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.APPROVAL_ERROR
+    assert "SYSTEM_CRASH" in str(bus.publish.call_args)

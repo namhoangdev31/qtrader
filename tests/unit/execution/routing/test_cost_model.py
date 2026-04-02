@@ -34,7 +34,7 @@ def test_routing_cost_fee_sensitivity(execution_config: MagicMock) -> None:
     
     costs = model.estimate_costs(order_size=10.0, market_data=market_data, order_type="MARKET")
     
-    assert costs["Kraken"] < costs["Binance"]  # noqa: S101
+    assert costs["Kraken"] < costs["Binance"]
 
 
 def test_routing_cost_slippage_dominance(execution_config: MagicMock) -> None:
@@ -52,7 +52,7 @@ def test_routing_cost_slippage_dominance(execution_config: MagicMock) -> None:
     # Large order (100) -> Market impact cost will spike on Binance
     costs = model.estimate_costs(order_size=100.0, market_data=market_data, order_type="MARKET")
     
-    assert costs["Coinbase"] < costs["Binance"]  # noqa: S101
+    assert costs["Coinbase"] < costs["Binance"]
 
 
 def test_routing_cost_spread_sensitivity(execution_config: MagicMock) -> None:
@@ -69,7 +69,7 @@ def test_routing_cost_spread_sensitivity(execution_config: MagicMock) -> None:
     # Small order (1.0) -> Spread cost is the primary factor.
     costs = model.estimate_costs(order_size=1.0, market_data=market_data, order_type="MARKET")
     
-    assert costs["Binance"] < costs["Coinbase"]  # noqa: S101
+    assert costs["Binance"] < costs["Coinbase"]
 
 
 def test_routing_cost_boundary_conditions(execution_config: MagicMock) -> None:
@@ -77,16 +77,16 @@ def test_routing_cost_boundary_conditions(execution_config: MagicMock) -> None:
     model = RoutingCostModel(execution_config)
     
     # 1. Zero size
-    assert model.estimate_costs(0.0, {"B": {"asks": [[1.0, 1.0]]}}) == {}  # noqa: S101
+    assert model.estimate_costs(0.0, {"B": {"asks": [[1.0, 1.0]]}}) == {}
     
     # 2. Empty market data
-    assert model.estimate_costs(100.0, {}) == {}  # noqa: S101
+    assert model.estimate_costs(100.0, {}) == {}
     
     # 3. Malformed snapshots (Missing asks/bids)
     market_data = {"NULL": {}}  # No price/liquidity data
     costs = model.estimate_costs(10.0, market_data)
     # Should fallback gracefully (price=1.0, liq=1.0)
-    assert costs["NULL"] > 0.0  # noqa: S101
+    assert costs["NULL"] > 0.0
 
 
 def test_routing_cost_catastrophic_safety(execution_config: MagicMock) -> None:
@@ -98,4 +98,4 @@ def test_routing_cost_catastrophic_safety(execution_config: MagicMock) -> None:
     costs = model.estimate_costs(10.0, market_data)
     
     # Should return failsafe penalty (1e18)
-    assert costs["V1"] == 1e18  # noqa: S101, PLR2004
+    assert costs["V1"] == 1e18

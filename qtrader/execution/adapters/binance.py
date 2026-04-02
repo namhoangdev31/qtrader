@@ -10,15 +10,14 @@ import hmac
 import logging
 import time
 import urllib.parse
-from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import aiohttp
 
-from qtrader.core.events import EventType, FillEvent, OrderEvent, FillPayload
 from qtrader.core.async_adapter import async_authority
 from qtrader.core.decimal_adapter import d
+from qtrader.core.events import OrderEvent
 from qtrader.execution.execution_engine import ExchangeAdapter
 
 _LOG = logging.getLogger("qtrader.execution.adapters.binance")
@@ -53,13 +52,13 @@ class BinanceAdapter(ExchangeAdapter):
             else "https://api.binance.com"
         )
         
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._order_symbol_map: Dict[str, str] = {}  # internal_oid -> symbol
+        self._session: aiohttp.ClientSession | None = None
+        self._order_symbol_map: dict[str, str] = {}  # internal_oid -> symbol
 
     async def _get_session(self) -> aiohttp.ClientSession:
         return await async_authority.get_session()
 
-    def _generate_signature(self, params: Dict[str, Any]) -> str:
+    def _generate_signature(self, params: dict[str, Any]) -> str:
         query_string = urllib.parse.urlencode(params, doseq=True)
         return hmac.new(
             self.api_secret.encode("utf-8"),
@@ -72,7 +71,7 @@ class BinanceAdapter(ExchangeAdapter):
         method: str, 
         path: str, 
         signed: bool = False, 
-        params: Optional[Dict[str, Any]] = None
+        params: dict[str, Any] | None = None
     ) -> Any:
         params = params or {}
         if signed:
@@ -90,7 +89,7 @@ class BinanceAdapter(ExchangeAdapter):
                 raise Exception(f"Binance API error: {resp.status}")
             return await resp.json()
 
-    async def send_order(self, order: OrderEvent) -> Tuple[bool, Optional[str]]:
+    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
         """Submits a LIMIT or MARKET order to Binance."""
         try:
             payload = order.payload
@@ -120,7 +119,7 @@ class BinanceAdapter(ExchangeAdapter):
             _LOG.error(f"BINANCE_SEND_FAILURE | {order.payload.order_id} | {e}")
             return False, str(e)
 
-    async def cancel_order(self, order_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
         """Cancels an existing order by its Binance order ID."""
         try:
             symbol = self._order_symbol_map.get(order_id)
@@ -134,7 +133,7 @@ class BinanceAdapter(ExchangeAdapter):
             _LOG.error(f"BINANCE_CANCEL_FAILURE | {order_id} | {e}")
             return False, str(e)
 
-    async def get_balance(self) -> Dict[str, Decimal]:
+    async def get_balance(self) -> dict[str, Decimal]:
         """Fetch account balances and return as asset -> free_qty map."""
         try:
             res = await self._request("GET", "/api/v3/account", signed=True)
@@ -146,7 +145,7 @@ class BinanceAdapter(ExchangeAdapter):
             _LOG.error(f"BINANCE_BALANCE_FAILURE | {e}")
             return {}
 
-    async def get_orderbook(self, symbol: str, limit: int = 10) -> Dict[str, Any]:
+    async def get_orderbook(self, symbol: str, limit: int = 10) -> dict[str, Any]:
         """Fetch L2 orderbook snapshot."""
         try:
             clean_symbol = symbol.upper().replace("-", "").replace("/", "")

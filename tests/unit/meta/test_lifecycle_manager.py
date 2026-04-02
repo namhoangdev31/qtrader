@@ -15,15 +15,15 @@ def test_lifecycle_happy_path(manager: MetaLifecycleManager) -> None:
 
     # 1. RESEARCH -> PAPER
     state = manager.transition(strategy_id, LifecycleState.RESEARCH, LifecycleEvent.VALIDATED)
-    assert state == LifecycleState.PAPER  # noqa: S101
+    assert state == LifecycleState.PAPER
 
     # 2. PAPER -> SHADOW
     state = manager.transition(strategy_id, LifecycleState.PAPER, LifecycleEvent.BACKTEST_PASS)
-    assert state == LifecycleState.SHADOW  # noqa: S101
+    assert state == LifecycleState.SHADOW
 
     # 3. SHADOW -> LIVE
     state = manager.transition(strategy_id, LifecycleState.SHADOW, LifecycleEvent.SHADOW_PASS)
-    assert state == LifecycleState.LIVE  # noqa: S101
+    assert state == LifecycleState.LIVE
 
 
 def test_lifecycle_jump_prevention(manager: MetaLifecycleManager) -> None:
@@ -32,7 +32,7 @@ def test_lifecycle_jump_prevention(manager: MetaLifecycleManager) -> None:
 
     # 1. RESEARCH + SHADOW_PASS (Invalid)
     state = manager.transition(strategy_id, LifecycleState.RESEARCH, LifecycleEvent.SHADOW_PASS)
-    assert state == LifecycleState.RESEARCH  # noqa: S101
+    assert state == LifecycleState.RESEARCH
 
 
 def test_lifecycle_global_kill(manager: MetaLifecycleManager) -> None:
@@ -41,15 +41,15 @@ def test_lifecycle_global_kill(manager: MetaLifecycleManager) -> None:
 
     # 1. RESEARCH -> KILLED
     state_r = manager.transition(strategy_id, LifecycleState.RESEARCH, LifecycleEvent.RISK_BREACH)
-    assert state_r == LifecycleState.KILLED  # noqa: S101
+    assert state_r == LifecycleState.KILLED
 
     # 2. SHADOW -> KILLED
     state_s = manager.transition("S4", LifecycleState.SHADOW, LifecycleEvent.RISK_BREACH)
-    assert state_s == LifecycleState.KILLED  # noqa: S101
+    assert state_s == LifecycleState.KILLED
 
     # 3. LIVE -> KILLED
     state_l = manager.transition("S5", LifecycleState.LIVE, LifecycleEvent.RISK_BREACH)
-    assert state_l == LifecycleState.KILLED  # noqa: S101
+    assert state_l == LifecycleState.KILLED
 
 
 def test_lifecycle_observability_report(manager: MetaLifecycleManager) -> None:
@@ -58,6 +58,6 @@ def test_lifecycle_observability_report(manager: MetaLifecycleManager) -> None:
     manager.transition("S2", LifecycleState.RESEARCH, LifecycleEvent.RISK_BREACH)  # KILLED
 
     report = manager.get_observability_report()
-    assert report["total_tracked"] == 2  # noqa: S101, PLR2004
-    assert report["state_distribution"]["PAPER"] == 1  # noqa: S101
-    assert report["state_distribution"]["KILLED"] == 1  # noqa: S101
+    assert report["total_tracked"] == 2
+    assert report["state_distribution"]["PAPER"] == 1
+    assert report["state_distribution"]["KILLED"] == 1

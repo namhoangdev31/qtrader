@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 from qtrader.audit.hardcode_scanner import HardcodeScanner
 
 MOCK_BAD_CODE = """

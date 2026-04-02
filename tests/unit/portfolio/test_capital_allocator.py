@@ -1,7 +1,9 @@
-import pytest
 import numpy as np
 import polars as pl
-from qtrader.portfolio.capital_allocator import CapitalAllocator
+import pytest
+
+from qtrader.portfolio.allocator import CapitalAllocator
+
 
 @pytest.fixture
 def allocator() -> CapitalAllocator:

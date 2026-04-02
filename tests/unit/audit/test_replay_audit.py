@@ -67,11 +67,11 @@ async def test_replay_audit_deterministic_match() -> None:
     auditor = ReplayAudit(store, registry)
     report = await auditor.run(trace_id)
     
-    assert report.match is True # noqa: S101
-    assert report.decision_original == "BUY" # noqa: S101
-    assert report.decision_replayed == "BUY" # noqa: S101
-    assert report.pnl == PNL_VALUE # noqa: S101
-    assert report.execution_outcome == "COMPLETED" # noqa: S101
+    assert report.match is True
+    assert report.decision_original == "BUY"
+    assert report.decision_replayed == "BUY"
+    assert report.pnl == PNL_VALUE
+    assert report.execution_outcome == "COMPLETED"
 
 
 @pytest.mark.asyncio
@@ -120,11 +120,11 @@ async def test_replay_audit_mismatch_detection() -> None:
         
         report = await auditor.run(trace_id)
         
-        assert report.match is False # noqa: S101
-        assert report.decision_original == "BUY" # noqa: S101
-        assert report.decision_replayed == "HOLD" # noqa: S101
-        assert report.deviation_signal == pytest.approx(SIGNAL_ORIGINAL - SIGNAL_REPLAYED) # noqa: S101
-        assert report.execution_outcome == "INCOMPLETE" # noqa: S101
+        assert report.match is False
+        assert report.decision_original == "BUY"
+        assert report.decision_replayed == "HOLD"
+        assert report.deviation_signal == pytest.approx(SIGNAL_ORIGINAL - SIGNAL_REPLAYED)
+        assert report.execution_outcome == "INCOMPLETE"
 
 
 @pytest.mark.asyncio
@@ -144,8 +144,8 @@ async def test_replay_audit_missing_trace_event() -> None:
     auditor = ReplayAudit(store, registry)
     report = await auditor.run(trace_id)
     
-    assert report.execution_outcome == "FAILED" # noqa: S101
-    assert report.match is False # noqa: S101
+    assert report.execution_outcome == "FAILED"
+    assert report.match is False
 
 
 @pytest.mark.asyncio

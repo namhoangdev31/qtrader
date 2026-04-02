@@ -1,10 +1,13 @@
-import pytest
-import polars as pl
 from datetime import datetime
-from unittest.mock import MagicMock, AsyncMock, patch
-from qtrader.pipeline.research import ResearchPipeline, ResearchResult
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import polars as pl
+import pytest
+
 from qtrader.backtest.integration import BacktestResult
 from qtrader.backtest.tearsheet import TearsheetMetrics
+from qtrader.pipeline.research import ResearchPipeline, ResearchResult
+
 
 @pytest.fixture
 def mock_pipeline_deps():

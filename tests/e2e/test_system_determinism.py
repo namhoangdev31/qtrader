@@ -2,11 +2,13 @@ import asyncio
 import uuid
 from decimal import Decimal
 from typing import Any
+
 import pytest
-from qtrader.core.event_bus import EventBus
-from qtrader.core.state_store import StateStore
 from qtrader.system.system_orchestrator import SystemOrchestrator
-from qtrader.core.events import MarketEvent, MarketPayload, EventType
+
+from qtrader.core.event_bus import EventBus
+from qtrader.core.events import EventType, MarketEvent, MarketPayload
+from qtrader.core.state_store import StateStore
 
 
 @pytest.mark.asyncio

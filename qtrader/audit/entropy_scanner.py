@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -70,7 +70,7 @@ class EntropyScanner(ast.NodeVisitor):
         self.has_file_level_seed = False
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
                 tree = ast.parse(content)
                 
@@ -154,7 +154,7 @@ class EntropyScanner(ast.NodeVisitor):
                 ))
         self.generic_visit(node)
 
-    def _get_call_name(self, node: ast.AST) -> Optional[str]:
+    def _get_call_name(self, node: ast.AST) -> str | None:
         """
         Extract the full call name from an AST node.
         """
@@ -238,7 +238,6 @@ class EntropyScanner(ast.NodeVisitor):
 
 if __name__ == "__main__":
     # Internal CLI for executing the audit.
-    import sys
     
     # Path setup: identify the repo root relative to this script.
     # Assumes project/qtrader/audit/entropy_scanner.py
@@ -249,4 +248,4 @@ if __name__ == "__main__":
     scanner.scan_directory(os.path.join(ROOT, "qtrader"))
     
     scanner.export(os.path.join(ROOT, "qtrader/audit"))
-    logger.success(f"Audit Complete. Results written to qtrader/audit/")
+    logger.success("Audit Complete. Results written to qtrader/audit/")

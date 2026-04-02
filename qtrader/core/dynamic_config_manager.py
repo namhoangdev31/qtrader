@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import copy
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -18,21 +17,21 @@ class DynamicConfigManager:
 
     def __init__(
         self, 
-        config_event_bus: Optional[Any] = None,
+        config_event_bus: Any | None = None,
         max_history: int = 10,
         leverage_delta_limit: float = 0.5  # Max 50% change in leverage per update
     ) -> None:
         self._event_bus = config_event_bus
         self._max_history = max_history
         self._leverage_delta_limit = leverage_delta_limit
-        self._history: List[QTraderConfig] = []
+        self._history: list[QTraderConfig] = []
         
         # Metrics
         self.update_count: int = 0
         self.failure_count: int = 0
         self.rollback_count: int = 0
 
-    async def update_config(self, delta: Dict[str, Any]) -> bool:
+    async def update_config(self, delta: dict[str, Any]) -> bool:
         """
         Apply a delta to the current configuration.
         

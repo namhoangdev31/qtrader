@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 from qtrader.audit.exception_scanner import ExceptionScanner
 
 MOCK_BAD_CODE = """

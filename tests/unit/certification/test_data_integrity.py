@@ -18,9 +18,9 @@ def test_data_integrity_validator_strict_ordering_pass(validator: DataIntegrityV
 
     artifact = validator.validate_dataset(df)
 
-    assert artifact["result"] == "PASS"  # noqa: S101
-    assert artifact["checks"]["monotonic_ordering"] is True  # noqa: S101
-    assert artifact["checks"]["duplicate_count"] == 0  # noqa: S101
+    assert artifact["result"] == "PASS"
+    assert artifact["checks"]["monotonic_ordering"] is True
+    assert artifact["checks"]["duplicate_count"] == 0
 
 
 def test_data_integrity_validator_temporal_violation_fail(
@@ -37,8 +37,8 @@ def test_data_integrity_validator_temporal_violation_fail(
     )
 
     artifact_out = validator.validate_dataset(df_out)
-    assert artifact_out["result"] == "FAIL"  # noqa: S101
-    assert artifact_out["checks"]["monotonic_ordering"] is False  # noqa: S101
+    assert artifact_out["result"] == "FAIL"
+    assert artifact_out["checks"]["monotonic_ordering"] is False
 
     # 2. Duplicate timestamp (Not strictly increasing)
     df_dupe = pl.DataFrame(
@@ -50,8 +50,8 @@ def test_data_integrity_validator_temporal_violation_fail(
     )
 
     artifact_dupe = validator.validate_dataset(df_dupe)
-    assert artifact_dupe["result"] == "FAIL"  # noqa: S101
-    assert artifact_dupe["checks"]["monotonic_ordering"] is False  # noqa: S101
+    assert artifact_dupe["result"] == "FAIL"
+    assert artifact_dupe["checks"]["monotonic_ordering"] is False
 
 
 def test_data_integrity_validator_duplicate_record_escalation(
@@ -69,8 +69,8 @@ def test_data_integrity_validator_duplicate_record_escalation(
 
     artifact = validator.validate_dataset(df)
 
-    assert artifact["result"] == "FAIL"  # noqa: S101
-    assert artifact["checks"]["duplicate_count"] == 2  # noqa: S101, PLR2004
+    assert artifact["result"] == "FAIL"
+    assert artifact["checks"]["duplicate_count"] == 2
 
 
 def test_data_integrity_validator_value_corruption_gating(
@@ -87,8 +87,8 @@ def test_data_integrity_validator_value_corruption_gating(
 
     artifact = validator.validate_dataset(df)
 
-    assert artifact["result"] == "FAIL"  # noqa: S101
-    assert artifact["checks"]["corruption_count"] == 2  # noqa: S101, PLR2004
+    assert artifact["result"] == "FAIL"
+    assert artifact["checks"]["corruption_count"] == 2
 
 
 def test_data_integrity_validator_sha256_fidelity_check(validator: DataIntegrityValidator) -> None:
@@ -98,12 +98,12 @@ def test_data_integrity_validator_sha256_fidelity_check(validator: DataIntegrity
     # 1. Correct hash pass
     current_hash = validator.validate_dataset(df)["checks"]["integrity_hash"]
     report_pass = validator.validate_dataset(df, expected_hash=current_hash)
-    assert report_pass["checks"]["lineage_verified"] is True  # noqa: S101
+    assert report_pass["checks"]["lineage_verified"] is True
 
     # 2. Incorrect hash fail
     report_fail = validator.validate_dataset(df, expected_hash="INCORRECT_HASH")
-    assert report_fail["result"] == "FAIL"  # noqa: S101
-    assert report_fail["checks"]["lineage_verified"] is False  # noqa: S101
+    assert report_fail["result"] == "FAIL"
+    assert report_fail["checks"]["lineage_verified"] is False
 
 
 def test_data_integrity_validator_telemetry_tracking(
@@ -117,13 +117,13 @@ def test_data_integrity_validator_telemetry_tracking(
     validator.validate_dataset(df_invalid)
 
     stats = validator.get_integrity_telemetry()
-    assert (  # noqa: S101
-        stats["total_records_analyzed"] == 3  # noqa: PLR2004
+    assert (
+        stats["total_records_analyzed"] == 3
     )
-    assert (  # noqa: S101
+    assert (
         stats["anomalous_dataset_count"] == 1
     )
-    assert stats["status"] == "DATA_HEALTH"  # noqa: S101
+    assert stats["status"] == "DATA_HEALTH"
 
 
 def test_data_integrity_validator_empty_dataset_handling(
@@ -134,5 +134,5 @@ def test_data_integrity_validator_empty_dataset_handling(
 
     artifact = validator.validate_dataset(df)
 
-    assert artifact["status"] == "DATA_CHECK_EMPTY"  # noqa: S101
-    assert artifact["result"] == "PASS"  # noqa: S101
+    assert artifact["status"] == "DATA_CHECK_EMPTY"
+    assert artifact["result"] == "PASS"

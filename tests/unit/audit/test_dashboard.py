@@ -24,9 +24,9 @@ def test_dashboard_trader_role_redaction(dashboard: GovernanceDashboard) -> None
 
     # Check that ID and severity are redacted
     trader_alert = view["telemetry"]["alerts"][0]
-    assert trader_alert["type"] == "WASH_TRADING"  # noqa: S101
-    assert "id" not in trader_alert  # noqa: S101
-    assert "severity" not in trader_alert  # noqa: S101
+    assert trader_alert["type"] == "WASH_TRADING"
+    assert "id" not in trader_alert
+    assert "severity" not in trader_alert
 
 
 def test_dashboard_auditor_full_forensics(dashboard: GovernanceDashboard) -> None:
@@ -44,8 +44,8 @@ def test_dashboard_auditor_full_forensics(dashboard: GovernanceDashboard) -> Non
 
     # Check for full data presence
     auditor_alert = view["telemetry"]["alerts"][0]
-    assert auditor_alert["id"] == "V2"  # noqa: S101
-    assert auditor_alert["severity"] == "MEDIUM"  # noqa: S101
+    assert auditor_alert["id"] == "V2"
+    assert auditor_alert["severity"] == "MEDIUM"
 
 
 def test_dashboard_access_logging_integrity(dashboard: GovernanceDashboard) -> None:
@@ -54,8 +54,8 @@ def test_dashboard_access_logging_integrity(dashboard: GovernanceDashboard) -> N
     dashboard.render_view(UserRole.AUDITOR, {}, {}, [], "HALTED")
 
     stats = dashboard.get_visibility_telemetry()
-    assert stats["access_count"] == 2  # noqa: S101, PLR2004
-    assert stats["status"] == "VISIBILITY"  # noqa: S101
+    assert stats["access_count"] == 2
+    assert stats["status"] == "VISIBILITY"
 
 
 def test_dashboard_performance_sync_accuracy(dashboard: GovernanceDashboard) -> None:
@@ -65,12 +65,12 @@ def test_dashboard_performance_sync_accuracy(dashboard: GovernanceDashboard) -> 
 
     view = dashboard.render_view(UserRole.TRADER, {"pnl": pnl, "equity": equity}, {}, [], "NORMAL")
 
-    assert view["telemetry"]["performance"]["Total_PnL"] == pnl  # noqa: S101
-    assert view["telemetry"]["performance"]["Core_Equity"] == equity  # noqa: S101
+    assert view["telemetry"]["performance"]["Total_PnL"] == pnl
+    assert view["telemetry"]["performance"]["Core_Equity"] == equity
 
 
 def test_dashboard_latency_telemetry_check(dashboard: GovernanceDashboard) -> None:
     """Verify that refresh latency is tracked correctly for sub-second visibility monitoring."""
     view = dashboard.render_view(UserRole.TRADER, {}, {}, [], "NORMAL")
-    assert view["refresh_latency_ms"] >= 0.0  # noqa: S101 (Float check)
-    assert view["status"] == "DASHBOARD_LIVE"  # noqa: S101
+    assert view["refresh_latency_ms"] >= 0.0
+    assert view["status"] == "DASHBOARD_LIVE"

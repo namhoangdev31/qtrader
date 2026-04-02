@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import decimal
-from decimal import Decimal, getcontext, ROUND_HALF_EVEN
-from typing import Any, Optional, Union
+from decimal import ROUND_HALF_EVEN, Decimal, getcontext
+from typing import Any
 
 from loguru import logger
 
@@ -28,7 +28,7 @@ class DecimalAdapter:
         ctx.prec = self.GLOBAL_PRECISION
         ctx.rounding = self.ROUNDING_MODE
 
-    def d(self, value: Union[str, int, float, Decimal, Any]) -> Decimal:
+    def d(self, value: str | int | float | Decimal | Any) -> Decimal:
         """
         Safe Decimal factory. Rejects float primitives to avoid silent precision loss.
         Recommends: d("10.5") or d(1050)
@@ -61,19 +61,19 @@ class DecimalAdapter:
         target = Decimal(10) ** -places
         return value.quantize(target, rounding=self.ROUNDING_MODE)
 
-    def to_price(self, value: Union[str, float, Decimal]) -> Decimal:
+    def to_price(self, value: str | float | Decimal) -> Decimal:
         """Quantize to 8 decimal places (standard market price)."""
         return self.quantize(self.d(value), places=8)
 
-    def to_qty(self, value: Union[str, float, Decimal]) -> Decimal:
+    def to_qty(self, value: str | float | Decimal) -> Decimal:
         """Quantize to 6 decimal places (standard asset quantity)."""
         return self.quantize(self.d(value), places=6)
 
-    def to_notional(self, value: Union[str, float, Decimal]) -> Decimal:
+    def to_notional(self, value: str | float | Decimal) -> Decimal:
         """Quantize to 2 decimal places (standard USD settlement)."""
         return self.quantize(self.d(value), places=2)
 
-    def to_nav(self, value: Union[str, float, Decimal]) -> Decimal:
+    def to_nav(self, value: str | float | Decimal) -> Decimal:
         """Quantize to 12 decimal places (High-fidelity internal state)."""
         return self.quantize(self.d(value), places=12)
 

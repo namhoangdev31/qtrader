@@ -1,8 +1,5 @@
 """Latency model for realistic trade simulation."""
-import asyncio
 import logging
-import math
-import random
 
 logger = logging.getLogger(__name__)
 

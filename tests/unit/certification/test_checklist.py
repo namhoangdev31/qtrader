@@ -21,9 +21,9 @@ def test_checklist_validator_full_readiness_pass(validator: ProductionChecklistV
 
     artifact = validator.validate_readiness(system_state)
 
-    assert artifact["ready"] is True  # noqa: S101
-    assert artifact["readiness_state"] == ReadinessStatus.READY.name  # noqa: S101
-    assert artifact["certification"]["failed_count"] == 0  # noqa: S101
+    assert artifact["ready"] is True
+    assert artifact["readiness_state"] == ReadinessStatus.READY.name
+    assert artifact["certification"]["failed_count"] == 0
 
 
 def test_checklist_validator_partial_failure_blocking(
@@ -40,10 +40,10 @@ def test_checklist_validator_partial_failure_blocking(
 
     artifact = validator.validate_readiness(system_state)
 
-    assert artifact["ready"] is False  # noqa: S101
-    assert artifact["readiness_state"] == ReadinessStatus.NOT_READY.name  # noqa: S101
-    assert "risk_engine_active" in artifact["checklist"]  # noqa: S101
-    assert artifact["checklist"]["risk_engine_active"] is False  # noqa: S101
+    assert artifact["ready"] is False
+    assert artifact["readiness_state"] == ReadinessStatus.NOT_READY.name
+    assert "risk_engine_active" in artifact["checklist"]
+    assert artifact["checklist"]["risk_engine_active"] is False
 
 
 def test_checklist_validator_failure_traceability(validator: ProductionChecklistValidator) -> None:
@@ -58,9 +58,9 @@ def test_checklist_validator_failure_traceability(validator: ProductionChecklist
 
     artifact = validator.validate_readiness(system_state)
 
-    assert artifact["certification"]["failed_count"] == 2  # noqa: S101, PLR2004
-    assert artifact["checklist"]["services_online"] is False  # noqa: S101
-    assert artifact["checklist"]["config_valid"] is False  # noqa: S101
+    assert artifact["certification"]["failed_count"] == 2
+    assert artifact["checklist"]["services_online"] is False
+    assert artifact["checklist"]["config_valid"] is False
 
 
 def test_checklist_validator_telemetry_tracking(
@@ -79,8 +79,8 @@ def test_checklist_validator_telemetry_tracking(
     validator.validate_readiness({"services_up": False})  # Failure Case (5/5 failed)
 
     stats = validator.get_deployment_telemetry()
-    assert stats["readiness_attempts"] == 2  # noqa: S101, PLR2004
+    assert stats["readiness_attempts"] == 2
     # 5 checks failed because ONLY 'services_up: False' was provided;
     # others default to False.
-    assert stats["last_failed_check_count"] == 5  # noqa: S101, PLR2004
-    assert stats["status"] == "DEPLOYMENT"  # noqa: S101
+    assert stats["last_failed_check_count"] == 5
+    assert stats["status"] == "DEPLOYMENT"

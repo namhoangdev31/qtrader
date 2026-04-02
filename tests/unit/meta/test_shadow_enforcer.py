@@ -16,8 +16,8 @@ def test_shadow_happy_path(enforcer: ShadowEnforcer) -> None:
 
     # 8 days (exceeds min 7)
     result = enforcer.evaluate(s_metrics, b_metrics, duration_days=8)
-    assert result["result"] == "PASS"  # noqa: S101
-    assert result["delta"] == 500.0  # noqa: S101, PLR2004
+    assert result["result"] == "PASS"
+    assert result["delta"] == 500.0
 
 
 def test_shadow_insufficient_duration(enforcer: ShadowEnforcer) -> None:
@@ -27,8 +27,8 @@ def test_shadow_insufficient_duration(enforcer: ShadowEnforcer) -> None:
 
     # 3 days (less than min 7)
     result = enforcer.evaluate(s_metrics, b_metrics, duration_days=3)
-    assert result["result"] == "FAIL"  # noqa: S101
-    assert result["reason"] == "INSUFFICIENT_DURATION"  # noqa: S101
+    assert result["result"] == "FAIL"
+    assert result["reason"] == "INSUFFICIENT_DURATION"
 
 
 def test_shadow_negative_alpha(enforcer: ShadowEnforcer) -> None:
@@ -37,8 +37,8 @@ def test_shadow_negative_alpha(enforcer: ShadowEnforcer) -> None:
     b_metrics = ShadowMetrics("TWAP", 1200.0, 2.0, 1.0, 0.0)
 
     result = enforcer.evaluate(s_metrics, b_metrics, duration_days=10)
-    assert result["result"] == "FAIL"  # noqa: S101
-    assert "NEGATIVE_ALPHA" in result["reason"]  # noqa: S101
+    assert result["result"] == "FAIL"
+    assert "NEGATIVE_ALPHA" in result["reason"]
 
 
 def test_shadow_execution_rejection(enforcer: ShadowEnforcer) -> None:
@@ -53,11 +53,11 @@ def test_shadow_execution_rejection(enforcer: ShadowEnforcer) -> None:
     res1 = enforcer.evaluate(s1, b_metrics, duration_days=10)
     res2 = enforcer.evaluate(s2, b_metrics, duration_days=10)
 
-    assert res1["result"] == "FAIL"  # noqa: S101
-    assert "HIGH_SLIPPAGE" in res1["reason"]  # noqa: S101
+    assert res1["result"] == "FAIL"
+    assert "HIGH_SLIPPAGE" in res1["reason"]
 
-    assert res2["result"] == "FAIL"  # noqa: S101
-    assert "LOW_FILL_RATE" in res2["reason"]  # noqa: S101
+    assert res2["result"] == "FAIL"
+    assert "LOW_FILL_RATE" in res2["reason"]
 
 
 def test_shadow_governance_report(enforcer: ShadowEnforcer) -> None:
@@ -70,5 +70,5 @@ def test_shadow_governance_report(enforcer: ShadowEnforcer) -> None:
     enforcer.evaluate(s2, b, duration_days=10)
 
     report = enforcer.get_shadow_report()
-    assert report["promotion_rate"] == 0.5  # noqa: S101, PLR2004
-    assert report["avg_pnl_delta"] == 250.0  # noqa: S101, PLR2004 (Delta S1=1000, Delta S2=-500)
+    assert report["promotion_rate"] == 0.5
+    assert report["avg_pnl_delta"] == 250.0

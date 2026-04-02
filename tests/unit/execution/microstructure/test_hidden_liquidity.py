@@ -13,8 +13,8 @@ def test_hidden_liquidity_instant_detection() -> None:
     signal = detector.update(executed, visible, price)
 
     expected_h = 0.8
-    assert signal == pytest.approx(expected_h)  # noqa: S101
-    assert detector._last_iceberg_price == price  # noqa: S101
+    assert signal == pytest.approx(expected_h)
+    assert detector._last_iceberg_price == price
 
 
 def test_hidden_liquidity_visible_only() -> None:
@@ -26,7 +26,7 @@ def test_hidden_liquidity_visible_only() -> None:
     executed, visible, price = 20.0, 20.0, 100.0
     signal = detector.update(executed, visible, price)
 
-    assert signal == 0.0  # noqa: S101
+    assert signal == 0.0
 
 
 def test_hidden_liquidity_rolling_persistence() -> None:
@@ -46,7 +46,7 @@ def test_hidden_liquidity_rolling_persistence() -> None:
     # Next call (4th tick): update(0, 0, 0) -> h_signal = 0.0.
     # History: [0.5, 0.5, 0.5, 0.0]. len = 4. sum = 1.5. average = 0.375.
     expected_avg = 0.375
-    assert detector.update(0.0, 0.0, 0.0) == pytest.approx(expected_avg)  # noqa: S101
+    assert detector.update(0.0, 0.0, 0.0) == pytest.approx(expected_avg)
 
 
 def test_hidden_liquidity_failsafe_noise() -> None:
@@ -54,11 +54,11 @@ def test_hidden_liquidity_failsafe_noise() -> None:
     detector = HiddenLiquidityDetector()
 
     # zero volume is neutral
-    assert detector.update(0.0, 10.0, 100.0) == 0.0  # noqa: S101
+    assert detector.update(0.0, 10.0, 100.0) == 0.0
 
     # Negative depletion (simulating book replenishment)
     # Should not trigger iceberg
-    assert detector.update(10.0, -5.0, 100.0) == 0.0  # noqa: S101
+    assert detector.update(10.0, -5.0, 100.0) == 0.0
 
 
 def test_hidden_liquidity_catastrophic_failure() -> None:
@@ -66,7 +66,7 @@ def test_hidden_liquidity_catastrophic_failure() -> None:
     detector = HiddenLiquidityDetector()
 
     # Malformed inputs (None causing TypeError in math logic)
-    assert detector.update(None, 10.0, 100.0) == 0.0  # type: ignore # noqa: S101
+    assert detector.update(None, 10.0, 100.0) == 0.0  # type: ignore
 
 
 def test_hidden_liquidity_reset() -> None:
@@ -74,8 +74,8 @@ def test_hidden_liquidity_reset() -> None:
     detector = HiddenLiquidityDetector()
     detector.update(100, 20, 100)
 
-    assert len(detector._history) > 0  # noqa: S101
+    assert len(detector._history) > 0
     detector.reset()
-    assert len(detector._history) == 0  # noqa: S101
-    assert detector._last_iceberg_price is None  # noqa: S101
-    assert detector._aggregate_signal() == 0.0  # noqa: S101
+    assert len(detector._history) == 0
+    assert detector._last_iceberg_price is None
+    assert detector._aggregate_signal() == 0.0

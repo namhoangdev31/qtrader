@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from qtrader.core.errors import (
     BaseError,
     CriticalError,
-    FatalError,
     RecoverableError,
     classify_error,
 )
@@ -41,7 +39,7 @@ class FailFastEngine:
         self._orchestrator = global_orchestrator
         self._max_retries = max_retries
         self._escalation_window = escalation_window_sec
-        self._escalation_map: Dict[str, EscalationState] = {}
+        self._escalation_map: dict[str, EscalationState] = {}
         
         # Metrics
         self.trigger_count: int = 0

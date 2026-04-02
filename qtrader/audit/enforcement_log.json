@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-01T03:20:12Z",
+  "engine": "EnforcementEngine",
+  "status": "ACTIVE",
+  "metrics": {
+    "checks": 1200,
+    "violations": 12,
+    "last_violation": {
+      "id": "C4",
+      "msg": "Floating point value detected in event field: price",
+      "module": "qtrader.core.orchestrator"
+    }
+  },
+  "compliance_rate": "99.0%"
+}

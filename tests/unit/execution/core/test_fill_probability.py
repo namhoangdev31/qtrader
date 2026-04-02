@@ -27,8 +27,8 @@ def test_fill_probability_intensity_sensitivity(execution_config: MagicMock) -> 
     prob_low = model.compute(intensity=1.0, time_horizon=1.0, queue_pos=100.0)
     prob_high = model.compute(intensity=50.0, time_horizon=1.0, queue_pos=100.0)
     
-    assert 0.0 < prob_low < prob_high < 1.0  # noqa: S101
-    assert prob_high > prob_low  # noqa: S101
+    assert 0.0 < prob_low < prob_high < 1.0
+    assert prob_high > prob_low
 
 
 def test_fill_probability_queue_sensitivity(execution_config: MagicMock) -> None:
@@ -40,8 +40,8 @@ def test_fill_probability_queue_sensitivity(execution_config: MagicMock) -> None
     prob_small = model.compute(intensity=10.0, time_horizon=1.0, queue_pos=10.0)
     prob_large = model.compute(intensity=10.0, time_horizon=1.0, queue_pos=1000.0)
     
-    assert 0.0 < prob_large < prob_small <= 1.0  # noqa: S101
-    assert prob_small > prob_large  # noqa: S101
+    assert 0.0 < prob_large < prob_small <= 1.0
+    assert prob_small > prob_large
 
 
 def test_fill_probability_time_sensitivity(execution_config: MagicMock) -> None:
@@ -52,7 +52,7 @@ def test_fill_probability_time_sensitivity(execution_config: MagicMock) -> None:
     prob_now = model.compute(intensity=10.0, time_horizon=1.0, queue_pos=100.0)
     prob_later = model.compute(intensity=10.0, time_horizon=60.0, queue_pos=100.0)
     
-    assert prob_later > prob_now  # noqa: S101
+    assert prob_later > prob_now
 
 
 def test_fill_probability_boundary_conditions(execution_config: MagicMock) -> None:
@@ -60,16 +60,16 @@ def test_fill_probability_boundary_conditions(execution_config: MagicMock) -> No
     model = FillProbabilityModel(execution_config)
     
     # 1. Zero Queue: Should be instant fill
-    assert model.compute(intensity=10.0, time_horizon=1.0, queue_pos=0.0) == 1.0  # noqa: S101
+    assert model.compute(intensity=10.0, time_horizon=1.0, queue_pos=0.0) == 1.0
     
     # 2. Zero Time: Should be impossible fill
-    assert model.compute(intensity=10.0, time_horizon=0.0, queue_pos=100.0) == 0.0  # noqa: S101
+    assert model.compute(intensity=10.0, time_horizon=0.0, queue_pos=100.0) == 0.0
     
     # 3. Very Large Request (Overflow): Should be near certain fill
-    assert model.compute(intensity=1e10, time_horizon=1e10, queue_pos=1.0) == 1.0  # noqa: S101
+    assert model.compute(intensity=1e10, time_horizon=1e10, queue_pos=1.0) == 1.0
     
     # 4. Default Fallback
-    assert model.compute(intensity=None, time_horizon=1.0, queue_pos=None) > 0.0  # noqa: S101
+    assert model.compute(intensity=None, time_horizon=1.0, queue_pos=None) > 0.0
 
 
 def test_fill_probability_catastrophic_safety(execution_config: MagicMock) -> None:
@@ -77,8 +77,8 @@ def test_fill_probability_catastrophic_safety(execution_config: MagicMock) -> No
     model = FillProbabilityModel(execution_config)
     
     # 1. Negative inputs
-    assert model.compute(intensity=-10.0, time_horizon=1.0, queue_pos=100.0) == 0.0  # noqa: S101
+    assert model.compute(intensity=-10.0, time_horizon=1.0, queue_pos=100.0) == 0.0
     
     # 2. Malformed objects (should hit Exception block)
     # Passing a string as queue_pos
-    assert model.compute(intensity=10.0, time_horizon=1.0, queue_pos="INVALID") == 0.0  # type: ignore # noqa: S101
+    assert model.compute(intensity=10.0, time_horizon=1.0, queue_pos="INVALID") == 0.0  # type: ignore

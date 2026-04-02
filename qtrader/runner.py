@@ -5,16 +5,16 @@ instance. It initializes the Unified Trading Orchestrator and manages the
 process lifecycle.
 """
 
+import argparse
 import asyncio
 import signal
 import sys
-import argparse
-from pathlib import Path
+
 from loguru import logger
 
-from qtrader.core.orchestrator import TradingOrchestrator, SystemState
 from qtrader.core.bus import EventBus
-from qtrader.core.config_manager import ConfigManager
+from qtrader.core.orchestrator import TradingOrchestrator
+
 
 # Internal component factory (Mocked for this implementation)
 # In production, these are loaded dynamically based on config

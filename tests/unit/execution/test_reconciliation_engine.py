@@ -1,12 +1,14 @@
 import asyncio
-import pytest
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from qtrader.core.event import EventType, FillEvent, TradingHaltEvent
 from qtrader.core.event_bus import EventBus
-from qtrader.core.state_store import StateStore, Position
-from qtrader.oms.order_management_system import UnifiedOMS
+from qtrader.core.state_store import Position, StateStore
 from qtrader.execution.reconciliation_engine import ReconciliationEngine
+from qtrader.oms.order_management_system import UnifiedOMS
 
 
 class MockExchange:

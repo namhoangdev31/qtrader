@@ -24,7 +24,7 @@ def test_spoof_detector_malicious_signature(detector: SpoofDetector) -> None:
     # Fill Rate: 0% (Threshold: 5%)
     # Large Orders: 10
     # Short Lived: 10 (> 50% of 10)
-    assert detector.is_spoofing(user, symbol) is True  # noqa: S101
+    assert detector.is_spoofing(user, symbol) is True
 
 
 def test_spoof_detector_market_maker_baseline(detector: SpoofDetector) -> None:
@@ -46,7 +46,7 @@ def test_spoof_detector_market_maker_baseline(detector: SpoofDetector) -> None:
     for _i in range(2):
         detector.record_event(user, symbol, "FILL", size=10.0, filled_qty=10.0, lifespan_s=0.0)
 
-    assert detector.is_spoofing(user, symbol) is False  # noqa: S101
+    assert detector.is_spoofing(user, symbol) is False
 
 
 def test_spoof_detector_small_order_immunity(detector: SpoofDetector) -> None:
@@ -60,7 +60,7 @@ def test_spoof_detector_small_order_immunity(detector: SpoofDetector) -> None:
         detector.record_event(user, symbol, "CANCEL", size=1.0, filled_qty=0.0, lifespan_s=0.05)
 
     # Cancel Rate: 100% but 0 Large Orders.
-    assert detector.is_spoofing(user, symbol) is False  # noqa: S101
+    assert detector.is_spoofing(user, symbol) is False
 
 
 def test_spoof_detector_quorum_requirement(detector: SpoofDetector) -> None:
@@ -73,7 +73,7 @@ def test_spoof_detector_quorum_requirement(detector: SpoofDetector) -> None:
         detector.record_event(user, symbol, "SUBMIT", size=1000.0, filled_qty=0.0, lifespan_s=0.0)
         detector.record_event(user, symbol, "CANCEL", size=1000.0, filled_qty=0.0, lifespan_s=0.01)
 
-    assert detector.is_spoofing(user, symbol) is False  # noqa: S101
+    assert detector.is_spoofing(user, symbol) is False
 
 
 def test_spoof_detector_telemetry_check(detector: SpoofDetector) -> None:
@@ -83,5 +83,5 @@ def test_spoof_detector_telemetry_check(detector: SpoofDetector) -> None:
     detector.record_event("u1", "S1", "FILL", 100, 50, 0)  # FR: 50/100 = 50%
 
     report = detector.get_report()
-    assert report["monitored_liquidity_entries"] == 1  # noqa: S101
-    assert report["status"] == "SPOOF_CHECK"  # noqa: S101
+    assert report["monitored_liquidity_entries"] == 1
+    assert report["status"] == "SPOOF_CHECK"

@@ -1,0 +1,34 @@
+{
+  "qtrader.core.orchestrator": {
+    "direct_imports_removed": [
+      "ConfigManager",
+      "TraceAuthority",
+      "FailFastEngine",
+      "math_authority",
+      "d"
+    ],
+    "container_access_injected": true
+  },
+  "qtrader.strategy.ensemble_strategy": {
+    "direct_imports_removed": [
+      "logging.getLogger"
+    ],
+    "container_access_injected": true
+  },
+  "qtrader.strategy.probabilistic_strategy": {
+    "direct_imports_removed": [
+      "logging.getLogger"
+    ],
+    "container_access_injected": true
+  },
+  "qtrader.portfolio.allocator": {
+    "direct_imports_removed": [
+      "logging.getLogger",
+      "qtrader.core.logger.logger"
+    ],
+    "container_access_injected": true
+  },
+  "status": "SAMPLING_COMPLETE",
+  "total_modules_targeted": 280,
+  "refactored_today": 4
+}

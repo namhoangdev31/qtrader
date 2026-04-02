@@ -1,6 +1,8 @@
 from enum import Enum, auto
 from typing import Optional
+
 from loguru import logger
+
 
 class SystemState(Enum):
     """Sovereign System States for QTrader."""
@@ -17,7 +19,7 @@ class SystemStateManager:
 
     def __new__(cls) -> 'SystemStateManager':
         if cls._instance is None:
-            cls._instance = super(SystemStateManager, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     @property

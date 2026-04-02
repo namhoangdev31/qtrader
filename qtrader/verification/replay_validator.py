@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Optional
+from decimal import Decimal
+from typing import Any
 
 import polars as pl
 from loguru import logger
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Custom JSON encoder for high-precision Decimal serialization."""
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return super().default(obj)
 
 
 @dataclass(slots=True)
@@ -30,7 +37,7 @@ class ReplayReport:
     divergence_points: list[DivergencePoint] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert report to JSON-serializable dictionary."""
+        """Convert report to JSON-serializable dictionary with high-precision stability."""
         return {
             "status": self.status,
             "deterministic": self.deterministic,
@@ -41,8 +48,8 @@ class ReplayReport:
                     "offset": d.offset,
                     "timestamp": d.timestamp,
                     "field": d.field,
-                    "original": str(d.original_value),
-                    "replay": str(d.replay_value)
+                    "original": d.original_value,
+                    "replay": d.replay_value
                 } for d in self.divergence_points
             ]
         }
@@ -125,31 +132,40 @@ class ReplayValidator:
     @staticmethod
     def _is_equal(a: Any, b: Any) -> bool:
         """
-        Internal equality check for diverse data types (JSON-like, DataFrames, etc).
+        Internal bit-perfect equality check (ε=0).
         """
-        # 1. Polars DataFrame Comparison (Check first to avoid Series-based == issues)
+        # 1. Polars DataFrame Comparison
         if isinstance(a, pl.DataFrame) and isinstance(b, pl.DataFrame):
             return a.equals(b)
 
-        # 2. Exact Type/Value Match (handles int, str, bool, Decimal)
+        # 2. Strict Decimal Comparison (No ε tolerance)
+        if isinstance(a, Decimal) and isinstance(b, Decimal):
+            return a == b
+
+        # 3. Exact Type/Value Match
         try:
+            # Note: We avoid 1.0 == Decimal('1.0') returning True if types must be sovereign
+            if type(a) is not type(b):
+                return False
             if a == b:
                 return True
         except (TypeError, ValueError):
-            # Fallback for complex types that don't support simple ==
             pass
             
-        # 3. Floating Point (Still exact, but handle NaN)
+        # 4. Floating Point (Still exact, but handle NaN)
         if isinstance(a, float) and isinstance(b, float):
             import math
             if math.isnan(a) and math.isnan(b):
                 return True
             return a == b
             
-        # 4. Dictionary/List Comparison (Sort keys for JSON stability)
+        # 5. Dictionary/List Comparison (Sovereign Serialization)
         if isinstance(a, (dict, list)) and isinstance(b, (dict, list)):
             try:
-                return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+                # Use custom encoder to handle Decimal in nested structures
+                s_a = json.dumps(a, sort_keys=True, cls=DecimalEncoder)
+                s_b = json.dumps(b, sort_keys=True, cls=DecimalEncoder)
+                return s_a == s_b
             except (TypeError, ValueError):
                 return False
             
@@ -159,5 +175,5 @@ class ReplayValidator:
     def save_report(report: ReplayReport, output_path: str) -> None:
         """Serialize and save the replay report to disk."""
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(report.to_dict(), f, indent=2)
+            json.dump(report.to_dict(), f, indent=2, cls=DecimalEncoder)
         logger.info(f"[REPLAY] Report archived at: {output_path}")

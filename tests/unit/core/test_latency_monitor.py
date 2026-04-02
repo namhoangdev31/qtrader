@@ -1,6 +1,9 @@
 import time
+
 import pytest
+
 from qtrader.core.latency_monitor import LatencyMonitor, LatencyViolation
+
 
 @pytest.fixture
 def monitor():

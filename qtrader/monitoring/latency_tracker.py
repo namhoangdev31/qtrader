@@ -9,7 +9,7 @@ All measurements use `time.perf_counter()` for nanosecond-resolution.
 """
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 _LOG = logging.getLogger("qtrader.monitoring.latency_tracker")

@@ -1,5 +1,7 @@
 import pytest
+
 from qtrader.risk.network_kill_switch import NetworkKillSwitch
+
 
 def test_kill_switch_initialization():
     switch = NetworkKillSwitch(latency_threshold_ms=500, max_errors=5)

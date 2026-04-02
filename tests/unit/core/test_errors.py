@@ -1,7 +1,14 @@
 import pytest
+
 from qtrader.core.errors import (
-    BaseError, RecoverableError, CriticalError, FatalError, ValidationError, classify_error
+    BaseError,
+    CriticalError,
+    FatalError,
+    RecoverableError,
+    ValidationError,
+    classify_error,
 )
+
 
 def test_error_hierarchy():
     # 1. Verification of inheritance and levels

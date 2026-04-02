@@ -1,7 +1,10 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from qtrader.pipeline.deployment import DeploymentBridge
 from qtrader.pipeline.research import ResearchResult
+
 
 def test_deployment_initialization():
     deployer = DeploymentBridge(config_path="configs/test_bot.yaml")

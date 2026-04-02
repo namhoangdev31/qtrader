@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
-from decimal import Decimal
-from typing import Dict, List, Optional
 
-from qtrader.core.events import (
-    BaseEvent, MarketEvent, OrderEvent, FillEvent, RiskEvent, EventType
-)
+from qtrader.core.decimal_adapter import d, math_authority
 from qtrader.core.event_store import BaseEventStore
-from qtrader.core.state_store import SystemState, Position, Order, RiskState
+from qtrader.core.events import BaseEvent, FillEvent, MarketEvent, OrderEvent, RiskEvent
+from qtrader.core.state_store import Order, Position, SystemState
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +45,6 @@ class ReplayEngine:
         start_perf = time.perf_counter()
         
         # 1. Fetch events from the store
-        # This uses the partitioned retrieval logic
         events = await self._event_store.get_events(
             partition=partition, 
             start_offset=start_offset, 
@@ -95,40 +92,39 @@ class ReplayEngine:
             state.positions[symbol] = Position(symbol=symbol)
             
         pos = state.positions[symbol]
-        mid_price = Decimal(str((event.bid + event.ask) / 2))
+        # Mid price calculation using math_authority
+        mid_price = (event.bid + event.ask) / d(2)
         
         # Re-calculate unrealized PnL based on replayed market ticks
         pos.market_value = pos.quantity * mid_price
         if pos.quantity != 0:
             pos.unrealized_pnl = pos.market_value - (pos.quantity * pos.average_price)
         else:
-            pos.unrealized_pnl = Decimal('0')
+            pos.unrealized_pnl = d(0)
 
     def _handle_order(self, state: SystemState, event: OrderEvent) -> None:
         """Track active orders in the state."""
-        payload = event.payload
-        state.active_orders[payload.order_id] = Order(
-            order_id=payload.order_id,
-            symbol=payload.symbol,
-            side=payload.action,
-            order_type=payload.order_type,
-            quantity=Decimal(str(payload.quantity)),
-            price=Decimal(str(payload.price)) if payload.price else None,
+        state.active_orders[event.order_id] = Order(
+            order_id=event.order_id,
+            symbol=event.symbol,
+            side=event.action,
+            order_type=event.payload.order_type,
+            quantity=event.quantity,
+            price=event.payload.price,
             status="ACK"
         )
 
     def _handle_fill(self, state: SystemState, event: FillEvent) -> None:
         """Update positions and close orders upon fill."""
-        payload = event.payload
-        symbol = payload.symbol
+        symbol = event.payload.symbol
         
         if symbol not in state.positions:
             state.positions[symbol] = Position(symbol=symbol)
             
         pos = state.positions[symbol]
-        qty_filled = Decimal(str(payload.quantity))
-        qty_delta = qty_filled if payload.side == "BUY" else -qty_filled
-        fill_price = Decimal(str(payload.price))
+        qty_filled = event.payload.quantity
+        qty_delta = qty_filled if event.payload.side == "BUY" else -qty_filled
+        fill_price = event.payload.price
         
         # Calculate new average cost
         new_qty = pos.quantity + qty_delta
@@ -136,45 +132,53 @@ class ReplayEngine:
             if (qty_delta * pos.quantity) >= 0:
                 # Adding to or starting position
                 total_cost = (pos.quantity * pos.average_price) + (qty_filled * fill_price)
-                pos.average_price = total_cost / abs(new_qty)
+                new_avg = total_cost / abs(new_qty)
+                pos.average_price = math_authority.to_price(new_avg)
             else:
-                # Reducing position - Average price doesn't change in simple accounting 
-                # unless we cross zero (flip)
+                # Reducing position - Average price remains same, realized P&L updated
+                # Note: This is an event-sourced simplification. Full FIFO logic in OMS.
                 if (pos.quantity * new_qty) < 0:
                     pos.average_price = fill_price
+                
+                realized = (fill_price - pos.average_price) * abs(qty_delta) * (d(1) if pos.quantity > 0 else d(-1))
+                pos.realized_pnl += realized
         else:
-            pos.average_price = Decimal('0')
+            realized = (fill_price - pos.average_price) * abs(qty_delta) * (d(1) if pos.quantity > 0 else d(-1))
+            pos.realized_pnl += realized
+            pos.average_price = d(0)
             
         pos.quantity = new_qty
         
         # Remove from active orders if fully filled
-        if payload.order_id in state.active_orders:
-            # Note: In a real system we'd check partial fills, but here we assume full fill for simplicity
-            del state.active_orders[payload.order_id]
+        if event.order_id in state.active_orders:
+            del state.active_orders[event.order_id]
 
     def _handle_risk(self, state: SystemState, event: RiskEvent) -> None:
         """Update risk multipliers and state limits."""
-        payload = event.payload
-        state.current_risk_multiplier = Decimal(str(payload.value))
-        state.risk_state.max_drawdown = Decimal(str(payload.metrics.get("max_drawdown", 0)))
+        state.current_risk_multiplier = event.payload.value
+        state.risk_state.max_drawdown = event.payload.metrics.get("max_drawdown", d(0))
 
     @staticmethod
     def calculate_state_hash(state: SystemState) -> str:
         """
         Generate a verifiable SHA-256 fingerprint of the system state.
-        Used to ensure deterministic reproducibility.
+        Used to ensure deterministic reproducibility (ε=0).
         """
-        import hashlib
-        
         # Sort keys to ensure stable string representation
         pos_parts = []
         for sym, pos in sorted(state.positions.items()):
-            pos_parts.append(f"{sym}:{pos.quantity}:{pos.average_price:.4f}")
+            # Use raw string representation of Decimal for exact match
+            pos_parts.append(f"{sym}:{pos.quantity}:{pos.average_price}")
             
         ord_parts = sorted(state.active_orders.keys())
         
         fingerprint = f"POS:{'|'.join(pos_parts)};ORD:{'|'.join(ord_parts)};RISK:{state.current_risk_multiplier}"
         return hashlib.sha256(fingerprint.encode()).hexdigest()
+
+
+class ReplayError(Exception):
+    """Raised when the replay engine encounters a sequence violation or corrupted data."""
+    pass
 
 
 class ReplayError(Exception):

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import collections
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 from loguru import logger
 
@@ -17,7 +17,7 @@ class TraceNode:
     module: str
     action: str
     state: dict[str, Any]
-    latency_ms: Optional[float] = None
+    latency_ms: float | None = None
 
 
 class TraceEngine:
@@ -27,12 +27,12 @@ class TraceEngine:
     Enables forensic replay and performance bottleneck analysis.
     """
 
-    _instance: Optional[TraceEngine] = None
+    _instance: TraceEngine | None = None
 
     def __init__(self) -> None:
         # In-memory trace store (Limited retention for performance)
         # Note: In production, these should be flushed to DuckDB or a trace collector.
-        self._traces: Dict[str, List[TraceNode]] = collections.defaultdict(list)
+        self._traces: dict[str, list[TraceNode]] = collections.defaultdict(list)
         self._max_trace_retention = 1000 # Keep 1000 active traces
 
     @classmethod
@@ -45,8 +45,8 @@ class TraceEngine:
         self,
         module: str,
         action: str,
-        state: Optional[dict[str, Any]] = None,
-        latency_ms: Optional[float] = None
+        state: dict[str, Any] | None = None,
+        latency_ms: float | None = None
     ) -> None:
         """
         Record a stage in the currently active trace.
@@ -74,11 +74,11 @@ class TraceEngine:
              oldest_tid = next(iter(self._traces))
              self._traces.pop(oldest_tid)
 
-    def get_trace_chain(self, trace_id: str) -> List[TraceNode]:
+    def get_trace_chain(self, trace_id: str) -> list[TraceNode]:
         """Reconstruct the sequence of events for a given ID."""
         return self._traces.get(trace_id, [])
 
-    def calculate_handoff_latency(self, trace_id: str) -> Dict[str, float]:
+    def calculate_handoff_latency(self, trace_id: str) -> dict[str, float]:
         """
         Compute the 'Air Gap' latency between consecutive stages.
         """
@@ -106,7 +106,7 @@ class TraceEngine:
         for i, node in enumerate(nodes):
              arrow = "└─>" if i > 0 else "┌──"
              logger.info(f"{arrow} [{node.module}] {node.action} (T+{node.timestamp - nodes[0].timestamp:.4f}s)")
-        logger.info(f"--- END TRACE ---")
+        logger.info("--- END TRACE ---")
 
 
 # Global singleton authority

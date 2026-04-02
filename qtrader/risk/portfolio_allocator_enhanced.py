@@ -9,7 +9,7 @@ import polars as pl
 
 from qtrader.risk.base import RiskModule
 
-_LOG = logging.getLogger("qtrader.risk.portfolio.allocator")
+_LOG = logging.getLogger("qtrader.portfolio.allocator")
 
 
 class EnhancedPortfolioAllocator(RiskModule):

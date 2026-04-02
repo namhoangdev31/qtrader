@@ -1,0 +1,29 @@
+{
+  "qtrader.core.orchestrator": [
+    "qtrader.core.events",
+    "qtrader.core.system_state",
+    "qtrader.core.trace_authority",
+    "qtrader.core.config_manager",
+    "qtrader.core.fail_fast_engine",
+    "qtrader.core.decimal_adapter",
+    "qtrader.core.execution_wrapper",
+    "qtrader.strategy.ensemble_strategy",
+    "qtrader.strategy.validation.feature_validator",
+    "qtrader.portfolio.allocator",
+    "qtrader.risk.realtime",
+    "qtrader.oms.adapter"
+  ],
+  "qtrader.strategy.ensemble_strategy": [
+    "qtrader.core.types",
+    "qtrader.core.logger"
+  ],
+  "qtrader.strategy.probabilistic_strategy": [],
+  "qtrader.strategy.mean_reversion": [],
+  "qtrader.strategy.alpha.candle_patterns_alpha": [
+    "qtrader.strategy.alpha.alpha_base"
+  ],
+  "qtrader.analytics.drift_detector": [],
+  "qtrader.analytics.drift": [
+    "qtrader.core.logger"
+  ]
+}

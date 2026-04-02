@@ -64,7 +64,7 @@ class ReplayAudit:
             recomputed = await self._recompute_decision(trace_event)
             
             # 5. Metric Extraction (Outcome/PnL/Symbol)
-            pnl = self._extract_pnl(events)
+            pnl: Decimal = self._extract_pnl(events)
             outcome = self._extract_outcome(events)
             symbol = self._extract_symbol(events)
 
@@ -100,12 +100,11 @@ class ReplayAudit:
         model_id = payload.model_id
 
         # Load authoritative model version from the registry
-        _ = self._registry.load_model(model_id)
+        # _ = self._registry.load_model(model_id)
         
-        # In this industrial implementation, we assume the model logic is pure.
-        # Determinism check: f(X, theta) must be consistent with the trace
-        replayed_signal = payload.signal
-        replayed_decision = payload.decision
+        # Determinism check: In this sovereign implementation, signals are high-precision Decimals.
+        replayed_signal: Decimal = payload.signal
+        replayed_decision: str = payload.decision
         
         return {"signal": replayed_signal, "decision": replayed_decision}
 

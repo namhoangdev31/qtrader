@@ -1,4 +1,5 @@
 import pytest
+
 from qtrader.security.rbac import Role, set_context_user
 from qtrader.security.secret_manager import SecretManager
 
@@ -20,16 +21,16 @@ def test_secret_store_and_authorized_retrieve(manager: SecretManager) -> None:
     # TRADER cannot read prod data (set in fixture above)
     set_context_user("trader_1", Role.TRADER)
     res_v1 = manager.store_secret("BINANCE_API_KEY", "AK12345")
-    assert res_v1 == 1  # noqa: S101
+    assert res_v1 == 1
 
     # 1. DENY: Trader attempting to read
     deny_val = manager.get_secret("BINANCE_API_KEY")
-    assert deny_val is None  # noqa: S101
+    assert deny_val is None
 
     # 2. ALLOW: ADMIN attempting to read
     set_context_user("admin_1", Role.ADMIN)
     allow_val = manager.get_secret("BINANCE_API_KEY")
-    assert allow_val == "AK12345"  # noqa: S101
+    assert allow_val == "AK12345"
 
 
 def test_secret_versioning_lifecycle(manager: SecretManager) -> None:
@@ -41,12 +42,12 @@ def test_secret_versioning_lifecycle(manager: SecretManager) -> None:
     # Version 2
     v2 = manager.store_secret("STRATEGY_CONFIG", "v2_config")
 
-    assert v1 == 1 and v2 == 2  # noqa: S101, PLR2004
+    assert v1 == 1 and v2 == 2
 
     # Retrieve latest (default)
-    assert manager.get_secret("STRATEGY_CONFIG") == "v2_config"  # noqa: S101
+    assert manager.get_secret("STRATEGY_CONFIG") == "v2_config"
     # Retrieve historical
-    assert manager.get_secret("STRATEGY_CONFIG", version=1) == "v1_config"  # noqa: S101
+    assert manager.get_secret("STRATEGY_CONFIG", version=1) == "v1_config"
 
 
 def test_secret_unauthorized_audit_telemetry(manager: SecretManager) -> None:
@@ -61,5 +62,5 @@ def test_secret_unauthorized_audit_telemetry(manager: SecretManager) -> None:
     manager.get_secret("ROOT_PASS")  # Should be granted
 
     report = manager.get_report()
-    assert report["unauthorized_attempts"] == 1  # noqa: S101
-    assert report["access_count"] == 1  # noqa: S101
+    assert report["unauthorized_attempts"] == 1
+    assert report["access_count"] == 1

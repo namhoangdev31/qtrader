@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from qtrader.ml.mlflow_manager import MLflowManager
 
 

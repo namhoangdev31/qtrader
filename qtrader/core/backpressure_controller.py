@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from enum import IntEnum, auto
+from enum import IntEnum
 
 from qtrader.core.events import EventType
 

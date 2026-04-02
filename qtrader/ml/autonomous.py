@@ -4,12 +4,16 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 import polars as pl
 
 from qtrader.core.bus import EventBus
-from qtrader.core.event import EventType, SignalEvent, DriftEvent, ModelRetrainEvent, MarketDataEvent
+from qtrader.core.event import (
+    DriftEvent,
+    MarketDataEvent,
+    ModelRetrainEvent,
+    SignalEvent,
+)
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.registry import ModelRegistry
 from qtrader.ml.rotation import ModelRotator

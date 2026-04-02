@@ -24,14 +24,14 @@ async def test_model_risk_scoring_success() -> None:
     event = await scorer.compute_risk_score(MODEL_ID, metrics)
 
     # 1. Verification of the Score Event
-    assert event is not None  # noqa: S101
-    assert event.payload.model_id == MODEL_ID  # noqa: S101
-    assert event.payload.risk_score == pytest.approx(-0.02)  # noqa: S101
-    assert event.payload.volatility == 0.20  # noqa: S101, PLR2004
+    assert event is not None
+    assert event.payload.model_id == MODEL_ID
+    assert event.payload.risk_score == pytest.approx(-0.02)
+    assert event.payload.volatility == 0.20
 
     # 2. Verification of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.MODEL_RISK_SCORE  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.MODEL_RISK_SCORE
 
 
 @pytest.mark.asyncio
@@ -45,10 +45,10 @@ async def test_model_risk_scoring_missing_metrics() -> None:
 
     event = await scorer.compute_risk_score(MODEL_ID, metrics)
 
-    assert event is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.RISK_SCORE_ERROR  # noqa: S101
-    assert bus.publish.call_args[0][0].payload.error_type == "MISSING_METRICS"  # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.RISK_SCORE_ERROR
+    assert bus.publish.call_args[0][0].payload.error_type == "MISSING_METRICS"
 
 
 @pytest.mark.asyncio
@@ -60,7 +60,7 @@ async def test_model_risk_scoring_failure() -> None:
     # Malformed metrics triggering exception
     event = await scorer.compute_risk_score(None, None)  # type: ignore
 
-    assert event is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.RISK_SCORE_ERROR  # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)  # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.RISK_SCORE_ERROR
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

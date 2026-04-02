@@ -37,12 +37,12 @@ def test_slicer_acceleration_on_imbalance(execution_config: mock.MagicMock) -> N
 
     child = slicer.generate_slice(order, state, signals)
 
-    assert child is not None  # noqa: S101
+    assert child is not None
     # Neutral slice = 1000 * 0.05 * 1.0 = 50.
     # Adaptive urgency = 1.0 + (0.8 * 1 * 1.5) = 2.2.
     # Target = 50 * 2.2 = 110.
-    assert child.quantity == pytest.approx(110.0)  # noqa: S101
-    assert child.side == "BUY"  # noqa: S101
+    assert child.quantity == pytest.approx(110.0)
+    assert child.side == "BUY"
 
 
 def test_slicer_suppression_on_toxicity(execution_config: mock.MagicMock) -> None:
@@ -61,8 +61,8 @@ def test_slicer_suppression_on_toxicity(execution_config: mock.MagicMock) -> Non
     child = slicer.generate_slice(order, state, signals)
 
     # Decelerated slice = 50 * 0.1 = 5.
-    assert child is not None  # noqa: S101
-    assert child.quantity == pytest.approx(5.0)  # noqa: S101
+    assert child is not None
+    assert child.quantity == pytest.approx(5.0)
 
 
 def test_slicer_participation_cap(execution_config: mock.MagicMock) -> None:
@@ -79,8 +79,8 @@ def test_slicer_participation_cap(execution_config: mock.MagicMock) -> None:
 
     child = slicer.generate_slice(order, state, signals)
 
-    assert child is not None  # noqa: S101
-    assert child.quantity == pytest.approx(2.0)  # noqa: S101
+    assert child is not None
+    assert child.quantity == pytest.approx(2.0)
 
 
 def test_slicer_catastrophic_safety(execution_config: mock.MagicMock) -> None:
@@ -92,14 +92,14 @@ def test_slicer_catastrophic_safety(execution_config: mock.MagicMock) -> None:
     # 1. Zero duration or time
     state = SlicingState(100.0, 0.0, 0.0, datetime.now())
     signals = {"imbalance": 0.0, "toxicity": 0.1}
-    assert slicer.generate_slice(order, state, signals) is not None  # noqa: S101
+    assert slicer.generate_slice(order, state, signals) is not None
 
     # 2. Complete fill
     state = SlicingState(0.0, 30.0, 60.0, datetime.now())
-    assert slicer.generate_slice(order, state, signals) is None  # noqa: S101
+    assert slicer.generate_slice(order, state, signals) is None
 
     # 3. Malformed signals (None causing TypeError)
-    assert slicer.generate_slice(order, None, None) is None  # type: ignore # noqa: S101
+    assert slicer.generate_slice(order, None, None) is None  # type: ignore
 
 
 def test_slicer_schedule_alignment(execution_config: mock.MagicMock) -> None:
@@ -117,5 +117,5 @@ def test_slicer_schedule_alignment(execution_config: mock.MagicMock) -> None:
 
     # Schedule deviation = 0.9 - 0.1 = 0.8.
     # Target = 50 * 1.0 * (1.0 + 0.8) = 90.
-    assert child is not None  # noqa: S101
-    assert child.quantity == pytest.approx(90.0)  # noqa: S101
+    assert child is not None
+    assert child.quantity == pytest.approx(90.0)

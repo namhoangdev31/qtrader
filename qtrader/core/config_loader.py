@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import yaml
 from loguru import logger
@@ -90,7 +89,7 @@ class ConfigLoader:
             path = current_dir / "config" / "config_schema.yaml"
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
                 config = QTraderConfig.model_validate(data)
                 cls._instance = config
@@ -98,7 +97,7 @@ class ConfigLoader:
         except Exception as e:
             # "Hard Fail" on invalid or missing configuration
             import sys
-            print(f"\n[FATAL] CONFIGURATION STANDARDIZATION FAILED", file=sys.stderr)
+            print("\n[FATAL] CONFIGURATION STANDARDIZATION FAILED", file=sys.stderr)
             print(f"[REASON] {e}", file=sys.stderr)
             print(f"[ACTION] Validation required for {path}\n", file=sys.stderr)
             sys.exit(1)

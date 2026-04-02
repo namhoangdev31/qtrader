@@ -4,7 +4,7 @@ import hashlib
 import random
 import zlib
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,9 +26,11 @@ class SeedManager:
     global_seed: int = 0
     _is_applied: bool = False
 
-    @property
     def is_applied(self) -> bool:
         """Returns True if the global seed has been successfully injected."""
+        return self._is_applied
+
+    def is_applied_method(self) -> bool: # Temporary workaround if I want to keep property
         return self._is_applied
 
     def __post_init__(self) -> None:
@@ -79,7 +81,7 @@ class SeedManager:
         torch.backends.cudnn.benchmark = False
 
         self._is_applied = True
-        logger.success(f"[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch")
+        logger.success("[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch")
         
         return self._get_status()
 

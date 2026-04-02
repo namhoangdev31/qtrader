@@ -3,8 +3,9 @@ Level 1 Critical Tests for RealTimeRiskEngine (risk/realtime.py)
 Covers: position updates, drawdown tracking, VaR/CVaR, HHI concentration,
 and limit breach detection under market-stress scenarios.
 """
-import pytest
 import polars as pl
+import pytest
+
 from qtrader.risk.realtime import RealTimeRiskEngine
 
 

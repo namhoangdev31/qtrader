@@ -13,9 +13,9 @@ async def test_scenario_generator_flash_crash() -> None:
     sg = ScenarioGenerator()
     df = sg.generate_flash_crash("BTC", 1000.0, length=100, crash_depth=0.20)
 
-    assert df.height == 100  # noqa: S101, PLR2004
-    assert df["close"].min() <= 800.0  # noqa: S101, PLR2004
-    assert df["symbol"][0] == "BTC"  # noqa: S101
+    assert df.height == 100
+    assert df["close"].min() <= 800.0
+    assert df["symbol"][0] == "BTC"
 
 
 @pytest.mark.asyncio
@@ -24,8 +24,8 @@ async def test_scenario_generator_vol_spike() -> None:
     sg = ScenarioGenerator()
     df = sg.generate_volatility_spike("BTC", 1000.0, length=50, spike_start=10)
 
-    assert df.height == 50  # noqa: S101, PLR2004
-    assert df["symbol"][0] == "BTC"  # noqa: S101
+    assert df.height == 50
+    assert df["symbol"][0] == "BTC"
 
 
 @pytest.mark.asyncio
@@ -57,13 +57,13 @@ async def test_stress_test_flash_crash_trigger_kill() -> None:
     result = await tester.run_stress_test("FLASH_CRASH_V1", strategy, data)
 
     # 1. Validation of Stress Test pass
-    assert result is not None  # noqa: S101
-    assert result.payload.kill_triggered  # noqa: S101
-    assert result.payload.is_passing  # noqa: S101
+    assert result is not None
+    assert result.payload.kill_triggered
+    assert result.payload.is_passing
 
     # 2. Validation of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.STRESS_TEST_RESULT  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.STRESS_TEST_RESULT
 
 
 @pytest.mark.asyncio
@@ -81,7 +81,7 @@ async def test_stress_test_failure_handling() -> None:
 
     result = await tester.run_stress_test("FLASH_ERROR", MagicMock(), None)  # type: ignore
 
-    assert result is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.STRESS_TEST_ERROR  # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)  # noqa: S101
+    assert result is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.STRESS_TEST_ERROR
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

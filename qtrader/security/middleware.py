@@ -10,15 +10,13 @@ This module bridges security/jwt_auth.py and security/rbac.py into a single
 composable middleware suitable for both FastAPI and raw ASGI usage.
 """
 import logging
-import time
-from typing import Any, Callable
+from typing import Any
 
 from qtrader.security.jwt_auth import JWTAuthManager, TokenPayload
 from qtrader.security.rbac import (
+    ROLE_PERMISSIONS,
     Permission,
     Role,
-    ROLE_PERMISSIONS,
-    current_user_role,
     set_context_role,
 )
 
@@ -111,7 +109,7 @@ class SecurityMiddleware:
     @staticmethod
     async def _send_401(send: Any, detail: str) -> None:
         """Send a 401 Unauthorized ASGI response."""
-        body = f'{{"detail":"{detail}"}}'.encode("utf-8")
+        body = f'{{"detail":"{detail}"}}'.encode()
         await send({
             "type": "http.response.start",
             "status": 401,

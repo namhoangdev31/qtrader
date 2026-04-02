@@ -1,9 +1,12 @@
-import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from qtrader.core.orchestrator import TradingOrchestrator, SystemState
+
+import pytest
+
 from qtrader.core.events import EventType
+from qtrader.core.orchestrator import SystemState, TradingOrchestrator
 from qtrader.core.types import MarketData
+
 
 @pytest.fixture
 def orchestrator_mock():

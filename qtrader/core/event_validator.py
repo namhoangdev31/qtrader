@@ -3,25 +3,25 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pydantic import ValidationError, BaseModel
+from pydantic import BaseModel, ValidationError
 
 from qtrader.core.events import (
     BaseEvent,
+    ClockSyncPayload,
+    ErrorPayload,
     EventType,
+    FeaturePayload,
+    FeedPayload,
+    FillPayload,
+    GapPayload,
+    MarketDeltaPayload,
     MarketPayload,
     OrderPayload,
-    RiskPayload,
-    FeaturePayload,
-    SignalPayload,
-    FillPayload,
-    SystemPayload,
-    ErrorPayload,
-    FeedPayload,
-    MarketDeltaPayload,
-    GapPayload,
     RecoveryPayload,
-    ClockSyncPayload,
     RetryOrderPayload,
+    RiskPayload,
+    SignalPayload,
+    SystemPayload,
 )
 
 logger = logging.getLogger(__name__)

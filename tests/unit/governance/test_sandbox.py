@@ -35,7 +35,7 @@ class MockStrategy:
         self._call_count += 1
         if self._call_count == 1:
             self._signal = {"action": "BUY", "quantity": 1.0}
-        elif self._call_count == 3:  # noqa: PLR2004
+        elif self._call_count == 3:
             self._signal = {"action": "SELL", "quantity": 1.0}
         else:
             self._signal = {}
@@ -54,19 +54,19 @@ async def test_sandbox_successful_simulation() -> None:
     report = await sandbox.run_simulation(strategy, OHLC_DATA)
 
     # 1. Verification of the Report
-    assert report is not None  # noqa: S101
-    assert report.payload.strategy_id == STRATEGY_ID  # noqa: S101
+    assert report is not None
+    assert report.payload.strategy_id == STRATEGY_ID
 
     # Trade 1: Close 101.0 (BUY 1.0)
     # Trade 2: Close 103.0 (SELL 1.0)
     # Net PnL = (SELL 103) - (BUY 101) = 2.0
-    assert report.payload.pnl == pytest.approx(2.0)  # noqa: S101
-    assert report.payload.trade_count == 2  # noqa: S101, PLR2004
-    assert report.payload.status == "SUCCESS"  # noqa: S101
+    assert report.payload.pnl == pytest.approx(2.0)
+    assert report.payload.trade_count == 2
+    assert report.payload.status == "SUCCESS"
 
     # 2. Verification of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.SANDBOX_REPORT  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.SANDBOX_REPORT
 
 
 @pytest.mark.asyncio
@@ -81,10 +81,10 @@ async def test_sandbox_empty_simulation() -> None:
 
     report = await sandbox.run_simulation(strategy, OHLC_DATA)
 
-    assert report is not None  # noqa: S101
-    assert report.payload.pnl == 0.0  # noqa: S101
-    assert report.payload.trade_count == 0  # noqa: S101
-    assert report.payload.status == "EMPTY"  # noqa: S101
+    assert report is not None
+    assert report.payload.pnl == 0.0
+    assert report.payload.trade_count == 0
+    assert report.payload.status == "EMPTY"
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_sandbox_system_failure() -> None:
     # Malformed market data causing exception
     report = await sandbox.run_simulation(None, None)  # type: ignore
 
-    assert report is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.SANDBOX_ERROR  # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)  # noqa: S101
+    assert report is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.SANDBOX_ERROR
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

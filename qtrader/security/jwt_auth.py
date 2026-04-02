@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import jwt
 from typing_extensions import TypedDict
@@ -77,6 +76,7 @@ class JWTAuthManager:
 try:
     from fastapi import Depends, HTTPException, status
     from fastapi.security import OAuth2PasswordBearer
+
     from qtrader.security.rbac import set_context_role
 
     oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

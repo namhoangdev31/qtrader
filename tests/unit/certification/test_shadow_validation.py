@@ -20,9 +20,9 @@ def test_shadow_engine_multi_regime_pass(engine: ShadowValidationEngine) -> None
 
     report = engine.evaluate_shadow_performance(regime_results)
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["regime_diversity_met"] is True  # noqa: S101
-    assert report["metrics"]["average_performance_delta"] > 0  # noqa: S101
+    assert report["result"] == "PASS"
+    assert report["metrics"]["regime_diversity_met"] is True
+    assert report["metrics"]["average_performance_delta"] > 0
 
 
 def test_shadow_engine_regime_failure_block(engine: ShadowValidationEngine) -> None:
@@ -36,7 +36,7 @@ def test_shadow_engine_regime_failure_block(engine: ShadowValidationEngine) -> N
 
     report = engine.evaluate_shadow_performance(regime_results)
 
-    assert report["result"] == "FAIL"  # noqa: S101
+    assert report["result"] == "FAIL"
 
 
 def test_shadow_engine_variance_breach_detection(engine: ShadowValidationEngine) -> None:
@@ -51,8 +51,8 @@ def test_shadow_engine_variance_breach_detection(engine: ShadowValidationEngine)
 
     report = engine.evaluate_shadow_performance(regime_results)
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["metrics"]["variance_consistency_met"] is False  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["metrics"]["variance_consistency_met"] is False
 
 
 def test_shadow_engine_diversity_compliance(engine: ShadowValidationEngine) -> None:
@@ -65,8 +65,8 @@ def test_shadow_engine_diversity_compliance(engine: ShadowValidationEngine) -> N
 
     report = engine.evaluate_shadow_performance(regime_results)
 
-    assert report["metrics"]["regime_diversity_met"] is False  # noqa: S101
-    assert report["result"] == "FAIL"  # noqa: S101
+    assert report["metrics"]["regime_diversity_met"] is False
+    assert report["result"] == "FAIL"
 
 
 def test_shadow_engine_telemetry_tracking(engine: ShadowValidationEngine) -> None:
@@ -76,6 +76,6 @@ def test_shadow_engine_telemetry_tracking(engine: ShadowValidationEngine) -> Non
     engine.evaluate_shadow_performance(regime_results)
 
     stats = engine.get_shadow_telemetry()
-    assert stats["total_regime_observations"] == 4  # noqa: S101, PLR2004
-    assert stats["weighted_cumulative_delta"] == 0.01  # noqa: S101, PLR2004
-    assert stats["status"] == "SHADOW_CERTIFICATION"  # noqa: S101
+    assert stats["total_regime_observations"] == 4
+    assert stats["weighted_cumulative_delta"] == 0.01
+    assert stats["status"] == "SHADOW_CERTIFICATION"

@@ -1,6 +1,9 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from qtrader.audit.blocking_scanner import BlockingScanner
+
 
 @pytest.fixture
 def scanner():

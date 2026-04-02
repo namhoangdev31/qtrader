@@ -52,9 +52,9 @@ async def test_slippage_decomposition_buy() -> None:
     engine = SlippageDecomposition(bus, store)
     result = await engine.decompose_trace(trace_id, events)
     
-    assert result is not None # noqa: S101
-    assert result.payload.timing_cost == pytest.approx(20.0) # noqa: S101
-    assert result.payload.market_impact == pytest.approx(30.0) # noqa: S101
+    assert result is not None
+    assert result.payload.timing_cost == pytest.approx(20.0)
+    assert result.payload.market_impact == pytest.approx(30.0)
 
 
 @pytest.mark.asyncio
@@ -76,7 +76,7 @@ async def test_slippage_decomposition_no_fills() -> None:
     
     engine = SlippageDecomposition(bus, store)
     result = await engine.decompose_trace(trace_id, events)
-    assert result is None # noqa: S101
+    assert result is None
 
 
 @pytest.mark.asyncio
@@ -106,8 +106,8 @@ async def test_slippage_decomposition_mid_extraction_failure() -> None:
     
     engine = SlippageDecomposition(bus, store)
     result = await engine.decompose_trace(trace_id, events)
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
+    assert result is None
+    assert bus.publish.called
 
 
 @pytest.mark.asyncio
@@ -140,6 +140,6 @@ async def test_slippage_decomposition_sell() -> None:
     
     engine = SlippageDecomposition(bus, store)
     result = await engine.decompose_trace(trace_id, events)
-    assert result is not None # noqa: S101
-    assert result.payload.timing_cost == pytest.approx(20.0) # noqa: S101
-    assert result.payload.market_impact == pytest.approx(30.0) # noqa: S101
+    assert result is not None
+    assert result.payload.timing_cost == pytest.approx(20.0)
+    assert result.payload.market_impact == pytest.approx(30.0)

@@ -25,10 +25,10 @@ def test_allocator_sharpe_weighted_pass(allocator: CapitalAllocationEngine) -> N
 
     report = allocator.allocate_capital(strategies, total_capital=1000.0)
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["active_strategy_nodes"] == 10  # noqa: S101, PLR2004
+    assert report["result"] == "PASS"
+    assert report["metrics"]["active_strategy_nodes"] == 10
     for _sid, weight in report["distribution_map"].items():
-        assert weight == 0.1  # noqa: S101, PLR2004
+        assert weight == 0.1
 
 
 def test_allocator_strict_position_cap_enforcement(allocator: CapitalAllocationEngine) -> None:
@@ -45,9 +45,9 @@ def test_allocator_strict_position_cap_enforcement(allocator: CapitalAllocationE
 
     report = allocator.allocate_capital(strategies, total_capital=1000.0)
 
-    assert report["distribution_map"]["GOD_MODE"] == 0.2  # noqa: S101, PLR2004
-    assert report["metrics"]["max_concentration_score"] == 0.2  # noqa: S101, PLR2004
-    assert sum(report["distribution_map"].values()) == pytest.approx(1.0)  # noqa: S101
+    assert report["distribution_map"]["GOD_MODE"] == 0.2
+    assert report["metrics"]["max_concentration_score"] == 0.2
+    assert sum(report["distribution_map"].values()) == pytest.approx(1.0)
 
 
 def test_allocator_zero_performance_gating(allocator: CapitalAllocationEngine) -> None:
@@ -60,11 +60,11 @@ def test_allocator_zero_performance_gating(allocator: CapitalAllocationEngine) -
 
     report = allocator.allocate_capital(strategies, total_capital=1000.0)
 
-    assert report["metrics"]["active_strategy_nodes"] == 1  # noqa: S101
-    assert "GOOD" in report["distribution_map"]  # noqa: S101
-    assert report["distribution_map"]["GOOD"] == 0.2  # noqa: S101, PLR2004
+    assert report["metrics"]["active_strategy_nodes"] == 1
+    assert "GOOD" in report["distribution_map"]
+    assert report["distribution_map"]["GOOD"] == 0.2
     # Note: If only 1 strategy, it's capped at 20% (diversification veracity).
-    assert "BAD" not in report["distribution_map"]  # noqa: S101
+    assert "BAD" not in report["distribution_map"]
 
 
 def test_allocator_iterative_redistribution(allocator: CapitalAllocationEngine) -> None:
@@ -81,17 +81,17 @@ def test_allocator_iterative_redistribution(allocator: CapitalAllocationEngine) 
 
     report = allocator.allocate_capital(strategies, total_capital=1000.0)
 
-    assert report["distribution_map"]["H1"] == 0.2  # noqa: S101, PLR2004
-    assert report["distribution_map"]["H2"] == 0.2  # noqa: S101, PLR2004
-    assert sum(report["distribution_map"].values()) == pytest.approx(1.0)  # noqa: S101
+    assert report["distribution_map"]["H1"] == 0.2
+    assert report["distribution_map"]["H2"] == 0.2
+    assert sum(report["distribution_map"].values()) == pytest.approx(1.0)
 
 
 def test_allocator_empty_handling(allocator: CapitalAllocationEngine) -> None:
     """Verify that empty strategy sets result in SKIP/Principal Protection."""
     report = allocator.allocate_capital([], total_capital=1000.0)
 
-    assert report["result"] == "SKIP"  # noqa: S101
-    assert report["status"] == "ALLOCATION_EMPTY"  # noqa: S101
+    assert report["result"] == "SKIP"
+    assert report["status"] == "ALLOCATION_EMPTY"
 
 
 def test_allocator_telemetry_tracking(allocator: CapitalAllocationEngine) -> None:
@@ -100,6 +100,6 @@ def test_allocator_telemetry_tracking(allocator: CapitalAllocationEngine) -> Non
     allocator.allocate_capital(strategies, total_capital=1000.0)
 
     stats = allocator.get_allocation_telemetry()
-    assert stats["current_max_concentration"] == 0.1  # noqa: S101, PLR2004
-    assert stats["diversification_entropy"] == 0.9  # noqa: S101, PLR2004
-    assert stats["status"] == "ALLOCATION_GOVERNANCE"  # noqa: S101
+    assert stats["current_max_concentration"] == 0.1
+    assert stats["diversification_entropy"] == 0.9
+    assert stats["status"] == "ALLOCATION_GOVERNANCE"

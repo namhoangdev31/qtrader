@@ -1,8 +1,11 @@
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+
 from qtrader.core.event_bus import EventBus
 from qtrader.core.types import EventType
+
 
 @pytest.fixture
 def logger_mock():

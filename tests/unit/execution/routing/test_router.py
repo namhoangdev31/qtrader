@@ -36,8 +36,8 @@ def test_dynamic_router_selection_accuracy(execution_config: MagicMock) -> None:
     )
     
     # Binance should receive nearly 100% of the order
-    assert "Binance" in allocation  # noqa: S101
-    assert allocation["Binance"] > 9.9  # noqa: S101, PLR2004
+    assert "Binance" in allocation
+    assert allocation["Binance"] > 9.9
 
 
 def test_dynamic_router_splitting_logic(execution_config: MagicMock) -> None:
@@ -55,10 +55,10 @@ def test_dynamic_router_splitting_logic(execution_config: MagicMock) -> None:
         order_size=100.0, side="BUY", market_data=market_data, latencies=latencies
     )
     
-    assert "V1" in allocation  # noqa: S101
-    assert "V2" in allocation  # noqa: S101
-    assert allocation["V1"] == pytest.approx(50.0)  # noqa: S101
-    assert allocation["V2"] == pytest.approx(50.0)  # noqa: S101
+    assert "V1" in allocation
+    assert "V2" in allocation
+    assert allocation["V1"] == pytest.approx(50.0)
+    assert allocation["V2"] == pytest.approx(50.0)
 
 
 def test_dynamic_router_failsafe_recovery(execution_config: MagicMock) -> None:
@@ -78,7 +78,7 @@ def test_dynamic_router_failsafe_recovery(execution_config: MagicMock) -> None:
     )
     
     # Should fallback to the venue with best liquidity (Coinbase)
-    assert allocation["Coinbase"] == 10.0  # noqa: S101, PLR2004
+    assert allocation["Coinbase"] == 10.0
 
 
 def test_dynamic_router_penalty_resilience(execution_config: MagicMock) -> None:
@@ -97,11 +97,11 @@ def test_dynamic_router_penalty_resilience(execution_config: MagicMock) -> None:
         order_size=10.0, side="BUY", market_data=market_data, latencies=latencies
     )
     
-    assert "Coinbase" not in allocation  # noqa: S101
-    assert allocation["Binance"] == 10.0  # noqa: S101, PLR2004
+    assert "Coinbase" not in allocation
+    assert allocation["Binance"] == 10.0
 
 
 def test_dynamic_router_empty_market_data(execution_config: MagicMock) -> None:
     """Verify behavior with completely empty market inputs."""
     engine = DynamicRoutingEngine(execution_config)
-    assert engine.route(10.0, "BUY", {}, {}) == {}  # noqa: S101
+    assert engine.route(10.0, "BUY", {}, {}) == {}

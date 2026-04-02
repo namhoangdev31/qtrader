@@ -1,6 +1,9 @@
-import pytest
 from decimal import Decimal
-from qtrader.core.precision_validator import PrecisionValidator, PrecisionError
+
+import pytest
+
+from qtrader.core.precision_validator import PrecisionError, PrecisionValidator
+
 
 @pytest.fixture
 def validator():

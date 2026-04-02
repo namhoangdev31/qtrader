@@ -1,8 +1,11 @@
-import pytest
 import asyncio
 from unittest.mock import MagicMock
-from qtrader.core.system_state import state_manager, SystemState
-from qtrader.core.execution_guard import require_initialized, gate_registry
+
+import pytest
+
+from qtrader.core.execution_guard import gate_registry, require_initialized
+from qtrader.core.system_state import SystemState, state_manager
+
 
 @pytest.fixture(autouse=True)
 def reset_state():
@@ -59,7 +62,7 @@ def test_report_generation():
         pass
     
     import json
-    with open("qtrader/audit/guard_report.json", "r") as f:
+    with open("qtrader/audit/guard_report.json") as f:
         report = json.load(f)
     
     assert report["blocked_attempts"] > 0

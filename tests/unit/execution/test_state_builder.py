@@ -39,14 +39,14 @@ async def test_state_builder_compute_success() -> None:
     # 6. Fill Prob -> Heuristic
     # 7. Latency (Normalized) -> 5.0 / 100.0 = 0.05
 
-    assert len(state_vector) == STATE_DIM  # noqa: S101
-    assert state_vector[1] == pytest.approx(-0.3333333333)  # noqa: S101
-    assert state_vector[3] == pytest.approx(0.2)  # noqa: S101
-    assert state_vector[6] == pytest.approx(0.05)  # noqa: S101
+    assert len(state_vector) == STATE_DIM
+    assert state_vector[1] == pytest.approx(-0.3333333333)
+    assert state_vector[3] == pytest.approx(0.2)
+    assert state_vector[6] == pytest.approx(0.05)
 
     # Status Broadcast
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.EXECUTION_STATE_UPDATE  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.EXECUTION_STATE_UPDATE
 
 
 @pytest.mark.asyncio
@@ -58,8 +58,8 @@ async def test_state_builder_catastrophic_safety() -> None:
     state_vector = await builder.build({}, SYMBOL, VENUE)
 
     # Failsafe should prevent crashes and return zero vector
-    assert len(state_vector) == STATE_DIM  # noqa: S101
-    assert all(v == 0.0 for v in state_vector)  # noqa: S101
+    assert len(state_vector) == STATE_DIM
+    assert all(v == 0.0 for v in state_vector)
 
 
 @pytest.mark.asyncio
@@ -70,8 +70,8 @@ async def test_state_builder_failure_handling() -> None:
     # Malformed state (None causing TypeError in math logic)
     state_vector = await builder.build(None, SYMBOL, VENUE)  # type: ignore
 
-    assert len(state_vector) == STATE_DIM  # noqa: S101
-    assert all(v == 0.0 for v in state_vector)  # noqa: S101
+    assert len(state_vector) == STATE_DIM
+    assert all(v == 0.0 for v in state_vector)
 
 
 @pytest.mark.asyncio
@@ -94,4 +94,4 @@ async def test_state_builder_performance_latency() -> None:
 
     avg_latency_ms = (end - start) / 1000.0 * 1000.0
     # Strict industrial threshold: 1ms
-    assert avg_latency_ms < 1.0  # noqa: S101
+    assert avg_latency_ms < 1.0

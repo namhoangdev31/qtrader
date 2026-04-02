@@ -17,9 +17,9 @@ def test_failover_simulator_successful_pass(simulator: FailoverSimulator) -> Non
         data_integrity_verified=True,
     )
 
-    assert report["result"] == "SUCCESS"  # noqa: S101
-    assert report["metrics"]["failover_latency_s"] == 2.3  # noqa: S101, PLR2004
-    assert report["metrics"]["availability_target_met"] is True  # noqa: S101
+    assert report["result"] == "SUCCESS"
+    assert report["metrics"]["failover_latency_s"] == 2.3
+    assert report["metrics"]["availability_target_met"] is True
 
 
 def test_failover_simulator_latency_threshold_fail(simulator: FailoverSimulator) -> None:
@@ -30,8 +30,8 @@ def test_failover_simulator_latency_threshold_fail(simulator: FailoverSimulator)
         data_integrity_verified=True,
     )
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["metrics"]["availability_target_met"] is False  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["metrics"]["availability_target_met"] is False
 
 
 def test_failover_simulator_data_loss_fail(simulator: FailoverSimulator) -> None:
@@ -42,7 +42,7 @@ def test_failover_simulator_data_loss_fail(simulator: FailoverSimulator) -> None
         data_integrity_verified=False,  # INCONSISTENCY (Data loss)
     )
 
-    assert report["result"] == "FAIL"  # noqa: S101
+    assert report["result"] == "FAIL"
 
 
 def test_failover_simulator_resilience_telemetry(simulator: FailoverSimulator) -> None:
@@ -57,9 +57,9 @@ def test_failover_simulator_resilience_telemetry(simulator: FailoverSimulator) -
     simulator.simulate_failover(db_scenario, simulated_transition_ms=1500.0)
 
     stats = simulator.get_resilience_telemetry()
-    assert stats["total_failover_events"] == 2  # noqa: S101, PLR2004
-    assert stats["cumulative_downtime_seconds"] == 2.0  # noqa: S101, PLR2004
-    assert stats["status"] == "OPERATIONAL_RESILIENCE"  # noqa: S101
+    assert stats["total_failover_events"] == 2
+    assert stats["cumulative_downtime_seconds"] == 2.0
+    assert stats["status"] == "OPERATIONAL_RESILIENCE"
 
 
 def test_failover_simulator_artifact_integrity(
@@ -70,6 +70,6 @@ def test_failover_simulator_artifact_integrity(
         FailureScenario.NETWORK_PARTITION, simulated_transition_ms=100.0
     )
 
-    assert "scenario" in report["certification"]  # noqa: S101
-    assert report["certification"]["scenario"] == "NETWORK_PARTITION"  # noqa: S101
-    assert "real_sim_duration_ms" in report["certification"]  # noqa: S101
+    assert "scenario" in report["certification"]
+    assert report["certification"]["scenario"] == "NETWORK_PARTITION"
+    assert "real_sim_duration_ms" in report["certification"]

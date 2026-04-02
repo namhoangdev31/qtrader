@@ -2,12 +2,14 @@
 Level 1 Critical Tests for SmartOrderRouter (execution/smart_router.py)
 Covers: best price routing, smart routing, order splitting, latency/fee factors.
 """
-import pytest
-from decimal import Decimal
 from datetime import datetime
-from unittest.mock import MagicMock, AsyncMock
-from qtrader.execution.smart_router import SmartOrderRouter
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from qtrader.core.types import OrderEvent  # Adjust import as needed
+from qtrader.execution.smart_router import SmartOrderRouter
 
 
 def make_order(order_id="o1", symbol="BTC", side="BUY", quantity=Decimal("1.0"),

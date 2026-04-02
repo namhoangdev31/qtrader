@@ -16,10 +16,10 @@ def test_key_creation_and_registration(rotator: KeyRotator) -> None:
     """Verify that a new key can be registered and retrieved."""
     key_id = "EXCHANGE_API"
     val = rotator.create_key(key_id)
-    assert len(val) > 40  # noqa: S101, PLR2004 (Token-urlsafe 32 result length)
+    assert len(val) > 40
 
     report = rotator.get_rotation_report()
-    assert report["active_secrets"] == 1  # noqa: S101
+    assert report["active_secrets"] == 1
 
 
 def test_stale_key_identification(rotator: KeyRotator) -> None:
@@ -33,7 +33,7 @@ def test_stale_key_identification(rotator: KeyRotator) -> None:
     # Need to wait a tiny bit because create_key uses time.time()
     time.sleep(0.01)
     stale = rotator.identify_stale_keys()
-    assert kid in stale  # noqa: S101
+    assert kid in stale
 
 
 def test_rotation_logic_and_new_key_generation(rotator: KeyRotator) -> None:
@@ -43,11 +43,11 @@ def test_rotation_logic_and_new_key_generation(rotator: KeyRotator) -> None:
 
     # Rotate
     val_v2 = rotator.rotate_key(kid)
-    assert val_v1 != val_v2  # noqa: S101
+    assert val_v1 != val_v2
 
     report = rotator.get_rotation_report()
-    assert report["rotation_events"] == 1  # noqa: S101
-    assert report["active_secrets"] == 1  # noqa: S101
+    assert report["rotation_events"] == 1
+    assert report["active_secrets"] == 1
 
 
 def test_emergency_rotation_tracking(rotator: KeyRotator) -> None:
@@ -59,7 +59,7 @@ def test_emergency_rotation_tracking(rotator: KeyRotator) -> None:
     rotator.rotate_key(kid, urgent=True)
 
     report = rotator.get_rotation_report()
-    assert report["rotation_events"] == 1  # noqa: S101
+    assert report["rotation_events"] == 1
 
 
 def test_unauthorized_rotation_rejection(rotator: KeyRotator) -> None:
@@ -68,4 +68,4 @@ def test_unauthorized_rotation_rejection(rotator: KeyRotator) -> None:
         rotator.rotate_key("MISSING")
 
     report = rotator.get_rotation_report()
-    assert report["failed_rotations"] == 1  # noqa: S101
+    assert report["failed_rotations"] == 1

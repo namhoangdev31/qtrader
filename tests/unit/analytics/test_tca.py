@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-import polars as pl
 from datetime import datetime, timedelta
+
+import polars as pl
+import pytest
+
 from qtrader.analytics.tca_engine import TCAEngine
-from qtrader.analytics.tca_models import TradeCostComponents, TCAReport, get_tca_input_schema
+from qtrader.analytics.tca_models import TCAReport, TradeCostComponents, get_tca_input_schema
 
 
 def test_analyze_batch() -> None:

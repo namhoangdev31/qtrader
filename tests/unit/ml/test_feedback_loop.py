@@ -30,10 +30,10 @@ def test_feedback_high_quality_authorization(controller: FeedbackController) -> 
     }
     
     sample = controller.process_trade(trade, signal)
-    assert sample is not None  # noqa: S101
-    assert sample.signal_id == "S123"  # noqa: S101
+    assert sample is not None
+    assert sample.signal_id == "S123"
     # PnL = (110 - 90) * 10 = 200. Fees = 2.0 -> Net = 198.0
-    assert sample.net_reward == 198.0  # noqa: S101, PLR2004
+    assert sample.net_reward == 198.0
 
 
 def test_feedback_immature_rejection(controller: FeedbackController) -> None:
@@ -52,7 +52,7 @@ def test_feedback_immature_rejection(controller: FeedbackController) -> None:
     }
     
     sample = controller.process_trade(trade, signal)
-    assert sample is None  # noqa: S101
+    assert sample is None
 
 
 def test_feedback_noise_rejection_slippage(controller: FeedbackController) -> None:
@@ -71,7 +71,7 @@ def test_feedback_noise_rejection_slippage(controller: FeedbackController) -> No
     }
     
     sample = controller.process_trade(trade, signal)
-    assert sample is None  # noqa: S101
+    assert sample is None
 
 
 def test_feedback_noise_rejection_fill(controller: FeedbackController) -> None:
@@ -90,7 +90,7 @@ def test_feedback_noise_rejection_fill(controller: FeedbackController) -> None:
     }
     
     sample = controller.process_trade(trade, signal)
-    assert sample is None  # noqa: S101
+    assert sample is None
 
 
 def test_feedback_telemetry(controller: FeedbackController) -> None:
@@ -112,5 +112,5 @@ def test_feedback_telemetry(controller: FeedbackController) -> None:
     controller.process_trade(trade_noise, signal)
     
     report = controller.get_feedback_report()
-    assert report["processed_count"] == 2  # noqa: S101, PLR2004
-    assert report["noise_ratio"] == 0.5  # noqa: S101, PLR2004
+    assert report["processed_count"] == 2
+    assert report["noise_ratio"] == 0.5

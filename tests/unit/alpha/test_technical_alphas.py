@@ -1,7 +1,9 @@
-import pytest
-import polars as pl
 import numpy as np
-from qtrader.alpha.technical import MomentumAlpha, MeanReversionAlpha, TrendAlpha
+import polars as pl
+import pytest
+
+from qtrader.alpha.technical import MeanReversionAlpha, MomentumAlpha, TrendAlpha
+
 
 def test_momentum_alpha():
     df = pl.DataFrame({

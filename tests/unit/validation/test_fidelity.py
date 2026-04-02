@@ -43,14 +43,14 @@ async def test_fidelity_engine_compute_success() -> None:
 
     # 1. Validation of Fidelity Score
     # error = 1.0 per trade, bt_pnl = 10.0. score approx 0.9.
-    assert event is not None  # noqa: S101
-    assert event.payload.fidelity_score == pytest.approx(0.9)  # noqa: S101
-    assert event.payload.pnl_diff == pytest.approx(1.0)  # noqa: S101
-    assert event.payload.price_diff == pytest.approx(1.0)  # noqa: S101
+    assert event is not None
+    assert event.payload.fidelity_score == pytest.approx(0.9)
+    assert event.payload.pnl_diff == pytest.approx(1.0)
+    assert event.payload.price_diff == pytest.approx(1.0)
 
     # 2. Validation of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.FIDELITY_REPORT  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.FIDELITY_REPORT
 
 
 @pytest.mark.asyncio
@@ -64,7 +64,7 @@ async def test_fidelity_engine_zero_trade_failure() -> None:
 
     event = await engine.compute_fidelity(STRATEGY_ID, bt, live)  # type: ignore
 
-    assert event is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.FIDELITY_ERROR  # noqa: S101
-    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)  # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.FIDELITY_ERROR
+    assert "SYSTEM_FAILURE" in str(bus.publish.call_args)

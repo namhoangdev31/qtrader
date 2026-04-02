@@ -71,13 +71,13 @@ def test_complete_trade_lifecycle_reconstruction() -> None:
     
     record = auditor.build(events)
     
-    assert record.status == "COMPLETED" or True # noqa: S101
-    assert record.symbol == BTC_SYMBOL # noqa: S101
-    assert record.trace_id == trace_id # noqa: S101
-    assert record.decision_time == t1 # noqa: S101
-    assert record.execution_time == t3 # noqa: S101
-    assert record.executed_price == price_fill # noqa: S101
-    assert record.pnl == pnl_realized # noqa: S101
+    assert record.status == "COMPLETED" or True
+    assert record.symbol == BTC_SYMBOL
+    assert record.trace_id == trace_id
+    assert record.decision_time == t1
+    assert record.execution_time == t3
+    assert record.executed_price == price_fill
+    assert record.pnl == pnl_realized
 
 
 def test_reconstruction_with_rejection() -> None:
@@ -107,10 +107,10 @@ def test_reconstruction_with_rejection() -> None:
     
     record = auditor.build(events)
     
-    assert record.status == "REJECTED" # noqa: S101
-    assert record.symbol == ETH_SYMBOL # noqa: S101
-    assert record.execution_time is None # noqa: S101
-    assert record.pnl == 0.0 # noqa: S101
+    assert record.status == "REJECTED"
+    assert record.symbol == ETH_SYMBOL
+    assert record.execution_time is None
+    assert record.pnl == 0.0
 
 
 def test_incomplete_lifecycle_detection() -> None:
@@ -131,9 +131,9 @@ def test_incomplete_lifecycle_detection() -> None:
     
     record = auditor.build(events)
     
-    assert record.status == "INCOMPLETE" # noqa: S101
-    assert record.symbol == SOL_SYMBOL # noqa: S101
-    assert record.execution_time is None # noqa: S101
+    assert record.status == "INCOMPLETE"
+    assert record.symbol == SOL_SYMBOL
+    assert record.execution_time is None
 
 
 def test_manual_pnl_calculation() -> None:
@@ -167,8 +167,8 @@ def test_manual_pnl_calculation() -> None:
     
     record = auditor.build(events)
     
-    assert record.status == "COMPLETED" # noqa: S101
-    assert record.pnl == expected_pnl # noqa: S101
+    assert record.status == "COMPLETED"
+    assert record.pnl == expected_pnl
 
 
 def test_empty_events_raises_error() -> None:
@@ -185,4 +185,4 @@ def test_execution_latency_calculation() -> None:
     t_start = 1000
     t_end = 2500
     expected = 1500
-    assert auditor.execution_latency(t_end, t_start) == expected # noqa: S101
+    assert auditor.execution_latency(t_end, t_start) == expected

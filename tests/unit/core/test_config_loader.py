@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
 import yaml
-from pathlib import Path
+
 from qtrader.core.config_loader import ConfigLoader, QTraderConfig
+
 
 @pytest.fixture
 def valid_config_dict():

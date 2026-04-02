@@ -4,7 +4,6 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
-from qtrader.core.bus import EventBus
 from qtrader.data.pipeline.base import DataPipeline
 
 __all__ = ["BacktestEngine"]
@@ -12,7 +11,8 @@ __all__ = ["BacktestEngine"]
 log = logging.getLogger(__name__)
 
 
-from qtrader.core.orchestrator import TradingOrchestrator, SystemState
+from qtrader.core.orchestrator import TradingOrchestrator
+
 
 @dataclass(slots=True)
 class BacktestEngine:

@@ -20,10 +20,10 @@ def test_rbac_hierarchy_inheritance() -> None:
     set_context_user("admin_user", Role.ADMIN)
 
     # ADMIN should have EXECUTE_TRADE (inherited via TRADER in hierarchy)
-    assert RBACProcessor.check_access(Permission.EXECUTE_TRADE) is True  # noqa: S101
+    assert RBACProcessor.check_access(Permission.EXECUTE_TRADE) is True
 
     # ADMIN should have OVERRIDE_RISK (explicit)
-    assert RBACProcessor.check_access(Permission.OVERRIDE_RISK) is True  # noqa: S101
+    assert RBACProcessor.check_access(Permission.OVERRIDE_RISK) is True
 
 
 def test_rbac_deny_by_default() -> None:
@@ -31,10 +31,10 @@ def test_rbac_deny_by_default() -> None:
     set_context_user("trader_user", Role.TRADER)
 
     # TRADER cannot OVERRIDE_RISK
-    assert RBACProcessor.check_access(Permission.OVERRIDE_RISK) is False  # noqa: S101
+    assert RBACProcessor.check_access(Permission.OVERRIDE_RISK) is False
 
     # TRADER cannot MANAGE_SYSTEM
-    assert RBACProcessor.check_access(Permission.MANAGE_SYSTEM) is False  # noqa: S101
+    assert RBACProcessor.check_access(Permission.MANAGE_SYSTEM) is False
 
 
 def test_rbac_separation_of_duties_violation() -> None:
@@ -44,13 +44,13 @@ def test_rbac_separation_of_duties_violation() -> None:
 
     # 1. OK: Approve someone else's strategy
     is_ok = RBACProcessor.check_access(Permission.APPROVE_STRATEGY, resource_owner_id="trader_A")
-    assert is_ok is True  # noqa: S101
+    assert is_ok is True
 
     # 2. DENY: Approve own strategy (Violation)
     is_denied = RBACProcessor.check_access(
         Permission.APPROVE_STRATEGY, resource_owner_id="risk_manager_1"
     )
-    assert is_denied is False  # noqa: S101
+    assert is_denied is False
 
 
 @pytest.mark.asyncio
@@ -63,7 +63,7 @@ async def test_rbac_required_decorator_success() -> None:
         return f"Order placed for {symbol}"
 
     result = await place_order("AAPL")
-    assert result == "Order placed for AAPL"  # noqa: S101
+    assert result == "Order placed for AAPL"
 
 
 @pytest.mark.asyncio

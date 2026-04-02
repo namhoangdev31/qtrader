@@ -1,7 +1,10 @@
-import pytest
 from decimal import Decimal
+
+import pytest
+
 from qtrader.core.decimal_adapter import d
 from qtrader.core.financial_engine import financial_authority
+
 
 def test_financial_engine_pnl_exact():
     # Buy at 45000.0, Sell at 45100.5, Quantity 1.25

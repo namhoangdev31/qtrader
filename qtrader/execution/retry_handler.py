@@ -1,10 +1,10 @@
 import asyncio
 import logging
-from datetime import datetime
 from typing import Any
 
 from qtrader.core.event import EventType, RetryOrderEvent
 from qtrader.core.types import EventBusProtocol
+
 
 class RetryHandler:
     """Handles event-driven retries for failed order submissions."""

@@ -61,9 +61,9 @@ async def test_venue_ranking_comparison() -> None:
     
     results = await engine.process_tca_results(events)
     
-    assert len(results) == 2  # noqa: S101, PLR2004
-    assert results[0].payload.venue == "COINBASE" # noqa: S101
-    assert results[0].payload.rank == 1 # noqa: S101
+    assert len(results) == 2
+    assert results[0].payload.venue == "COINBASE"
+    assert results[0].payload.rank == 1
 
 
 @pytest.mark.asyncio
@@ -94,8 +94,8 @@ async def test_venue_ranking_rolling_window() -> None:
         ]
         results = await engine.process_tca_results(events)
     
-    assert len(engine._history["V"]) == 2  # noqa: S101, PLR2004
-    assert results[0].payload.metrics["avg_is"] == 20.0  # From i=2 # noqa: S101, PLR2004
+    assert len(engine._history["V"]) == 2
+    assert results[0].payload.metrics["avg_is"] == 20.0  # From i=2
 
 
 @pytest.mark.asyncio
@@ -114,7 +114,7 @@ async def test_venue_ranking_edge_cases() -> None:
         )
     )
     results = await engine.process_tca_results([ev_unknown])
-    assert results == [] # noqa: S101
+    assert results == []
     
     # 2. Incomplete Batch (IS only, no SLIP for venue)
     ev_is = ImplementationShortfallEvent(
@@ -126,8 +126,8 @@ async def test_venue_ranking_edge_cases() -> None:
         )
     )
     results = await engine.process_tca_results([ev_is])
-    assert results == [] # noqa: S101
+    assert results == []
     
     # 3. System Error (None events)
     results = await engine.process_tca_results(None) # type: ignore
-    assert results == [] # noqa: S101
+    assert results == []

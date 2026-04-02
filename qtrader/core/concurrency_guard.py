@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict
-from typing import Any, Coroutine, Dict, Optional, TypeVar
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 from loguru import logger
 
@@ -22,11 +23,11 @@ class ConcurrencyGuard:
     Protects the 100ms latency budget by monitoring lock contention.
     """
 
-    _instance: Optional[ConcurrencyGuard] = None
+    _instance: ConcurrencyGuard | None = None
 
     def __init__(self) -> None:
-        self._locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        self._held_since: Dict[str, float] = {}
+        self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._held_since: dict[str, float] = {}
         self._contention_threshold_ms: float = 50.0 # Critical threshold for a single lock
 
     @classmethod

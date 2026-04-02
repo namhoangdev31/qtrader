@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -15,8 +14,9 @@ if TYPE_CHECKING:
     from qtrader.oms.order_management_system import UnifiedOMS
 
 
-from qtrader.core.event import EventType, MarketDataEvent
+from qtrader.core.event import EventType
 from qtrader.core.event_bus import EventBus
+
 
 class ReconciliationService:
     """Service for bidirectional synchronization between local OMS and exchange.

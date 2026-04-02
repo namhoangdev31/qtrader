@@ -30,9 +30,9 @@ def test_execution_consistency_alignment_pass(
 
     report = validator.validate_execution_lineage(signals, fills)
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["signals_audited"] == 1  # noqa: S101
-    assert report["metrics"]["average_slippage_impact"] == 0.05  # noqa: S101, PLR2004
+    assert report["result"] == "PASS"
+    assert report["metrics"]["signals_audited"] == 1
+    assert report["metrics"]["average_slippage_impact"] == 0.05
 
 
 def test_execution_consistency_size_mismatch_fail(
@@ -47,8 +47,8 @@ def test_execution_consistency_size_mismatch_fail(
 
     report = validator.validate_execution_lineage(signals, fills)
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["lineage_audit"][0]["metrics"]["size_error"] == 1.0  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["lineage_audit"][0]["metrics"]["size_error"] == 1.0
 
 
 def test_execution_consistency_timing_latency_fail(
@@ -69,8 +69,8 @@ def test_execution_consistency_timing_latency_fail(
 
     report = validator.validate_execution_lineage(signals, fills)
 
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["lineage_audit"][0]["metrics"]["latency_ms"] == 2000.0  # noqa: S101, PLR2004
+    assert report["result"] == "FAIL"
+    assert report["lineage_audit"][0]["metrics"]["latency_ms"] == 2000.0
 
 
 def test_execution_consistency_side_dissonance_fail(
@@ -83,7 +83,7 @@ def test_execution_consistency_side_dissonance_fail(
 
     report = validator.validate_execution_lineage(signals, fills)
 
-    assert report["result"] == "FAIL"  # noqa: S101
+    assert report["result"] == "FAIL"
 
 
 def test_execution_consistency_governance_telemetry(
@@ -102,9 +102,9 @@ def test_execution_consistency_governance_telemetry(
     )  # Fail
 
     stats = validator.get_consistency_telemetry()
-    assert stats["lifecycle_mismatch_rate"] == 50.0  # noqa: S101, PLR2004
-    assert stats["total_slippage_drift"] == 0.5  # noqa: S101, PLR2004
-    assert stats["status"] == "EXECUTION_GOVERNANCE"  # noqa: S101
+    assert stats["lifecycle_mismatch_rate"] == 50.0
+    assert stats["total_slippage_drift"] == 0.5
+    assert stats["status"] == "EXECUTION_GOVERNANCE"
 
 
 def test_execution_consistency_orphan_and_missing_handling(
@@ -116,11 +116,11 @@ def test_execution_consistency_orphan_and_missing_handling(
     signals: list[dict[str, Any]] = []
     fills = [{"lineage_id": "ORPHAN", "side": "BUY", "size": 1.0, "price": 10, "timestamp": now}]
     report = validator.validate_execution_lineage(signals, fills)
-    assert report["result"] == "PASS"  # noqa: S101
+    assert report["result"] == "PASS"
 
     # 2. Missing Link (Signal without Fill) - Failure case
     signals = [{"lineage_id": "MISSING", "side": "BUY", "size": 1.0, "price": 10, "timestamp": now}]
     fills = []
     report = validator.validate_execution_lineage(signals, fills)
-    assert report["result"] == "FAIL"  # noqa: S101
-    assert report["lineage_audit"][0]["violation"] == "LINEAGE_BREAK"  # noqa: S101
+    assert report["result"] == "FAIL"
+    assert report["lineage_audit"][0]["violation"] == "LINEAGE_BREAK"

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import decimal
 from decimal import Decimal
-from typing import Any, Union
+from typing import Any
 
 from loguru import logger
 

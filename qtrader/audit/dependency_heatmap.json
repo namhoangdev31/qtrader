@@ -1,0 +1,18 @@
+{
+  "total_modules": 87,
+  "orphans": 6,
+  "redundant_pairs": 5,
+  "status": "FRAGMENTED",
+  "heatmap": {
+    "qtrader.core.orchestrator": "CORE (High)",
+    "qtrader.core.trace_authority": "CORE (High)",
+    "qtrader.core.config_manager": "CORE (High)",
+    "qtrader.core.fail_fast_engine": "CORE (High)",
+    "qtrader.core.decimal_adapter": "CORE (High)",
+    "qtrader.core.execution_wrapper": "CORE (High)",
+    "qtrader.strategy.ensemble_strategy": "RUNNING (Medium)",
+    "qtrader.strategy.probabilistic_strategy": "ORPHAN (None)",
+    "qtrader.analytics.drift": "LOW (1 Importer)",
+    "qtrader.analytics.drift_detector": "ORPHAN (None)"
+  }
+}

@@ -18,9 +18,9 @@ def test_kill_drawdown_veracity(kill_switch: GlobalKillSwitch) -> None:
         current_anomaly_score=0,
     )
 
-    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
-    assert "CRITICAL_DRAWDOWN_BREACH" in report["state"]["kill_reason"]  # noqa: S101
-    assert report["state"]["is_halted"] is True  # noqa: S101
+    assert report["status"] == "KILL_SWITCH_ACTIVE"
+    assert "CRITICAL_DRAWDOWN_BREACH" in report["state"]["kill_reason"]
+    assert report["state"]["is_halted"] is True
 
 
 def test_kill_capital_loss_precision(kill_switch: GlobalKillSwitch) -> None:
@@ -32,8 +32,8 @@ def test_kill_capital_loss_precision(kill_switch: GlobalKillSwitch) -> None:
         current_anomaly_score=0,
     )
 
-    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
-    assert "MAX_LOSS_EXCEEDED" in report["state"]["kill_reason"]  # noqa: S101
+    assert report["status"] == "KILL_SWITCH_ACTIVE"
+    assert "MAX_LOSS_EXCEEDED" in report["state"]["kill_reason"]
 
 
 def test_kill_anomaly_intensity_trigger(kill_switch: GlobalKillSwitch) -> None:
@@ -45,8 +45,8 @@ def test_kill_anomaly_intensity_trigger(kill_switch: GlobalKillSwitch) -> None:
         current_anomaly_score=0.95,
     )
 
-    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
-    assert "SEVERE_ANOMALY" in report["state"]["kill_reason"]  # noqa: S101
+    assert report["status"] == "KILL_SWITCH_ACTIVE"
+    assert "SEVERE_ANOMALY" in report["state"]["kill_reason"]
 
 
 def test_kill_manual_trigger_reliability(kill_switch: GlobalKillSwitch) -> None:
@@ -59,8 +59,8 @@ def test_kill_manual_trigger_reliability(kill_switch: GlobalKillSwitch) -> None:
         manual_trigger=True,
     )
 
-    assert report["status"] == "KILL_SWITCH_ACTIVE"  # noqa: S101
-    assert "MANUAL_HALT" in report["state"]["kill_reason"]  # noqa: S101
+    assert report["status"] == "KILL_SWITCH_ACTIVE"
+    assert "MANUAL_HALT" in report["state"]["kill_reason"]
 
 
 def test_kill_persistent_state_veracity(kill_switch: GlobalKillSwitch) -> None:
@@ -80,8 +80,8 @@ def test_kill_persistent_state_veracity(kill_switch: GlobalKillSwitch) -> None:
     )
 
     # State should remain HALTED.
-    assert report["status"] == "ALREADY_HALTED"  # noqa: S101
-    assert report["reason"] != ""  # noqa: S101
+    assert report["status"] == "ALREADY_HALTED"
+    assert report["reason"] != ""
 
 
 def test_kill_telemetry_tracking(kill_switch: GlobalKillSwitch) -> None:
@@ -93,5 +93,5 @@ def test_kill_telemetry_tracking(kill_switch: GlobalKillSwitch) -> None:
     )
 
     stats = kill_switch.get_kill_telemetry()
-    assert stats["is_system_halted"] is True  # noqa: S101
-    assert stats["kill_reason_captured"] != ""  # noqa: S101
+    assert stats["is_system_halted"] is True
+    assert stats["kill_reason_captured"] != ""

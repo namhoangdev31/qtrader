@@ -17,9 +17,9 @@ def test_governor_regulated_scaling_pass(governor: CapitalScalingGovernor) -> No
         target_growth=0.05, stability_score=0.2, volatility=10.0, metrics=metrics
     )
 
-    assert report["result"] == "PASS"  # noqa: S101
-    assert report["metrics"]["regulated_scale_factor"] == 0.02  # noqa: S101, PLR2004
-    assert report["metrics"]["stability_vol_efficiency"] == 0.02  # noqa: S101, PLR2004
+    assert report["result"] == "PASS"
+    assert report["metrics"]["regulated_scale_factor"] == 0.02
+    assert report["metrics"]["stability_vol_efficiency"] == 0.02
 
 
 def test_governor_drawdown_freeze(governor: CapitalScalingGovernor) -> None:
@@ -29,9 +29,9 @@ def test_governor_drawdown_freeze(governor: CapitalScalingGovernor) -> None:
         target_growth=0.05, stability_score=1.0, volatility=1.0, metrics=metrics
     )
 
-    assert report["result"] == "BLOCK"  # noqa: S101
-    assert report["metrics"]["regulated_scale_factor"] == 0.0  # noqa: S101
-    assert report["certification"]["governance_mode"] == "DRAWDOWN_FREEZE"  # noqa: S101
+    assert report["result"] == "BLOCK"
+    assert report["metrics"]["regulated_scale_factor"] == 0.0
+    assert report["certification"]["governance_mode"] == "DRAWDOWN_FREEZE"
 
 
 def test_governor_volatility_spike_reduction(governor: CapitalScalingGovernor) -> None:
@@ -44,9 +44,9 @@ def test_governor_volatility_spike_reduction(governor: CapitalScalingGovernor) -
         metrics=metrics,  # Spike
     )
 
-    assert report["result"] == "BLOCK"  # noqa: S101
-    assert report["metrics"]["regulated_scale_factor"] == 0.0  # noqa: S101
-    assert report["certification"]["governance_mode"] == "VOLATILITY_THROTTLE"  # noqa: S101
+    assert report["result"] == "BLOCK"
+    assert report["metrics"]["regulated_scale_factor"] == 0.0
+    assert report["certification"]["governance_mode"] == "VOLATILITY_THROTTLE"
 
 
 def test_governor_stability_weighted_expansion(governor: CapitalScalingGovernor) -> None:
@@ -57,7 +57,7 @@ def test_governor_stability_weighted_expansion(governor: CapitalScalingGovernor)
         target_growth=0.05, stability_score=10.0, volatility=1.0, metrics=metrics
     )
 
-    assert report["metrics"]["regulated_scale_factor"] == 0.05  # noqa: S101, PLR2004
+    assert report["metrics"]["regulated_scale_factor"] == 0.05
 
 
 def test_governor_telemetry_tracking(governor: CapitalScalingGovernor) -> None:
@@ -69,6 +69,6 @@ def test_governor_telemetry_tracking(governor: CapitalScalingGovernor) -> None:
     governor.regulate_expansion(0.05, 1.0, 1.0, metrics_ok)  # Pass
 
     stats = governor.get_governance_telemetry()
-    assert stats["total_scaling_blocks"] == 1  # noqa: S101
-    assert stats["avg_regulated_expansion_rate"] == 0.025  # noqa: S101, PLR2004
-    assert stats["status"] == "GOVERNANCE_HEALTH"  # noqa: S101
+    assert stats["total_scaling_blocks"] == 1
+    assert stats["avg_regulated_expansion_rate"] == 0.025
+    assert stats["status"] == "GOVERNANCE_HEALTH"

@@ -1,7 +1,19 @@
-import pytest
+import sys
 from decimal import Decimal
-from qtrader.core.state_store import SystemState, Position
+
+import pytest
+
+from qtrader.core.state_store import Position, SystemState
 from qtrader.portfolio.nav_engine import NAVEngine
+
+print(f"DEBUG: sys.path = {sys.path}")
+print(f"DEBUG: NAVEngine file = {NAVEngine.__module__}")
+# Use a more descriptive attribute if available
+try:
+    import inspect
+    print(f"DEBUG: NAVEngine source file = {inspect.getfile(NAVEngine)}")
+except Exception as e:
+    print(f"DEBUG: inspect error = {e}")
 
 
 def test_nav_calculation_accuracy():

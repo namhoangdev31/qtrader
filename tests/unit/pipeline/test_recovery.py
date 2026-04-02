@@ -1,9 +1,12 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from qtrader.core.event import EventType, GapFreeMarketEvent, RecoveryCompletedEvent
-from qtrader.data.pipeline.recovery import RecoveryService
-from qtrader.data.market.snapshot_recovery import RecoveryEngine
 from qtrader.core.event_bus import EventBus
+from qtrader.data.market.snapshot_recovery import RecoveryEngine
+from qtrader.data.pipeline.recovery import RecoveryService
+
 
 @pytest.fixture
 def mock_engine():

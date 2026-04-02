@@ -19,8 +19,8 @@ def test_determinism_validator_bit_perfect_reproducibility(
 
     report = validator.validate_reproducibility(dataset, random_seed=42)
 
-    assert report["consistent"] is True  # noqa: S101
-    assert (  # noqa: S101
+    assert report["consistent"] is True
+    assert (
         report["metrics"]["Trial_1_Artifact"] == report["metrics"]["Trial_2_Artifact"]
     )
 
@@ -31,7 +31,7 @@ def test_determinism_validator_seed_dependency_detection(
     """Verify that identical trial cycles produce identical results."""
     dataset = [{"price": 1000.0}] * 10
     report = validator.validate_reproducibility(dataset, random_seed=12345)
-    assert report["consistent"] is True  # noqa: S101
+    assert report["consistent"] is True
 
 
 def test_determinism_validator_mismatch_escalation(
@@ -45,10 +45,10 @@ def test_determinism_validator_mismatch_escalation(
         m_rand.side_effect = [0.1, 0.2]
         report = validator.validate_reproducibility([{"price": 10.0}])
 
-    assert report["consistent"] is False  # noqa: S101
+    assert report["consistent"] is False
     stats = validator.get_determinism_telemetry()
-    assert stats["verification_cycle_count"] == 1  # noqa: S101
-    assert stats["mismatch_detected"] is True  # noqa: S101
+    assert stats["verification_cycle_count"] == 1
+    assert stats["mismatch_detected"] is True
 
 
 def test_determinism_validator_artifact_construction(
@@ -58,8 +58,8 @@ def test_determinism_validator_artifact_construction(
     report = validator.validate_reproducibility([{"price": 500.0}], random_seed=1)
 
     metrics = report["metrics"]["Trial_1_Artifact"]
-    assert "terminal_pnl" in metrics  # noqa: S101
-    assert "ordered_identifiers" in metrics  # noqa: S101
-    assert (  # noqa: S101
+    assert "terminal_pnl" in metrics
+    assert "ordered_identifiers" in metrics
+    assert (
         report["certification"]["verification_duration_ms"] >= 0.0
     )

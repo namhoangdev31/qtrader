@@ -19,8 +19,8 @@ def test_recovery_system_fault_halt(recovery: RecoverySystem) -> None:
         description="BROKER_DISCONNECT",
     )
     result = recovery.propose_recovery(event)
-    assert result["action"] == RecoveryAction.HALT_TRADING  # noqa: S101
-    assert "BROKER_DISCONNECT" in result["reason"]  # noqa: S101
+    assert result["action"] == RecoveryAction.HALT_TRADING
+    assert "BROKER_DISCONNECT" in result["reason"]
 
 
 def test_recovery_pnl_isolation(recovery: RecoverySystem) -> None:
@@ -33,8 +33,8 @@ def test_recovery_pnl_isolation(recovery: RecoverySystem) -> None:
         description="MAX_DRAWDOWN_REACHED",
     )
     result = recovery.propose_recovery(event)
-    assert result["action"] == RecoveryAction.ISOLATE_STRATEGY  # noqa: S101
-    assert result["strategy_id"] == "S1"  # noqa: S101
+    assert result["action"] == RecoveryAction.ISOLATE_STRATEGY
+    assert result["strategy_id"] == "S1"
 
 
 def test_recovery_risk_containment(recovery: RecoverySystem) -> None:
@@ -47,8 +47,8 @@ def test_recovery_risk_containment(recovery: RecoverySystem) -> None:
         description="SKEWNESS_ANOMALY",
     )
     result = recovery.propose_recovery(event)
-    assert result["action"] == RecoveryAction.REDUCE_EXPOSURE  # noqa: S101
-    assert "RISK_DEGRADATION" in result["reason"]  # noqa: S101
+    assert result["action"] == RecoveryAction.REDUCE_EXPOSURE
+    assert "RISK_DEGRADATION" in result["reason"]
 
 
 def test_recovery_normal_conditions(recovery: RecoverySystem) -> None:
@@ -61,7 +61,7 @@ def test_recovery_normal_conditions(recovery: RecoverySystem) -> None:
         description="HEALTHY",
     )
     result = recovery.propose_recovery(event)
-    assert result["action"] == RecoveryAction.NO_ACTION  # noqa: S101
+    assert result["action"] == RecoveryAction.NO_ACTION
 
 
 def test_recovery_telemetry_report(recovery: RecoverySystem) -> None:
@@ -72,5 +72,5 @@ def test_recovery_telemetry_report(recovery: RecoverySystem) -> None:
     recovery.propose_recovery(FailureEvent("S", -10000, False, False, "LOST"))
 
     report = recovery.get_recovery_report()
-    assert report["total_recoveries"] == 2  # noqa: S101, PLR2004
-    assert report["last_recovery_latency_ms"] < 1000.0  # noqa: S101, PLR2004
+    assert report["total_recoveries"] == 2
+    assert report["last_recovery_latency_ms"] < 1000.0

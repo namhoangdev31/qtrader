@@ -1,15 +1,18 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from qtrader.core.event import EventType, MarketDataEvent, GapFreeMarketEvent
+
+import pytest
 from qtrader.data.pipeline.orchestrator import MarketPipelineOrchestrator
-from qtrader.oms.event_store import EventStore
+
+from qtrader.core.event import EventType, GapFreeMarketEvent, MarketDataEvent
 from qtrader.core.event_bus import EventBus
-from qtrader.data.pipeline.base import DataNormalizer
+from qtrader.data.market.clock_sync import ClockSync
 from qtrader.data.pipeline.arbitrator import Arbitrator
+from qtrader.data.pipeline.base import DataNormalizer
 from qtrader.data.pipeline.gap_detector import GapDetector
 from qtrader.data.pipeline.recovery import RecoveryService
-from qtrader.data.market.clock_sync import ClockSync
 from qtrader.data.quality_gate import DataQualityGate
+from qtrader.oms.event_store import EventStore
+
 
 @pytest.fixture
 def mock_store():

@@ -1,7 +1,10 @@
 import statistics
 import time
+
 import pytest
+
 from qtrader.monitoring.metrics_collector import MetricsCollector
+
 
 @pytest.fixture
 def collector():

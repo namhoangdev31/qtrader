@@ -6,11 +6,10 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from qtrader.core.events import BaseEvent, EventType
-from qtrader.core.partition_manager import PartitionManager
 from qtrader.core.backpressure_controller import BackpressureController
 from qtrader.core.event_store import BaseEventStore
-
+from qtrader.core.events import BaseEvent, EventType
+from qtrader.core.partition_manager import PartitionManager
 
 logger = logging.getLogger(__name__)
 

@@ -19,9 +19,9 @@ def test_go_live_gate_total_pass(certification_gate: GoLiveCertificationGate) ->
 
     report = certification_gate.evaluate_certification_readiness(test_results)
 
-    assert report["result"] == "APPROVED"  # noqa: S101
-    assert report["metrics"]["total_modules_audited"] == 3  # noqa: S101, PLR2004
-    assert report["metrics"]["rejected_module_count"] == 0  # noqa: S101
+    assert report["result"] == "APPROVED"
+    assert report["metrics"]["total_modules_audited"] == 3
+    assert report["metrics"]["rejected_module_count"] == 0
 
 
 def test_go_live_gate_single_failure_reject(certification_gate: GoLiveCertificationGate) -> None:
@@ -34,10 +34,10 @@ def test_go_live_gate_single_failure_reject(certification_gate: GoLiveCertificat
 
     report = certification_gate.evaluate_certification_readiness(test_results)
 
-    assert report["result"] == "REJECTED"  # noqa: S101
-    assert len(report["rejection_forensics"]) == 1  # noqa: S101
-    assert report["rejection_forensics"][0]["module"] == "Capital"  # noqa: S101
-    assert report["rejection_forensics"][0]["reason"] == "SOLVENCY_BREACH"  # noqa: S101
+    assert report["result"] == "REJECTED"
+    assert len(report["rejection_forensics"]) == 1
+    assert report["rejection_forensics"][0]["module"] == "Capital"
+    assert report["rejection_forensics"][0]["reason"] == "SOLVENCY_BREACH"
 
 
 def test_go_live_gate_fail_safe_empty(certification_gate: GoLiveCertificationGate) -> None:
@@ -46,8 +46,8 @@ def test_go_live_gate_fail_safe_empty(certification_gate: GoLiveCertificationGat
     report = certification_gate.evaluate_certification_readiness({})
 
     # Assert
-    assert report["result"] == "REJECTED"  # noqa: S101
-    assert report["rejection_forensics"][0]["reason"] == "EMPTY_CERTIFICATION_SUITE"  # noqa: S101
+    assert report["result"] == "REJECTED"
+    assert report["rejection_forensics"][0]["reason"] == "EMPTY_CERTIFICATION_SUITE"
 
 
 def test_go_live_gate_telemetry_tracking(certification_gate: GoLiveCertificationGate) -> None:
@@ -57,6 +57,6 @@ def test_go_live_gate_telemetry_tracking(certification_gate: GoLiveCertification
     certification_gate.evaluate_certification_readiness({"M1": {"result": "FAIL"}})
 
     stats = certification_gate.get_certification_telemetry()
-    assert stats["lifecycle_approval_rate"] == 0.5  # noqa: S101, PLR2004
-    assert stats["total_rejections"] == 1  # noqa: S101
-    assert stats["rejection_distribution_count"]["M1"] == 1  # noqa: S101
+    assert stats["lifecycle_approval_rate"] == 0.5
+    assert stats["total_rejections"] == 1
+    assert stats["rejection_distribution_count"]["M1"] == 1

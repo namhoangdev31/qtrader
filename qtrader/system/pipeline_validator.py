@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, List, Type
+from typing import Any
 
 from qtrader.core.events import BaseEvent
 
@@ -18,7 +18,7 @@ class PipelineValidator:
     coupling and side-channel mutation.
     """
 
-    FORBIDDEN_DIRECT_CALLS: List[str] = [
+    FORBIDDEN_DIRECT_CALLS: list[str] = [
         "ExecutionEngine", 
         "OMS", 
         "RuntimeRiskEngine", 
@@ -28,7 +28,7 @@ class PipelineValidator:
     ]
 
     @classmethod
-    def validate_module_architecture(cls, target_cls: Type[Any]) -> bool:
+    def validate_module_architecture(cls, target_cls: type[Any]) -> bool:
         """
         Scans a module's constructor to ensure zero direct-module injection.
         

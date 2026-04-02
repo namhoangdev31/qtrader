@@ -44,9 +44,9 @@ async def test_implementation_shortfall_buy() -> None:
     tca = ImplementationShortfall(bus)
     result = await tca.compute_and_emit(trace_id, events)
     
-    assert result is not None # noqa: S101
-    assert result.payload.shortfall == pytest.approx(100.0) # noqa: S101
-    assert result.payload.total_cost == pytest.approx(110.0) # noqa: S101
+    assert result is not None
+    assert result.payload.shortfall == pytest.approx(100.0)
+    assert result.payload.total_cost == pytest.approx(110.0)
 
 
 @pytest.mark.asyncio
@@ -75,8 +75,8 @@ async def test_implementation_shortfall_hold() -> None:
     tca = ImplementationShortfall(bus)
     result = await tca.compute_and_emit(trace_id, events)
     
-    assert result is not None # noqa: S101
-    assert result.payload.shortfall == 0.0 # noqa: S101
+    assert result is not None
+    assert result.payload.shortfall == 0.0
 
 
 @pytest.mark.asyncio
@@ -98,8 +98,8 @@ async def test_implementation_shortfall_no_fills() -> None:
     tca = ImplementationShortfall(bus)
     result = await tca.compute_and_emit(trace_id, events)
     
-    assert result is None # noqa: S101
-    assert not bus.publish.called # noqa: S101
+    assert result is None
+    assert not bus.publish.called
 
 
 @pytest.mark.asyncio
@@ -112,10 +112,10 @@ async def test_implementation_shortfall_critical_error() -> None:
     tca = ImplementationShortfall(bus)
     result = await tca.compute_and_emit(trace_id, None) # type: ignore
     
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
+    assert result is None
+    assert bus.publish.called
     event = bus.publish.call_args[0][0]
-    assert event.payload.error_type == "SYSTEM_FAILURE" # noqa: S101
+    assert event.payload.error_type == "SYSTEM_FAILURE"
 
 
 @pytest.mark.asyncio
@@ -134,6 +134,6 @@ async def test_implementation_shortfall_missing_decision() -> None:
     tca = ImplementationShortfall(bus)
     result = await tca.compute_and_emit(trace_id, events)
     
-    assert result is None # noqa: S101
-    assert bus.publish.called # noqa: S101
-    assert bus.publish.call_args[0][0].payload.error_type == "MISSING_DECISION" # noqa: S101
+    assert result is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].payload.error_type == "MISSING_DECISION"

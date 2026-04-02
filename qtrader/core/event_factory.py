@@ -1,26 +1,25 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Type
+from typing import Any
 
 from qtrader.core.events import (
     BaseEvent,
     ClockSyncEvent,
     ConfigChangeEvent,
+    DecisionErrorEvent,
+    DecisionTraceEvent,
     ErrorEvent,
     EventType,
-    FeaturePayload,
     FeeEvent,
     FillEvent,
     FundingEvent,
     GapDetectedEvent,
     GapFreeMarketEvent,
+    LedgerEntryEvent,
     MarketDeltaEvent,
     MarketEvent,
     NAVEvent,
-    DecisionErrorEvent,
-    DecisionTraceEvent,
-    LedgerEntryEvent,
     OrderEvent,
     PipelineErrorEvent,
     RecoveryCompletedEvent,
@@ -41,7 +40,7 @@ class EventFactory:
     """
 
     # Mapping of EventType to its corresponding Pydantic class
-    _TYPE_MAP: Dict[EventType, Type[BaseEvent]] = {
+    _TYPE_MAP: dict[EventType, type[BaseEvent]] = {
         EventType.MARKET_DATA: MarketEvent,
         EventType.MARKET_DELTA: MarketDeltaEvent,
         EventType.GAP_DETECTED: GapDetectedEvent,
@@ -69,7 +68,7 @@ class EventFactory:
     }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> BaseEvent:
+    def from_dict(cls, data: dict[str, Any]) -> BaseEvent:
         """
         Reconstruct a specialized event object from a raw dictionary.
         

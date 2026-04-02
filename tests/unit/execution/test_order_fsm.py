@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-import pytest
-
-from qtrader.execution.order_fsm import (
-    OrderFSM,
-    OrderState,
-    InvalidTransitionError,
-    create_order_fsm,
-)
-from qtrader.core.types import FillEvent, OrderEvent
 from datetime import datetime
 from decimal import Decimal
+
+import pytest
+
+from qtrader.core.types import FillEvent, OrderEvent
+from qtrader.execution.order_fsm import (
+    InvalidTransitionError,
+    OrderFSM,
+    OrderState,
+    create_order_fsm,
+)
 
 
 def create_test_order_event(order_id: str = "test_order", symbol: str = "BTC") -> OrderEvent:

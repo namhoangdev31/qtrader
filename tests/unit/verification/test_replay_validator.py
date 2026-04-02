@@ -1,6 +1,8 @@
-import pytest
 import polars as pl
-from qtrader.verification.replay_validator import ReplayValidator, ReplayReport
+import pytest
+
+from qtrader.verification.replay_validator import ReplayReport, ReplayValidator
+
 
 def test_replay_validator_bit_perfect_pass():
     original = [

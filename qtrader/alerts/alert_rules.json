@@ -1,0 +1,35 @@
+{
+  "rules": {
+    "high_error_rate": {
+      "metric": "error_count",
+      "threshold": 0.05,
+      "operator": ">",
+      "severity": "CRITICAL",
+      "action": "HALT_SYSTEM"
+    },
+    "high_latency": {
+      "metric": "latency",
+      "stat": "avg",
+      "threshold": 100.0,
+      "operator": ">",
+      "severity": "WARNING",
+      "action": "LOG_INCIDENT"
+    },
+    "violation_detected": {
+      "metric": "violation_count",
+      "threshold": 0,
+      "operator": ">",
+      "severity": "CRITICAL",
+      "action": "HALT_SYSTEM"
+    }
+  },
+  "channels": {
+    "console": {
+      "enabled": true
+    },
+    "incident_log": {
+      "enabled": true,
+      "path": "qtrader/alerts/incident_log.json"
+    }
+  }
+}

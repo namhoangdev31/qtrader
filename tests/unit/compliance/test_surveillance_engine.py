@@ -34,9 +34,9 @@ def test_surveillance_wash_trading_detection(engine: SurveillanceEngine) -> None
     ]
 
     alerts = engine.analyze_events(events)
-    assert len(alerts) == 1  # noqa: S101
-    assert alerts[0].type == ViolationType.WASH_TRADING  # noqa: S101
-    assert alerts[0].evidence["e1_id"] == "B1"  # noqa: S101
+    assert len(alerts) == 1
+    assert alerts[0].type == ViolationType.WASH_TRADING
+    assert alerts[0].evidence["e1_id"] == "B1"
 
 
 def test_surveillance_spoofing_detection(engine: SurveillanceEngine) -> None:
@@ -55,9 +55,9 @@ def test_surveillance_spoofing_detection(engine: SurveillanceEngine) -> None:
     ]
 
     alerts = engine.analyze_events(events)
-    assert len(alerts) == 1  # noqa: S101
-    assert alerts[0].type == ViolationType.SPOOFING  # noqa: S101
-    assert alerts[0].evidence["order_id"] == "C1"  # noqa: S101
+    assert len(alerts) == 1
+    assert alerts[0].type == ViolationType.SPOOFING
+    assert alerts[0].evidence["order_id"] == "C1"
 
 
 def test_surveillance_negative_baseline(engine: SurveillanceEngine) -> None:
@@ -78,7 +78,7 @@ def test_surveillance_negative_baseline(engine: SurveillanceEngine) -> None:
     ]
 
     alerts = engine.analyze_events(events)
-    assert len(alerts) == 0  # noqa: S101
+    assert len(alerts) == 0
 
 
 def test_surveillance_report_and_telemetry(engine: SurveillanceEngine) -> None:
@@ -90,4 +90,4 @@ def test_surveillance_report_and_telemetry(engine: SurveillanceEngine) -> None:
 
     engine.analyze_events(events)
     report = engine.get_report()
-    assert report["violations_detected"] == 1  # noqa: S101
+    assert report["violations_detected"] == 1

@@ -4,7 +4,6 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
 
 from qtrader.core.events import OrderEvent
 from qtrader.core.state_store import SystemState
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 class RiskResult:
     """Standardized decision output from a risk constraint."""
     approved: bool
-    reason: Optional[str] = None
+    reason: str | None = None
     metric_value: Decimal = Decimal('0')
     threshold: Decimal = Decimal('0')
 

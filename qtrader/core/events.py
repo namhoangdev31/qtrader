@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from enum import Enum, auto
-from typing import Any, Union
+from enum import Enum
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,6 +16,7 @@ class EventType(str, Enum):
     RECOVERY_COMPLETED = "RECOVERY_COMPLETED"
     GAP_FREE_MARKET = "GAP_FREE_MARKET"
     FEATURE = "FEATURE"
+    FEATURES = "FEATURES"
     SIGNAL = "SIGNAL"
     ENSEMBLE_SIGNAL = "ENSEMBLE_SIGNAL"
     ORDER = "ORDER"
@@ -27,9 +28,14 @@ class EventType(str, Enum):
     SYSTEM = "SYSTEM"
     TRADING_HALT = "TRADING_HALT"
     DRIFT = "DRIFT"
+    DRIFT_ALERT = "DRIFT_ALERT"
     MODEL_RETRAIN = "MODEL_RETRAIN"
     ERROR = "ERROR"
     HEARTBEAT = "HEARTBEAT"
+    SIGNALS = "SIGNAL"
+    ORDERS = "ORDER"
+    VALIDATED_FEATURES = "VALIDATED_FEATURES"
+    RISK_ALERT = "RISK_ALERT"
     CLOCK_SYNC = "CLOCK_SYNC"
     DATA_ERROR = "DATA_ERROR"
     DATA_REJECTED = "DATA_REJECTED"
@@ -90,8 +96,8 @@ class EventType(str, Enum):
 class MarketPayload(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     symbol: str
-    bid: float
-    ask: float
+    bid: Decimal
+    ask: Decimal
     seq_id: int | None = None
     data: Any = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -102,8 +108,8 @@ class OrderPayload(BaseModel):
     order_id: str
     symbol: str
     action: str  # BUY or SELL
-    quantity: float
-    price: float | None = None
+    quantity: Decimal
+    price: Decimal | None = None
     order_type: str = "MARKET"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -112,9 +118,9 @@ class RiskPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     symbol: str | None = None
     risk_type: str
-    value: float
-    threshold: float
-    metrics: dict[str, float] = Field(default_factory=dict)
+    value: Decimal
+    threshold: Decimal
+    metrics: dict[str, Decimal] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -129,8 +135,8 @@ class SignalPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     symbol: str
     signal_type: str
-    strength: float
-    confidence: float = 0.5
+    strength: Decimal
+    confidence: Decimal = Decimal("0.5")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -139,9 +145,9 @@ class FillPayload(BaseModel):
     order_id: str
     symbol: str
     side: str
-    quantity: float
-    price: float
-    commission: float = 0.0
+    quantity: Decimal
+    price: Decimal
+    commission: Decimal = Decimal("0.0")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -172,8 +178,8 @@ class MarketDeltaPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     symbol: str
     seq_id: int
-    bids: list[tuple[float, float]]
-    asks: list[tuple[float, float]]
+    bids: list[tuple[Decimal, Decimal]]
+    asks: list[tuple[Decimal, Decimal]]
 
 
 class GapPayload(BaseModel):
@@ -204,11 +210,11 @@ class RetryOrderPayload(BaseModel):
 
 class NAVPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
-    nav: float
-    cash: float
-    realized_pnl: float
-    unrealized_pnl: float
-    total_fees: float
+    nav: Decimal
+    cash: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    total_fees: Decimal
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -226,7 +232,7 @@ class FeePayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     order_id: str
     symbol: str
-    fee_amount: float
+    fee_amount: Decimal
     currency: str = "USD"
     fee_type: str = "TAKER"
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -234,10 +240,10 @@ class FeePayload(BaseModel):
 class FundingPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     symbol: str
-    position_size: float
-    funding_rate: float
-    funding_amount: float
-    mark_price: float
+    position_size: Decimal
+    funding_rate: Decimal
+    funding_amount: Decimal
+    mark_price: Decimal
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -276,9 +282,9 @@ class PipelineErrorPayload(BaseModel):
 class DecisionTracePayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     model_id: str
-    features: dict[str, float]
-    signal: float
-    decision_price: float
+    features: dict[str, Decimal]
+    signal: Decimal
+    decision_price: Decimal
     decision: str
     config_version: int
 
@@ -325,11 +331,11 @@ class ComplianceErrorPayload(BaseModel):
 class ImplementationShortfallPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     trace_id: UUID
-    decision_price: float
-    executed_price: float
-    quantity: float
-    shortfall: float
-    total_cost: float
+    decision_price: Decimal
+    executed_price: Decimal
+    quantity: Decimal
+    shortfall: Decimal
+    total_cost: Decimal
     side: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -344,10 +350,10 @@ class TCAErrorPayload(BaseModel):
 class SlippageBreakdownPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     trace_id: UUID
-    total_slippage: float
-    market_impact: float
-    timing_cost: float
-    fees: float
+    total_slippage: Decimal
+    market_impact: Decimal
+    timing_cost: Decimal
+    fees: Decimal
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -361,12 +367,12 @@ class TCAWarningPayload(BaseModel):
 class BenchmarkComparisonPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     trace_id: UUID
-    exec_price: float
-    vwap: float
-    twap: float
-    arrival_price: float
-    perf_vwap: float
-    perf_twap: float
+    exec_price: Decimal
+    vwap: Decimal
+    twap: Decimal
+    arrival_price: Decimal
+    perf_vwap: Decimal
+    perf_twap: Decimal
     side: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -381,11 +387,11 @@ class BenchmarkErrorPayload(BaseModel):
 class CostAttributionPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     trace_id: UUID
-    total_cost: float
-    impact_pct: float
-    timing_pct: float
-    fee_pct: float
-    funding_pct: float
+    total_cost: Decimal
+    impact_pct: Decimal
+    timing_pct: Decimal
+    fee_pct: Decimal
+    funding_pct: Decimal
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -399,9 +405,9 @@ class AttributionErrorPayload(BaseModel):
 class VenueRankingPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     venue: str
-    score: float
+    score: Decimal
     rank: int
-    metrics: dict[str, float]
+    metrics: dict[str, Decimal]
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -417,12 +423,12 @@ class TCAReportPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     period_start: int
     period_end: int
-    avg_shortfall: float
-    avg_slippage: float
-    vwap_diff: float
-    cost_breakdown: dict[str, float]
+    avg_shortfall: Decimal
+    avg_slippage: Decimal
+    vwap_diff: Decimal
+    cost_breakdown: dict[str, Decimal]
     best_venue: str
-    total_cost: float
+    total_cost: Decimal
     trade_count: int
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -454,9 +460,9 @@ class FSMErrorPayload(BaseModel):
 class SandboxReportPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     strategy_id: str
-    pnl: float
-    drawdown: float
-    sharpe: float
+    pnl: Decimal
+    drawdown: Decimal
+    sharpe: Decimal
     status: str
     trade_count: int
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -543,10 +549,10 @@ class StressTestErrorPayload(BaseModel):
 class FidelityReportPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     strategy_id: str
-    pnl_diff: float
-    slippage_diff: float
-    price_diff: float
-    fidelity_score: float
+    pnl_diff: Decimal
+    slippage_diff: Decimal
+    price_diff: Decimal
+    fidelity_score: Decimal
     trade_count: int
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -600,11 +606,11 @@ class ExecutionObjectivePayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     strategy_id: str
     symbol: str
-    total_cost: float
-    impact_cost: float
-    timing_cost: float
-    fee_cost: float
-    risk_cost: float
+    total_cost: Decimal
+    impact_cost: Decimal
+    timing_cost: Decimal
+    fee_cost: Decimal
+    risk_cost: Decimal
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -641,6 +647,7 @@ class MetaDecisionPayload(BaseModel):
 
 from qtrader.core.trace_authority import TraceAuthority
 
+
 class BaseEvent(BaseModel):
     """
     Global immutable event schema.
@@ -670,6 +677,14 @@ class BaseEvent(BaseModel):
         return self.event_type
 
 
+class EventBusProtocol(Protocol):
+    async def publish(self, event: BaseEvent) -> bool: ...
+    def subscribe(self, event_type: EventType, callback: Any) -> None: ...
+    def unsubscribe(self, event_type: EventType, callback: Any) -> None: ...
+    async def start(self) -> None: ...
+    async def stop(self) -> None: ...
+
+
 class MarketEvent(BaseEvent):
     """Event representing a market update."""
     event_type: EventType = EventType.MARKET_DATA
@@ -680,11 +695,11 @@ class MarketEvent(BaseEvent):
         return self.payload.symbol
 
     @property
-    def bid(self) -> float:
+    def bid(self) -> Decimal:
         return self.payload.bid
 
     @property
-    def ask(self) -> float:
+    def ask(self) -> Decimal:
         return self.payload.ask
 
     @property
@@ -710,7 +725,7 @@ class OrderEvent(BaseEvent):
         return self.payload.action
 
     @property
-    def quantity(self) -> float:
+    def quantity(self) -> Decimal:
         return self.payload.quantity
 
 
@@ -728,17 +743,17 @@ class SignalEvent(BaseEvent):
         return self.payload.signal_type
 
     @property
-    def strength(self) -> float:
+    def strength(self) -> Decimal:
         return self.payload.strength
 
     @property
-    def signal(self) -> float:
+    def signal(self) -> Decimal:
         """Compatibility with the signal calculation logic."""
         if self.payload.signal_type == "BUY":
             return self.payload.strength
         if self.payload.signal_type == "SELL":
             return -self.payload.strength
-        return 0.0
+        return Decimal("0.0")
 
 
 class RiskEvent(BaseEvent):
@@ -793,12 +808,24 @@ class GapFreeMarketEvent(BaseEvent):
     payload: MarketDeltaPayload
 
     @property
-    def bid(self) -> float:
-        return self.payload.bids[0][0] if self.payload.bids else 0.0
+    def bid(self) -> Decimal:
+        return self.payload.bids[0][0] if self.payload.bids else Decimal("0.0")
 
     @property
-    def ask(self) -> float:
-        return self.payload.asks[0][0] if self.payload.asks else 0.0
+    def ask(self) -> Decimal:
+        return self.payload.asks[0][0] if self.payload.asks else d(0)
+
+
+class FeatureEvent(BaseEvent):
+    """Event representing raw generated features (alpha values)."""
+    event_type: EventType = EventType.FEATURES
+    payload: FeaturePayload
+
+
+class ValidatedFeatureEvent(BaseEvent):
+    """Event representing features that have passed statistical validation."""
+    event_type: EventType = EventType.VALIDATED_FEATURES
+    payload: FeaturePayload
 
 
 class ClockSyncEvent(BaseEvent):
@@ -810,6 +837,9 @@ class NAVEvent(BaseEvent):
     """Event representing a portfolio NAV update."""
     event_type: EventType = EventType.NAV_UPDATED
     payload: NAVPayload
+
+
+# Removed redundant self-import
 
 
 class LedgerEntryEvent(BaseEvent):

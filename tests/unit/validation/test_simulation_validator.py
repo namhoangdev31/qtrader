@@ -35,15 +35,15 @@ async def test_simulation_validator_compute_success() -> None:
     event = await validator.validate_simulation(SCENARIO_ID, sim_df, real_df)
 
     # 3. Validation of Accuracy Score
-    assert event is not None  # noqa: S101
+    assert event is not None
     # Accuracy Score = exp(-KL) * Correlation. Should be high for near-identical data.
-    assert event.payload.accuracy_score > 0.8  # noqa: S101, PLR2004
-    assert event.payload.kl_divergence < 0.20  # noqa: S101, PLR2004
-    assert event.payload.correlation > 0.95  # noqa: S101, PLR2004
+    assert event.payload.accuracy_score > 0.8
+    assert event.payload.kl_divergence < 0.20
+    assert event.payload.correlation > 0.95
 
     # 4. Validation of Event Bus Publish
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.SIMULATION_ACCURACY_REPORT  # noqa: S101
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.SIMULATION_ACCURACY_REPORT
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,7 @@ async def test_simulation_validator_insufficient_data() -> None:
 
     event = await validator.validate_simulation(SCENARIO_ID, sim_df, real_df)
 
-    assert event is None  # noqa: S101
-    assert bus.publish.called  # noqa: S101
-    assert bus.publish.call_args[0][0].event_type == EventType.SIMULATION_ACCURACY_ERROR  # noqa: S101
-    assert "Insufficient data" in str(bus.publish.call_args)  # noqa: S101
+    assert event is None
+    assert bus.publish.called
+    assert bus.publish.call_args[0][0].event_type == EventType.SIMULATION_ACCURACY_ERROR
+    assert "Insufficient data" in str(bus.publish.call_args)

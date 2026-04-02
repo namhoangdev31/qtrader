@@ -1,0 +1,28 @@
+{
+  "alert_channels": [
+    {
+      "type": "SLACK",
+      "channel": "#qtrader-violations",
+      "enabled": true,
+      "priority": "CRITICAL"
+    },
+    {
+      "type": "EMAIL",
+      "recipient": "risk-engine@kilo.ai",
+      "enabled": true,
+      "priority": "HIGH"
+    },
+    {
+      "type": "INTERNAL",
+      "enabled": true,
+      "priority": "ALL"
+    }
+  ],
+  "violation_mapping": {
+    "C1": ["SLACK", "EMAIL"],
+    "C4": ["SLACK", "EMAIL"],
+    "C5": ["SLACK"],
+    "C6": ["SLACK"]
+  },
+  "halt_system_on": ["C1", "C4", "C5", "C6"]
+}

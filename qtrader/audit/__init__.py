@@ -4,4 +4,4 @@ from qtrader.audit.reporting_engine import (
     ReportType,
 )
 
-__all__ = ["AuditStorageManager", "AuditRecord", "ComplianceReportingEngine", "ReportType"]
+__all__ = ["AuditRecord", "AuditStorageManager", "ComplianceReportingEngine", "ReportType"]

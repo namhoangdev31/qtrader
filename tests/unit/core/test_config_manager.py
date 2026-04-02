@@ -1,6 +1,8 @@
 import asyncio
 import uuid
+
 import pytest
+
 from qtrader.core.config_manager import ConfigManager
 from qtrader.core.events import ConfigChangeEvent
 

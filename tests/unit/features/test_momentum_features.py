@@ -1,5 +1,6 @@
-import pytest
 import polars as pl
+import pytest
+
 try:
     from qtrader.features.technical.momentum import MomentumFeatureGenerator
 except ImportError:

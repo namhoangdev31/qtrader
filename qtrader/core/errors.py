@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 class BaseError(Exception):
@@ -16,7 +16,7 @@ class BaseError(Exception):
     severity: int = 1
     code: str = "ERR_BASE"
 
-    def __init__(self, message: str, metadata: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, metadata: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.metadata = metadata or {}
@@ -59,6 +59,6 @@ def classify_error(exc: Exception) -> BaseError:
     
     # Auto-escalation of unknown errors to prevent unmonitored risk exposure.
     return FatalError(
-        message=f"Unknown Unhandled Exception: {type(exc).__name__}: {str(exc)}",
+        message=f"Unknown Unhandled Exception: {type(exc).__name__}: {exc!s}",
         metadata={"original_type": type(exc).__name__}
     )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -11,13 +10,16 @@ import polars as pl
 from qtrader.core.types import SignalEvent, ValidatedFeatures
 
 # Try to import MetaLearningEngine, create a fallback if not available
+# Try to import MetaLearningEngine, create a fallback if not available
 try:
     from qtrader.ml.meta_learning_engine import MetaLearningEngine
 except ImportError:
     # Fallback when ML dependencies are not available
     MetaLearningEngine = None  # type: ignore
 
-_LOG = logging.getLogger("qtrader.strategy.ensemble")
+from qtrader.core.container import container
+
+_LOG = container.get("logger")
 
 
 class EnsembleStrategy:
