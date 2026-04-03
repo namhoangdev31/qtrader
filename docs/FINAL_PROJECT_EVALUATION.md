@@ -1,127 +1,157 @@
-# Báo Cáo Đánh Giá Chuyên Sâu Cấu Trúc & Tình Trạng Dự Án QTrader
+# QTRADER — TIER-1 INSTITUTIONAL MASTER ASSESSMENT
 
-Báo cáo này cung cấp cái nhìn chi tiết, tường minh (transparent) nhất về cấu trúc vật lý của dự án sau tái cấu trúc (tháng 3/2026), cũng như mổ xẻ từng ngóc ngách logic kỹ thuật, rủi ro tài chính định lượng của hệ thống.
-
----
-
-## 1. CẤU TRÚC CÂY THƯ MỤC DỰ ÁN (PROJECT DIRECTORY TREE)
-
-Sau đợt quy hoạch dứt điểm tình trạng trùng lặp module, dự án được chia làm 2 phần rõ rệt: **Môi trường vận hành bên ngoài (Root Level)** và **Lõi logic giao dịch (Python Package `qtrader/`)**.
-
-```text
-/Users/hoangnam/qtrader/                 (ROOT LEVEL)
-├── bot/                                 # Entry point cho Live Trading Bot
-│   └── runner.py                        # Vòng lặp chính kết nối các core logic khi chạy real-time
-├── configs/                             # File cấu hình YAML cho các chế độ (dev, paper, prod)
-├── data_lake/                           # Nơi lưu trữ dữ liệu thị trường thô (Parquet/CSV)
-├── docs/                                # Tài liệu dự án (chứa báo cáo này)
-├── notebooks/                           # Môi trường Jupyter Lab dành cho phân tích viên
-│   ├── analyst/                         # Phân tích rủi ro, EDA, báo cáo Backtest
-│   ├── researcher/                      # Nghiên cứu Features, mô hình Machine Learning
-│   └── trader/                          # Dashboard giám sát execution, Microstructure Lab
-├── pipeline/                            # Các kịch bản Pipeline tự động (không phải logic core)
-│   ├── deployment.py                    # Script đưa model/strategy từ MLflow ra Bot config
-│   ├── monitor.py                       # Giám sát Bot live vs Backtest baseline
-│   ├── research.py                      # Kịch bản chạy full pipeline Data -> Feature -> Alpha -> ML
-│   └── session_bridge.py                # Cầu nối giữa Jupyter Analyst và Core Pipeline
-├── qtrader/                             # CHÍNH: LÕI THUẬT TOÁN (PYTHON PACKAGE)
-│   ├── alpha/                           # Các thuật toán tạo tín hiệu thô (Microstructure, VPIN...)
-│   ├── analytics/                       # Tính toán EV (Expected Value), Cost, Hiệu suất
-│   ├── api/                             # Wrapper giao tiếp API mộc với sàn (Binance, Coinbase)
-│   ├── backtest/                        # Vectorized Engine (cho tốc độ) & Local Broker Sim
-│   ├── core/                            # Async EventBus, Base Config, DB Client, Logger
-│   ├── data/                            # Chuẩn hóa dữ liệu thô từ data_lake vào DataFrame
-│   ├── execution/                       # Khớp lệnh: Chứa Smart Order Routing (SOR), Algos (TWAP/VWAP)
-│   ├── features/                        # Trích xuất đặc trưng Data (Technical, Statistical, Factors)
-│   ├── feedback/                        # Feedback engine thời gian thực giữa fill và tín hiệu
-│   ├── ml/                              # Machine Learning: Cảm nhận pha thị trường (GMM), Walk-forward
-│   ├── models/                          # Các lớp bọc Model CatBoost, XGBoost, PyTorch
-│   ├── oms/                             # Hệ thống quản lý vị thế, Order book cục bộ
-│   ├── portfolio/                       # Cấp phát vốn: HRP, Mean-Variance, Risk Parity, Vol Targeting
-│   ├── research/                        # Session nghiên cứu, báo cáo Report (Tearsheet)
-│   ├── risk/                            # Kiểm soát rủi ro thời gian thực (Drawdown limits, VaR)
-│   ├── strategy/                        # Kết hợp Alpha + ML thành Probabilistic/Ensemble Signals
-│   ├── utils/                           # Các hàm công cụ dùng chung
-│   └── validation/                      # Block chặn: Đo lường IC Decay, Feature Stability
-├── reports/                             # Chứa file kết quả dạng HTML/JSON Tearsheet sau backtest
-├── rust_core/                           # Lõi Rust (.rs): Module tối ưu tốc độ tính toán Microstructure (Zero-Copy)
-├── scripts/                             # Các bash/python scripts phục vụ CI/CD, migration DB
-├── tests/                               # Toàn bộ Test Suite (Pytest)
-│   ├── debug/                           # Scripts debug lỗi cụ thể (ví dụ debug_ensemble)
-│   ├── integration/                     # Test nối ghép giữa các Module (OMS <-> Risk)
-│   └── unit/                            # Test độc lập rẽ nhánh (Feature test, Alpha test)
-├── Dockerfile & docker-compose.yml      # Đóng gói hạ tầng cho Deploy (K8s/Docker Swarm)
-├── pyproject.toml / Makefile            # Quản lý dependency (UV) và công cụ code quality (Ruff, Mypy)
-└── qtrader.db                           # Database SQLite metadata cục bộ
-```
+> **Ngày rà soát**: 2026-04-03
+> **Benchmark**: [standash-document.md](standash-document.md) (Tier-1 Institutional Master Specification)
+> **Mục tiêu**: Đánh giá cực kỳ chi tiết đến từng file, từng dòng code về mức độ vi phạm kiến trúc, tiến độ hoàn thành, và lỗ hổng hệ thống. Đưa ra phương án tái sử dụng triệt để những khối kiến trúc đang bị bỏ hoang (Orphans).
 
 ---
 
-## 2. ĐÁNH GIÁ ĐỘ CHÍN (MATURITY) TỪNG CHUỖI LOGIC
+## PHẦN 1: TỔNG QUAN HỆ THỐNG VÀ MA TRẬN RỦI RO (READINESS MATRIX)
 
-Đây không phải là một Bot giao dịch cơ bản, mà là Hệ thống định lượng Cấp Tổ chức (Institutional-grade). Do vậy, yêu cầu đánh giá rất khắt khe.
+QTrader hiện có `404` file Python, bao quát mọi Domain nghiệp vụ. Giá trị Engineering khổng lồ nhưng lại nằm ở trạng thái **Architecturally Unwired (Phân mảnh kiến trúc nghiêm trọng)**. Mức độ hoàn thiện tổng thể ước tính ~50-55%.
 
-### 2.1 Chuỗi Alpha & Features (Feature Engineering & Signal Generation)
-
-- **Chi tiết & Điểm mạnh**: Gần đây đã bổ sung cụm 27 features mẫu nến (Candlestick Patterns) cực kỳ chi tiết, tính toán bằng Polars (Vectorized). Lớp `FeatureValidator` đã vượt qua mọi bài Test về rào chắn: Nó đo Information Coefficient (IC) của file feature, đo tự tương quan (Stability) và tốc độ rã tín hiệu (Decay). Bất cứ feature nào không đạt chuẩn sẽ tự động bị "gán mác 0" thay vì để Strategy học nhiễu.
-- **Khoảng trống (Gap)**: Thiếu các Alpha "Deep Orderbook" cao cấp. Rust Core có tiềm năng tính toán Microstructure từ L2 Tick Data (Order Imbalance), nhưng hiện mới dùng OHLCV phân giải thấp.
-
-### 2.2 Chuỗi Phân bổ vốn (Portfolio Allocation & Sizing)
-
-- **Chi tiết & Điểm mạnh**: Cơ chế `EnhancedPortfolioAllocator` ứng dụng True Risk Parity (Ledoit-Wolf Shrinkage) giúp cân bằng đóng góp rủi ro của từng đồng coin thay vì chia vốn theo Kelly đơn thuần dễ rủi ro cao. Có tính năng Volatility Targeting (Nhắm mục tiêu biến động).
-- **Khoảng trống (Gap)**: Hàm tối ưu hóa (Optimizer) còn dùng bước chuyển đổi Polars $\rightarrow$ Pandas $\rightarrow$ scipy.optimize. Ở cường độ lớn, điều này tạo ra độ trễ.
-
-### 2.3 Chuỗi Machine Learning (Regime & Meta-strategy)
-
-- **Chi tiết & Điểm mạnh**: Đã lập trình thuật toán GMM (Gaussian Mixture Models) theo kiểu _Online_ (Thích ứng thời gian thực với `partial_fit`) giúp nhận diện nhanh Thị trường có Đang Trend (Trending) hay Tích Lũy (Ranging). `EnsembleStrategy` dùng Probability (Xác suất) thay vì Nhị phân (Threshold 0/1) giúp cấp tín hiệu tinh tế hơn.
-- **Khoảng trống (Gap)**: Khi chuyển giao pha (Regime Shift), mô hình rất dễ bị "Whipsaw" (Lắc nhiễu). Cần bổ sung thuật toán độ trễ (Hysteresis) chặn bot giao dịch trong các điểm giao cắt hỗn loạn này để bảo vệ vốn.
-
-### 2.4 Chuỗi Khớp lệnh & Rủi ro (Execution & Runtime Risk)
-
-- **Chi tiết & Điểm mạnh**: Code đã lập xong `RuntimeRiskEngine` có thể lấy Exposure và P&L trực tiếp từ tài khoản (thông qua `UnifiedOMS`) để tính VaR (Parametric) chuẩn mực, tính Drawdown Curve theo tick.
-- **Khoảng trống (Gap)**: Bộ phận L2 Simulator trong Backtest đang mô phỏng theo "luật đút lót L2" nhưng chưa sát thực tế vì chưa có mô hình Orderbook Depletion (Cạn kiệt thanh khoản) chuẩn xác. Nghĩa là lệnh to trong backtest vẫn khớp ngon nhưng ra Live sẽ bị Slippage nặng.
+| Tiêu chí | Trạng thái | Điểm Yếu Chí Mạng Đi Kèm |
+| :--- | :--- | :--- |
+| **Zero Latency Protocol** | 🔴 FAILED (0/10) | Phát hiện `time.sleep()` ngang nhiên chặn luồng trong xử lý dữ liệu. Thiếu hoàn toàn tối ưu TCP (`TCP_NODELAY`). |
+| **Pre-Trade Risk Gates** | 🔴 FAILED (2/10) | 3 Module Kill Switch chồng chéo. `WarModeEngine` đã xây xong 100% logic báo động nhưng bị **cô lập**, không được import vào bất kỳ luồng Execution nào. |
+| **Stateful HA & Replication**| 🔴 FAILED (3/10) | Code `state_replication.py` đồng bộ Active/Passive cực chuẩn, nhưng Hàm `publish_state()` bị bỏ xó. Sẽ không có Failover <5s trên thực tế. |
+| **Deterministic Isolation** | 🔴 FAILED (0/10) | Module `cpu_affinity.py` (Móc chặt Thread vào CPU Core) là "Ghost file" - không bao giờ được tải lên khi start hệ thống. |
+| **Algorithmic SOR Execution** | 🔴 FAILED (1/10) | Toàn bộ Smart Order Router (SOR) và các thuật toán cắt lệnh (VWAP, TWAP) chỉ là cái vỏ. Các hàm bên trong toàn `return {}` hoặc `return []`. |
+| **Error Handling Strictness** | 🔴 FAILED (2/10) | 174 lần gọi `except Exception:` nhưng không đưa lên hệ thống cảnh báo, gây hiện tượng văng lỗi ngầm (Silent Death). |
 
 ---
 
-## 3. KHẢ NĂNG RELEASE DỰ ÁN (PIPELINE INTEGRATION)
+## PHẦN 2: "GHOST MODULES" VÀ ORPHANED FILES (MỔ XẺ VÀ CÁCH DÙNG HIỆU QUẢ)
 
-**Đánh giá: BẬT MỨC CẢNH BÁO ĐỎ (CRITICAL NOT-READY)**
+Hệ thống có khoảng **80 file Python (chiếm gần 20%)** đóng vai trò là "Module Ma" (Orphans). Chúng chứa các thuật toán cực kỳ cao cấp, đạt chuẩn quỹ (Hedge-fund grade), nhưng chưa hề được "nối dây điện" vào Orchestrator.
 
-Vì sao các khối lego 100/100 ghép lại chưa thành robot sống?
+Thay vì xóa bỏ mù quáng, dưới đây là phân tích chi tiết từng mảnh ghép và **Cách tích hợp hiệu quả nhất** để phát huy toàn bộ sức mạnh của chúng:
 
-1. **Thiếu Dây Truyền Thần Kinh (Event Orchestrator)**: Dù đã có `TradingOrchestrator` và cấu trúc `EventBus`, dự án vẫn chưa có kịch bản gắn chết dòng chảy: WebSocket Binance $\rightarrow$ `MarketEvent` $\rightarrow$ `FeatureEngine` $\rightarrow$ `AlphaEngine` $\rightarrow$ `Strategy` $\rightarrow$ `OMS` chạy trơn tru trong 1 loop Real-time liên tục trên Production.
-2. **Thiếu Shadow Mode (Paper Trading Mức Sâu)**: Hệ thống chưa có cơ chế thu thập "Shadow Execution" (Giả định vào lệnh live nhưng ko tốn tiền) để đo độ trễ (Latency) và độ trượt giá (Slippage) của thuật toán Router (SOR).
-3. **Drift Monitoring chưa cắm điện**: Việc so sánh giữa Data lúc Research và Data lúc chạy Live (để ngăn mô hình đi chệch hướng) mới chỉ hình thành ở file `pipeline/monitor.py` trên giấy, chưa loop chạy thật.
+### 2.1 Cụm Phân Tích Lệnh Cấp Thấp (`execution/microstructure/` & `hft/`)
+
+- **Danh sách file mồ côi**: `toxic_flow.py`, `hidden_liquidity.py`, `queue_model.py`, `hft/spoofing.py`.
+- **Giá trị mang lại**: Phân tích sổ lệnh (Orderbook) siêu vi mô (microstructure) để nhận diện đội lái (spoofing), dòng tiền độc hại (toxic flow), và thanh khoản ngầm.
+- **Cách dùng hiệu quả nhất**:
+  - Không chạy độc lập. Hãy biến chúng thành các **Pre-Trade Filters** (Bộ lọc trước giao dịch) nằm bên trong `Standard Router`.
+  - Lúc `route_order()` chuẩn bị nổ lệnh Limit: Gọi `toxic_flow.predict()`. Nếu xác suất bị "xả hàng" cao > 80%, Router sẽ tự động ép đổi sang Market Order hoặc huỷ lệnh tạm thời để tránh trượt giá bất lợi (Adverse Selection).
+
+### 2.2 Cụm Quản Trị Khủng Hoảng và Phản Hồi (`feedback/` & `system/`)
+
+- **Danh sách file mồ côi**: `feedback/incident_handler.py`, `feedback/dashboard.py`, `system/system_orchestrator.py`.
+- **Giá trị mang lại**: Cơ chế tự động đối phó với sự cố và giám sát vòng lặp.
+- **Cách dùng hiệu quả nhất**:
+  - Tái cấu trúc 174 khối `except Exception:` đang rải rác. Khi xảy ra Exception rủi ro cao, không được im lặng hay in log suông, mà phải quăng sự kiện lên EventBus, nhắm đến đích là `incident_handler.py`.
+  - Từ `incident_handler.py`, dựa theo thang độ rủi ro, module này trực tiếp kích hoạt lệnh gọi `WarModeEngine` để ngắt đòn bẩy toàn cục. Cấu trúc này tạo ra quy trình "Tự Chữa Lành" (Autonomic Healing).
+
+### 2.3 Cụm Tự Động Tối Ưu, Sinh Học (Hệ `meta/`)
+
+- **Danh sách file mồ côi**: Gần 13 file gồm `genetic.py`, `self_diagnostic.py`, `memory.py`, `governance_engine.py`, `shadow_enforcer.py`.
+- **Giá trị mang lại**: Học máy tăng cường Meta-learning, thuật toán di truyền tự tìm trọng số (weight) Alpha tốt nhất mà không cần con người. Tuân thủ §8.1 Strategy Lifecycle.
+- **Cách dùng hiệu quả nhất**:
+  - Các module này quá nặng để nhét vào vòng lặp tốc độ cao (Core HFT/Execution).
+  - Phải tách nguyên cụm `meta/` thành một **Off-path Background Process (Cronjob/Worker)**.
+  - Hàng tuần/Hàng ngày, Process này sẽ rà soát DB/DuckDB log, chạy `genetic.py` để tìm tham số tối ưu mới, và push cấu hình xịn thông qua `Feature Flags` xuống thẳng Core Engine mà không cần Restart. `shadow_enforcer.py` sẽ lo việc theo dõi Paper-trade cho thuật toán mới đó.
+
+### 2.4 Cụm Phân Tích Độ Trượt & Phí Tổn (`tca/`)
+
+- **Danh sách file mồ côi**: 6 file (thiếu `__init__.py`) như `slippage.py`, `benchmark.py`, `implementation_shortfall.py`.
+- **Giá trị mang lại**: Phân tích hụt PnL (Chi phí giao dịch Transaction Cost Analysis) sát ván.
+- **Cách dùng hiệu quả nhất**:
+  - Hiện tại Analytics đã có `tca_engine.py`. Phải gộp logic phân rã phí của cụm `tca/` (chất lượng rất tốt) thành thư viện nội bộ cho Analytics.
+  - Ràng buộc **Feedback Loop**: Đo lường slippage từ `tca/` không được chỉ để "xem báo cáo offline". Dữ liệu độ trễ và Slippage của sàn Binance vs Coinbase phải được lưu vào Caching. Smart Order Router (`execution/router.py`) trước khi chẻ lệnh VWAP phải đọc rating từ `TCA` để điều hướng theo tỷ lệ (Sàn trượt ít thì chia nhiều lệnh).
+
+### 2.5 Cụm Định Nghĩa Định Danh Kép (Order FSM Fragment)
+
+- **Danh sách file mồ côi**: `execution/order_id.py` và `oms/replay_engine.py`.
+- **Giá trị mang lại**: Cơ chế replay lại sổ lệnh và ID định danh kép chống trùng lệnh sàn.
+- **Cách dùng hiệu quả nhất**:
+  - `execution/order_id.py` cung cấp Global UUID có chống replay - cực kỳ hợp với chuẩn §4.7. Bắt buộc import vào tầng tạo `OrderEvent` để toàn bộ FSM theo vết ID này từ sinh ra lúc Signal cho tới Fill trên Sàn.
+  - `replay_engine.py` là một máy du hành thời gian. Phục vụ đắc lực cho End-of-Day Audit. Phục dựng trạng thái. Cần chuyển hẳn về thư mục `audit/` để phòng Backoffice hoặc Data Science sử dụng độc lập.
+
+### 2.6 Khủng Hoảng Duplicates (Logic trùng lặp tại Execution & Portfolio)
+
+- **Danh sách file dư thừa**:
+  - Execution adapter rác (`exchange/binance_adapter.py`, `adapters/binance_adapter.py`).
+  - Portfolio allocator lộn xộn (`portfolio/` rỗng init, và đụng độ với `risk/portfolio/`).
+- **Cách giải quyết**: Đây là "Lập trình viên viết ra, quên chưa xóa".
+  - Chốt hạ 1 File 1 Chức năng.
+  - Binance adapter chỉ chui vào `brokers/binance.py`.
+  - Gom toàn bộ Capital Allocator về chuẩn `qtrader/portfolio/`. Loại bỏ các file copy bên trong `risk/portfolio/` để làm sạch thanh Namespace.
 
 ---
 
-## 4. PHÂN TÍCH RỦI RO HỆ THỐNG KỸ THUẬT (SYSTEM RISKS)
+## PHẦN 3: VI PHẠM THIẾT KẾ CỐT LÕI (CORE RULE VIOLATIONS)
 
-1. **Rủi ro Đồng Bộ Trạng Thái (State Desync Risk)**: Mất kết nối REST/Websocket với Binance. Trong lúc đó OMS ở local vẫn đinh ninh lệnh chưa khớp, nhưng sàn đã khớp. Hiện `execution/engine.py` có nhắc đến reconciliation nhưng thuật toán đối soát 2 chiều (2-way sync state) chưa thực sự rock-solid.
-2. **Rủi ro Độ Trễ (Latency Risk)**: Python có Global Interpreter Lock (GIL). Tuy EventBus là async, nhưng nếu `CatBoostPredictor` hay `HRPOptimizer` (chạy C++/Numpy) block CPU thread chính, toàn bộ EventBus lấy giá sẽ bị khựng lại (Stutter), lệnh đẩy ra sẽ bị trễ vài giây so với nến.
-3. **Bộ nhớ rò rỉ (Memory Leak) ở Polars/DuckDB**: DataStream nạp nến mới vào mỗi phút, nếu DataFrame in-memory không bị cắt gọt (trim) định kỳ bằng cơ chế Rolling Window chuẩn, bot chạy 3 ngày sẽ sập RAM server.
+### 3.1 Chặn Luồng Bất Hợp Pháp (Blocking IO & Sleeps)
+
+Theo luật §2.5 Standash: **Strictly No Sleep**. Các lỗi dưới đây đang bóp chết Event Loop:
+
+- `data/market/coinbase_market.py`: Lệnh `time.sleep(0.15)` và `time.sleep(1.0)` nằm chờ rate limits cứng.
+- `data/market/snapshot_recovery.py`: Chứa các lệnh sleep làm nghẽn quá trình tái tạo Orderbook.
+- `execution/market_maker_live.py`: Logic market making bị block ngầm, làm tăng latency hàng order magnitude.
+- `core/timer.py`: Lạm dụng vòng lặp kiểm tra thời gian.
+
+### 3.2 Tối Ưu State Bị Nghẽn Bới Khối Lượng Dữ Liệu
+
+Mặc dù đã có nỗ lực thêm các docstring `"""Fast copy without deepcopy."""`, hệ thống OMS/Execution ban đầu phụ thuộc vào `copy.deepcopy()` bên trong các khối `asyncio.Lock()`. Khi Portfolio tăng lên vài vạn vị thế, GC (Garbage Collection) của Python sẽ gây ra hiện tượng *Giật/Lag toàn cục > 100ms*, loại bỏ hoàn toàn khả năng giao dịch HFT. Cần 100% Memory Zero-copy (Immutable struct).
+
+### 3.3 Thuật Toán "Chống Điếc" (Execution Stubs & Facades)
+
+Logic cốt lõi của việc chuyển lệnh đang bị bỏ trống trắng trợn:
+
+- **`execution/multi_exchange_adapter.py`**: Các method route nhiều sàn chỉ trả về `{}`.
+- **`execution/routing/router.py`**: Hành động điều phối (Smart Order Route) trả ra `{}`. Không hề phân tích phí sàn nào rẻ hơn.
+- **`execution/routing/fill_model.py` và `cost_model.py`**: Dự báo tỷ lệ chênh giá/khớp lệnh trống rỗng.
+- **`execution/algos/vwap.py` & `twap.py`**: Thuật toán băm nhỏ lệnh cho các lệnh volume lớn trả ra mảng danh sách trống `[]`. Điều này khiến lệnh văng thẳng ra thị trường (trở thành DUMB Order thay vì SMART Order).
 
 ---
 
-## 5. RỦI RO MẤT TIỀN (FINANCIAL RISKS / RISK OF RUIN)
+## PHẦN 4: SỰ PHÂN MẢNH KIẾN TRÚC VÀ RỦI RO HOẠT ĐỘNG (OPERATIONAL RISKS)
 
-Đây là rủi ro quan trọng nhất cần Q-Dev và Trader đặc biệt chú ý trước khi cắm API Key thật:
+### 4.1 Rủi Ro Phân Quyền (Security & Governance)
 
-1. **Chưa có "Phanh Chết" (Hard-Coded Kill Switch) ở cấp Networking**:
-   - Dù `RuntimeRiskEngine` tính được lỗ tối đa trong ngày (Daily Loss Limits) là vỡ ngưỡng $1000, nhưng chức năng gửi tín hiệu `SYSTEM_HALT` chốt chặn ngắt kết nối Network đến Sàn chưa được đóng kín. Bot có thể kẹt vào vòng lặp "Lỗ $\rightarrow$ Cố đấm ăn xôi sinh tín hiệu Mua $\rightarrow$ Tiếp tục khớp lệnh" nếu logic check Risk bị bypass hoặc lỗi.
-2. **Rủi ro Bào Mòn Tài Khoản do Phí (Transaction Cost Ruin)**:
-   - Thuật toán GMM nhận diện Regime có thể nhảy nhót (Flickering) liên tục khi sideway. `EnsembleStrategy` sẽ văng lệnh Mua bán qua lại liên tục. Mỗi lần như vậy phí taker 0.04% trên Binance sẽ bào nhẵn vốn. Cần cơ chế **Turnover Constraint (Giới hạn vòng quay vốn)** hard-coded bắt buộc vào Allocator.
-3. **Sizing tự mãn (Over-confidence Sizing Risk)**:
-   - Nếu có một chuỗi thắng liên tiếp 10 lệnh, mô hình ML sẽ báo Confidence Score cực cao. Thuật toán phân bổ vốn sẽ full-margin do tưởng rủi ro thấp. Nhưng thị trường Crypto có Flash-crash. Quét râu sẽ cháy khét tài khoản nếu hệ thống khuyết chức năng "Cap Max Leverage" độc lập.
+- Tổ hợp an ninh lệnh **`security/order_signing.py`** chứa đầy đủ thuật toán để mã hoá ký xác nhận lệnh điện tử cho Audit. Nhưng file `execution_engine.py` (Lõi chốt đơn) không hề gắn lệnh gọi hàm `OrderSigning.sign()`. Mọi lệnh được đẩy lên Broker là **Unsigned (Lệnh trần)** - vi phạm Non-repudiation.
+- Override hệ thống thủ công không được kích hoạt Event gắn vết, vi phạm luật kiểm toán.
+
+### 4.2 Thảm Họa State Machine (Double FSM)
+
+- Hệ thống bị tách ra với 2 Order FSM song song: Đầu tiên là `oms/order_fsm.py` chạy riêng để record. Thứ hai là luồng trong Execution Engine nội bộ chạy vòng đời.
+- **Hệ quả**: Nếu một lệnh bị sàn báo REJECTED, có nguy cơ Orderbook thì giữ lệnh, nhưng OMS lại báo PENDING. Nguy cơ treo quỹ (Zombie Capital).
+
+### 4.3 Giám Sát Và Thuyết Minh Lệnh Đặt (Explainability Missing)
+
+- Mảng ML / Phân tích (như `phi2_controller.py`) tạo ra biểu đồ/lý do (reason / SHAP explanation) xác định tại sao AI mở vị thế.
+- **Hệ quả**: Chỗ Log TradeExecution (`trade_logger.py`) và Analytics chối bỏ dữ liệu đó; Audit không thể thuyết minh cho Khách hàng lý do máy móc khớp lệnh.
 
 ---
 
-## KẾT LUẬN TỔNG THỂ
+## PHẦN 5: LỘ TRÌNH TÁI CẤU TRÚC VÀ TÍCH HỢP 4 BƯỚC KHẨN CẤP
 
-QTrader không phải là một "Crypto Bot" đồ chơi, nó đi đúng tư duy xây dựng của quỹ Quantitative Hedge Fund (cô lập rủi ro, phân chia alpha, chia regime).
+> **Cảnh báo**: Bất kỳ bước nhảy vọt nào bổ sung Feature mới sẽ gây đổ vỡ hệ thống cục bộ. Lệnh dừng Update Logic mới để "Bắt Cầu Nối Điện" là bắt buộc.
 
-Nhưng hiện tại nó mới chỉ là một **"Cỗ máy trên bản vẽ kỹ thuật đã lắp ráp xong linh kiện"**. Để nổ máy, bạn bắt buộc phải:
+### GIAI ĐOẠN 1: QUÉT SẠCH NỢ, SÁT NHẬP PACKAGES (CLEANUP)
 
-1. **Dựng môi trường Paper-trading (Testnet Binance).**
-2. Khởi chạy `bot/runner.py` trên luồng dữ liệu Live 1 tuần để bắt các Exception sập EventBus chưa lường trước.
-3. Khóa cứng một File Cấu Hình (Limit.yaml) - Vượt qua là tắt process Python không nhân nhượng.
+- Thêm file rỗng `__init__.py` cho các thư mục quan trọng (`tca`, `portfolio`, `governance`) để khôi phục kiến trúc Package.
+- Gộp cụm `tca/` vào `analytics/`.
+- Xóa adapter trung lặp: `exchange/`, `adapters/`. Gom về `brokers/`.
+- Gắn bẫy Lỗi (Fail-Fast): Đổi tất cả hàm trả `{}`/`[]` ở phần `Execution/Algos` thành `raise NotImplementedError("Missing Logic!")`. Tránh ảo tưởng code hoàn thiện.
+
+### GIAI ĐOẠN 2: "BẮT CẦU" NỐI CÁC ORPHANS KHỦNG (SAFETY & WIRING)
+
+- **Tích Hợp War Mode & Incident**: Đưa 174 block `except` vào gửi Event lên `incident_handler.py`. Module này sẽ nắm dây kéo cầu dao `WarModeEngine`. Nhúng hàm `WarModeEngine.check_order_allowed()` vào đầu hàm `execute_order(...)` của `ExecutionEngine`.
+- **Gắn Mã Hoá Lệnh Đặt**: Yêu cầu gọi `OrderSigning.sign()` tại Adapter trước khi xả lệnh Websocket mua bán.
+
+### GIAI ĐOẠN 3: ÁP ĐẶT ZERO LATENCY COMPLIANCE (THIẾT QUÂN LUẬT TỐC ĐỘ)
+
+- Rút ruột toàn bộ hàm `time.sleep()`. Ép buộc dùng I/O async hoặc `asyncio.sleep()` ở Market Data layer (`coinbase_market.py`).
+- Cấu hình Socket: Gắn cờ socket `TCP_NODELAY = 1` tại kết nối Binance/Coinbase Brokers.
+- Hồi sinh `cpu_affinity.py`: Ép luồng event_loop Orchestrator chạy duy nhất trên Pin Core 0/1 bằng dòng lệnh đầu tiên khi start app.
+- Kích hoạt Replication: Trong `StateStore.set_position()`, nổ hàm `StateReplicator.publish_state()` chép qua Server Backup.
+
+### GIAI ĐOẠN 4: HỢP NHẤT Finite State Machine (FSM CONSOLIDATION)
+
+- Hợp nhất 2 FSM: Chặt bỏ FSM tại `execution/order_fsm.py` — chỉ thao tác trên Source of Truth của `oms/order_fsm.py`.
+- Dùng `order_id.py` từ vòng đời đầu tiên (Signal) để không bao giờ bị lệnh bị lệch track giữa OMS và Sàn.
+- Bắt buộc vòng đời: `NEW` -> `ACK` -> `PARTIAL` -> `FILLED / CANCELLED / REJECTED`.
+
+*(Mỗi thay đổi phải gắn kèm kết quả Test phủ sóng > 90% Code Coverage).*
