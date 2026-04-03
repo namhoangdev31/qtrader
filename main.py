@@ -1,99 +1,59 @@
 #!/usr/bin/env python3
-"""Main entry point for the QTrader live trading system."""
+"""Main entry point for the QTrader live trading system.
 
+The TradingSystem is the unified, complete pipeline that wires ALL modules:
+  Market Data → Alpha (Atomic Trio ML) → Signal → Risk → Order → Fill → Recon → PnL
+
+Usage:
+    python main.py                    # Paper trading with Atomic Trio ML
+    python main.py --live             # Live trading with real broker
+    python main.py --symbols BTC-USD,ETH-USD  # Multiple symbols
+"""
+
+import argparse
 import asyncio
 import signal
 import sys
-from decimal import Decimal
-from datetime import datetime
 
 from loguru import logger
 
-from qtrader.core.event_bus import EventBus
-from qtrader.core.events import MarketEvent, MarketPayload, EventType
-from qtrader.core.types import MarketData, AlphaOutput
-from qtrader.strategy.alpha.alpha_base import AlphaBase
-from qtrader.strategy.validation.feature_validator import SimpleFeatureValidator
-from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
-from qtrader.strategy.ensemble_strategy import EnsembleStrategy
-from qtrader.portfolio.allocator import SimpleAllocator
-from qtrader.risk.runtime import RuntimeRiskEngine
-from qtrader.oms.oms_adapter import OMSAdapter
-from qtrader.execution.execution_engine import SimulatedExchangeAdapter
-from qtrader.core.orchestrator import TradingOrchestrator
 
-
-class ExampleAlpha(AlphaBase):
-    """Example alpha generator for demonstration."""
-
-    def __init__(self) -> None:
-        super().__init__("example_alpha")
-
-    async def generate(self, market_data: MarketData) -> AlphaOutput:
-        """Generate a simple example alpha."""
-        alpha_value = Decimal("0.05")
-
-        return AlphaOutput(
-            symbol=market_data.symbol,
-            timestamp=market_data.timestamp,
-            alpha_values={"example_alpha": alpha_value},
-            metadata={"alpha_type": "example"},
-        )
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="QTrader Trading System")
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Use live broker instead of paper trading",
+    )
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        default="BTC-USD",
+        help="Comma-separated list of trading symbols",
+    )
+    return parser.parse_args()
 
 
 async def main() -> None:
-    """Main function to run the QTrader system."""
-    logger.info("Starting QTrader system")
+    """Main function to run the QTrader Trading System."""
+    args = parse_args()
 
-    # Setup event bus
-    event_bus = EventBus()
+    from qtrader.trading_system import create_trading_system
 
-    # Create components
-    alpha_module = ExampleAlpha()
-    feature_validator = SimpleFeatureValidator()
+    symbols = [s.strip() for s in args.symbols.split(",")]
+    simulate = not args.live
 
-    # Create strategies
-    probabilistic_strategy = ProbabilisticStrategy(
-        symbol="AAPL",
-        capital=Decimal("100000"),
+    logger.info(
+        f"Starting QTrader Trading System "
+        f"(mode={'LIVE' if not simulate else 'PAPER'}, symbols={symbols})"
     )
 
-    ensemble_strategy = EnsembleStrategy(
-        strategies=[probabilistic_strategy],
-        performance_window=20,
-    )
+    system = create_trading_system(simulate=simulate, symbols=symbols)
 
-    allocator = SimpleAllocator()
-
-    # Create OMS adapter
-    oms_adapter = OMSAdapter()
-
-    # Create risk engine
-    risk_engine = RuntimeRiskEngine()
-
-    # Create a simulated exchange adapter for testing
-    simulated_adapter = SimulatedExchangeAdapter(name="SimulatedExchange")
-    simulated_adapter.set_price("AAPL", Decimal("150.0"))
-
-    # Create orchestrator
-    orchestrator = TradingOrchestrator(
-        event_bus=event_bus,
-        market_data_adapter=None,
-        alpha_modules=[alpha_module],
-        feature_validator=feature_validator,
-        strategies=[probabilistic_strategy],
-        ensemble_strategy=ensemble_strategy,
-        portfolio_allocator=allocator,
-        runtime_risk_engine=risk_engine,
-        oms_adapter=oms_adapter,
-    )
-
-    # Setup signal handling for graceful shutdown
     def signal_handler() -> None:
         logger.info("Received shutdown signal")
-        asyncio.create_task(orchestrator.halt_core("SHUTDOWN_SIGNAL"))
+        system._shutdown_event.set()
 
-    # Register signal handlers
     loop = asyncio.get_running_loop()
     for sig_name in ("SIGTERM", "SIGINT"):
         sig = getattr(signal, sig_name, None)
@@ -104,14 +64,12 @@ async def main() -> None:
                 pass  # Windows doesn't support add_signal_handler
 
     try:
-        # Initialize and start the orchestrator
-        orchestrator.initialize()
-        await orchestrator.run()
-
+        await system.start()
     except Exception as e:
-        logger.error(f"Error in main loop: {e}", exc_info=True)
+        logger.error(f"System error: {e}", exc_info=True)
     finally:
-        logger.info("QTrader system stopped")
+        await system.stop()
+        logger.info("QTrader Trading System stopped")
 
 
 if __name__ == "__main__":

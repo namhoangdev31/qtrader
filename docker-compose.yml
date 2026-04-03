@@ -1,72 +1,136 @@
 services:
+  # ============================================================
+  # QTrader Orchestrator — Main trading engine
+  # ============================================================
   orchestrator:
-    build: .
-    command: ["uv", "run", "python", "scripts/orchestrator_service.py"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    command: ["uv", "run", "python", "live_trader.py"]
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+      - hf_cache:/app/.cache/huggingface
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
       - SERVICE_TYPE=ORCHESTRATOR
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
     restart: always
     depends_on:
-      - timescaledb
-      - mlflow
+      timescaledb:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
 
-  execution:
-    build: .
-    command: ["uv", "run", "python", "scripts/execution_service.py"]
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONPATH=/app
-      - SERVICE_TYPE=EXECUTION
-    restart: always
-    depends_on:
-      - timescaledb
-
+  # ============================================================
+  # ML Engine — Atomic Trio (Chronos-2, TabPFN 2.5, Phi-2)
+  # ============================================================
   ml_engine:
-    build: .
-    command: ["uv", "run", "python", "scripts/ml_service.py"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    command: ["uv", "run", "python", "-m", "qtrader.ml.atomic_trio"]
     volumes:
       - .:/app
+      - hf_cache:/app/.cache/huggingface
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
       - SERVICE_TYPE=ML
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - CHRONOS_MODEL_ID=${CHRONOS_MODEL_ID:-amazon/chronos-2}
+      - TABPFN_MODEL_ID=${TABPFN_MODEL_ID:-Prior-Labs/tabpfn_2_5}
+      - PHI2_MODEL_ID=${PHI2_MODEL_ID:-microsoft/phi-2}
     restart: always
     depends_on:
       - mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "from qtrader.ml.atomic_trio import AtomicTrioPipeline; print('OK')"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 6G
 
+  # ============================================================
+  # TimescaleDB — Time-series database
+  # ============================================================
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     platform: linux/arm64
     ports:
       - "5433:5432"
     environment:
-      - POSTGRES_USER=sanauto
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=qtrader
+      - POSTGRES_USER=${DATABASE_USERNAME:-sanauto}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD:-secret}
+      - POSTGRES_DB=${DATABASE_NAME:-qtrader}
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sanauto -d qtrader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ============================================================
+  # MLflow — Experiment tracking & model registry
+  # ============================================================
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     platform: linux/arm64
     ports:
       - "5050:5000"
-    command: mlflow server --host 0.0.0.0 --port 5000
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
+    volumes:
+      - mlflow_data:/mlflow
     restart: always
+
+  # ============================================================
+  # Redis — Cache & message broker
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   timescaledb_data:
+  mlflow_data:
+  redis_data:
+  hf_cache:  # Persistent cache for HuggingFace models
 
 networks:
   default:
-    name: sanauto-production-net
+    name: qtrader-net
