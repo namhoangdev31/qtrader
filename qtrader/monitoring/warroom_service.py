@@ -6,7 +6,7 @@ from typing import Any
 from loguru import logger
 
 from qtrader.core.bus import EventBus
-from qtrader.core.event import DriftEvent, EventType, FillEvent, OrderEvent, RiskEvent
+from qtrader.core.events import EventType, FillEvent, OrderEvent, RiskEvent, SystemEvent
 
 from .metrics import MetricsAggregator
 
@@ -29,11 +29,13 @@ class WarRoomService:
         self._latest_snapshot: dict[str, Any] = {}
         self._tasks: set[asyncio.Task[Any]] = set()
         self._subscribers: list[Callable[[dict[str, Any]], None]] = []
-        
+
         if self.bus:
             self._subscribe_to_bus()
         else:
-            logger.warning("WarRoomService initialized without EventBus. Call set_bus() later to enable reactive monitoring.")
+            logger.warning(
+                "WarRoomService initialized without EventBus. Call set_bus() later to enable reactive monitoring."
+            )
 
     def set_bus(self, event_bus: EventBus) -> None:
         """Link the service to a production EventBus and enable subscriptions."""
@@ -81,8 +83,8 @@ class WarRoomService:
 
     async def _handle_risk(self, event: RiskEvent) -> None:
         self._event_queue.put_nowait({"type": "risk", "data": event})
-        
-    async def _handle_drift(self, event: DriftEvent) -> None:
+
+    async def _handle_drift(self, event: SystemEvent) -> None:
         self._event_queue.put_nowait({"type": "drift", "data": event})
 
     async def _handle_error(self, event: Any) -> None:
@@ -98,22 +100,20 @@ class WarRoomService:
 
                 if etype == "fill":
                     self.aggregator.on_fill(
-                        symbol=data.symbol, 
-                        quantity=float(data.quantity), 
-                        price=float(data.price), 
-                        side=data.side
+                        symbol=data.symbol,
+                        quantity=float(data.quantity),
+                        price=float(data.price),
+                        side=data.side,
                     )
                 elif etype == "order":
                     self.aggregator.on_order(
-                        symbol=data.symbol, 
-                        quantity=float(data.quantity), 
-                        side=data.side
+                        symbol=data.symbol, quantity=float(data.quantity), side=data.side
                     )
                 elif etype == "risk":
                     self.aggregator.on_risk_alert()
                 elif etype == "pnl_update":
                     self.aggregator.update_pnl(nav=data["nav"], realized=data.get("realized", 0.0))
-                
+
                 # Push real-time snapshot to subscribers
                 self._latest_snapshot = self.aggregator.get_summary()
                 for subscriber in self._subscribers:

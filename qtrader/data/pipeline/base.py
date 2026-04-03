@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
 
-from qtrader.core.event import MarketDataEvent
+from qtrader.core.events import MarketEvent
 
 
 @runtime_checkable
@@ -20,9 +20,9 @@ class DataSource(Protocol):
 
 @runtime_checkable
 class DataNormalizer(Protocol):
-    """Protocol for converting raw source data into MarketDataEvent."""
+    """Protocol for converting raw source data into MarketEvent."""
 
-    def normalize(self, raw_data: Any) -> MarketDataEvent:
+    def normalize(self, raw_data: Any) -> MarketEvent:
         ...
 
 

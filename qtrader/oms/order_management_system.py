@@ -8,13 +8,12 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from qtrader.core.decimal_adapter import d, math_authority
-from qtrader.core.event import (
+from qtrader.core.events import (
     EventType,
     FillEvent,
-    OrderCreatedEvent,
     OrderEvent,
-    OrderFilledEvent,
-    OrderRejectedEvent,
+    SystemEvent,
+    SystemPayload,
 )
 from qtrader.core.state_store import Order, Position, StateStore
 from qtrader.oms.event_store import EventStore
@@ -58,16 +57,24 @@ class UnifiedOMS:
             quantity=Decimal(str(order_event.quantity)),
             price=Decimal(str(order_event.price)) if order_event.price else None,
             timestamp=order_event.timestamp,
-            status=OrderState.NEW.value
+            status=OrderState.NEW.value,
         )
         await self.state_store.set_order(order)
-        
+
         # 2. Event Recording
-        created_event = OrderCreatedEvent(order=order_event)
+        created_event = SystemEvent(
+            source="UnifiedOMS",
+            trace_id=getattr(order_event, "trace_id", "unknown"),
+            payload=SystemPayload(
+                action="ORDER_CREATED",
+                reason=f"New order: {order_event.symbol}",
+                metadata={"order_id": order_event.order_id, "symbol": order_event.symbol},
+            ),
+        )
         await self.event_store.record_event(created_event)
-        
+
         # 3. Bus Publication
-        await self.event_bus.publish(EventType.ORDER_CREATED, created_event)
+        await self.event_bus.publish(created_event)
         self._log.info(f"OMS | Order Created: {order_event.order_id} [{order_event.symbol}]")
 
     async def on_ack(self, order_id: str) -> None:
@@ -77,9 +84,17 @@ class UnifiedOMS:
     async def on_reject(self, order_id: str, reason: str) -> None:
         """Handle order rejection from exchange."""
         await self._transition(order_id, "REJECT")
-        rejected_event = OrderRejectedEvent(order_id=order_id, reason=reason)
+        rejected_event = SystemEvent(
+            source="UnifiedOMS",
+            trace_id="unknown",
+            payload=SystemPayload(
+                action="ORDER_REJECTED",
+                reason=reason,
+                metadata={"order_id": order_id},
+            ),
+        )
         await self.event_store.record_event(rejected_event)
-        await self.event_bus.publish(EventType.ORDER_REJECTED, rejected_event)
+        await self.event_bus.publish(rejected_event)
         self._log.error(f"OMS | Order Rejected: {order_id} - Reason: {reason}")
 
     async def cancel_order(self, order_id: str) -> None:
@@ -97,49 +112,67 @@ class UnifiedOMS:
 
         # 1. Determine FSM event (PARTIAL vs COMPLETE)
         # Using Decimal for precision
-        current_fill_total = await self._calculate_current_fill(order_id) + Decimal(str(fill_event.quantity))
+        current_fill_total = await self._calculate_current_fill(order_id) + Decimal(
+            str(fill_event.quantity)
+        )
         is_complete = current_fill_total >= order.quantity
         fsm_event = "FILL_COMPLETE" if is_complete else "FILL_PARTIAL"
-        
+
         # 2. Transition State
         await self._transition(order_id, fsm_event)
-        
+
         # 3. Update Position centralized in StateStore
         await self._update_position(fill_event)
-        
+
         # 4. Record and Publish
-        filled_event = OrderFilledEvent(
-            order_id=order_id,
-            symbol=fill_event.symbol,
-            quantity=fill_event.quantity,
-            price=fill_event.price,
-            side=fill_event.side,
-            remaining=order.quantity - current_fill_total
+        filled_event = SystemEvent(
+            source="UnifiedOMS",
+            trace_id=getattr(fill_event, "trace_id", "unknown"),
+            payload=SystemPayload(
+                action="ORDER_FILLED",
+                reason=f"Fill: {fill_event.payload.symbol}",
+                metadata={
+                    "order_id": order_id,
+                    "symbol": fill_event.payload.symbol,
+                    "quantity": str(fill_event.payload.quantity),
+                    "price": str(fill_event.payload.price),
+                    "side": fill_event.payload.side,
+                    "remaining": str(order.quantity - current_fill_total),
+                },
+            ),
         )
         await self.event_store.record_event(filled_event)
-        await self.event_bus.publish(EventType.ORDER_FILLED, filled_event)
-        self._log.info(f"OMS | Order Fill: {order_id} ({fsm_event}) | Total Fill: {current_fill_total}/{order.quantity}")
+        await self.event_bus.publish(filled_event)
+        self._log.info(
+            f"OMS | Order Fill: {order_id} ({fsm_event}) | Total Fill: {current_fill_total}/{order.quantity}"
+        )
 
     async def _transition(self, order_id: str, event: str) -> None:
         """Centralized FSM transition logic."""
         order = await self.state_store.get_order(order_id)
         if not order:
             return
-            
+
         current_state = order.status
         try:
             next_state = self.fsm.transition(current_state, event)
-            await self.state_store.update_order(order_id, lambda o: setattr(o, "status", next_state))
+            await self.state_store.update_order(
+                order_id, lambda o: setattr(o, "status", next_state)
+            )
             self._log.debug(f"OMS | FSM Transition: {order_id} ({current_state} -> {next_state})")
         except ValueError as e:
-            self._log.error(f"OMS | FSM Violation: {order_id} ({current_state} + {event} failed) - {e}")
+            self._log.error(
+                f"OMS | FSM Violation: {order_id} ({current_state} + {event} failed) - {e}"
+            )
 
     async def _update_position(self, fill: FillEvent) -> None:
         """Update global system position in StateStore."""
         symbol = fill.symbol
-        quantity = Decimal(str(fill.quantity)) if fill.side == "BUY" else -Decimal(str(fill.quantity))
+        quantity = (
+            Decimal(str(fill.quantity)) if fill.side == "BUY" else -Decimal(str(fill.quantity))
+        )
         price = Decimal(str(fill.price))
-        
+
         pos = await self.state_store.get_position(symbol)
         if pos:
             new_qty = pos.quantity + quantity
@@ -151,29 +184,39 @@ class UnifiedOMS:
                 else:
                     # Closing/Reducing position: average price remains same, realized P&L updated
                     new_avg = pos.average_price
-                    realized = (price - pos.average_price) * abs(quantity) * (d(1) if pos.quantity > 0 else d(-1))
+                    realized = (
+                        (price - pos.average_price)
+                        * abs(quantity)
+                        * (d(1) if pos.quantity > 0 else d(-1))
+                    )
                     pos.realized_pnl += realized
             else:
                 new_avg = d(0)
-                realized = (price - pos.average_price) * abs(quantity) * (d(1) if pos.quantity > 0 else d(-1))
+                realized = (
+                    (price - pos.average_price)
+                    * abs(quantity)
+                    * (d(1) if pos.quantity > 0 else d(-1))
+                )
                 pos.realized_pnl += realized
-                
+
             pos.quantity = new_qty
             pos.average_price = math_authority.to_price(abs(new_avg))
             pos.timestamp = datetime.utcnow()
             await self.state_store.set_position(pos)
         else:
-            await self.state_store.set_position(Position(
-                symbol=symbol,
-                quantity=quantity,
-                average_price=price,
-                timestamp=datetime.utcnow()
-            ))
+            await self.state_store.set_position(
+                Position(
+                    symbol=symbol,
+                    quantity=quantity,
+                    average_price=price,
+                    timestamp=datetime.utcnow(),
+                )
+            )
 
     async def _calculate_current_fill(self, order_id: str) -> Decimal:
         """Replay events for the order to calculate true current fill sum."""
         events = self.event_store.replay_order(order_id)
-        total = Decimal('0')
+        total = Decimal("0")
         for ev in events:
             if ev.get("type") == "ORDER_FILLED":
                 total += Decimal(str(ev.get("quantity", 0)))

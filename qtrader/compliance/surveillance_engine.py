@@ -144,9 +144,66 @@ class SurveillanceEngine:
     def _detect_quote_stuffing(self, events: list[dict[str, Any]]) -> list[ViolationAlert]:
         """
         Detect Quote Stuffing: Extreme message rates designed to induce latency.
+
+        Algorithm: Count order submissions and cancellations per user per window.
+        If cancel-to-submit ratio > 90% AND message rate > threshold, flag as quote stuffing.
         """
-        # Industrial baseline: Integrated into real-time sliding window analysis (Future).
-        return []
+        from collections import defaultdict
+
+        alerts: list[ViolationAlert] = []
+
+        # Group events by user
+        user_events: dict[str, list[dict]] = defaultdict(list)
+        for e in events:
+            user_id = e.get("user_id", "unknown")
+            user_events[user_id].append(e)
+
+        for user_id, user_evts in user_events.items():
+            submits = sum(1 for e in user_evts if e.get("action") in ("SUBMIT", "NEW"))
+            cancels = sum(1 for e in user_evts if e.get("action") in ("CANCEL", "CANCEL_REPLACE"))
+            total = submits + cancels
+
+            if total < 10:
+                continue  # Insufficient sample
+
+            cancel_ratio = cancels / total
+            message_rate = total / max(1.0, self._get_window_seconds(user_evts))
+
+            # Quote stuffing criteria:
+            # 1. Cancel ratio > 90%
+            # 2. Message rate > 100 messages/second
+            if cancel_ratio > 0.90 and message_rate > 100:
+                alert = ViolationAlert(
+                    violation_type="QUOTE_STUFFING",
+                    user_id=user_id,
+                    severity="CRITICAL",
+                    evidence={
+                        "cancel_ratio": cancel_ratio,
+                        "message_rate": message_rate,
+                        "total_messages": total,
+                        "submits": submits,
+                        "cancels": cancels,
+                    },
+                    timestamp=events[-1].get("timestamp", 0),
+                )
+                alerts.append(alert)
+                self._stats["violations_detected"] += 1
+                _LOG.warning(
+                    f"[SURVEILLANCE] QUOTE_STUFFING Detected | User: {user_id} | "
+                    f"Cancel Ratio: {cancel_ratio:.1%} | Rate: {message_rate:.0f}/s"
+                )
+
+        return alerts
+
+    @staticmethod
+    def _get_window_seconds(events: list[dict]) -> float:
+        """Get time window span of events in seconds."""
+        if not events:
+            return 1.0
+        timestamps = [e.get("timestamp", 0) for e in events if "timestamp" in e]
+        if len(timestamps) < 2:
+            return 1.0
+        return max(1.0, max(timestamps) - min(timestamps))
 
     def get_report(self) -> dict[str, Any]:
         """

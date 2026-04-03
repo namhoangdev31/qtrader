@@ -1,12 +1,15 @@
+import asyncio
+import json
 import logging
 import uuid
 from decimal import Decimal
+from typing import Any, Callable
 
 import aiohttp
 
 from qtrader.core.config import Config
 from qtrader.core.decimal_adapter import d
-from qtrader.core.event import FillEvent, OrderEvent
+from qtrader.core.events import FillEvent, OrderEvent
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
 from qtrader.execution.http import RetryConfig, request_json
 
@@ -62,12 +65,15 @@ class CoinbaseBrokerAdapter:
 
     def _auth_headers(self, *, method: str, path: str) -> dict[str, str]:
         if not self._key_name or not self._private_key_pem:
-            raise PermissionError("Missing COINBASE_KEY_NAME / COINBASE_PRIVATE_KEY for live REST mode")
-        
+            raise PermissionError(
+                "Missing COINBASE_KEY_NAME / COINBASE_PRIVATE_KEY for live REST mode"
+            )
+
         from urllib.parse import urlparse
+
         parsed = urlparse(self._rest_base)
         full_path = f"{parsed.path.rstrip('/')}{path}"
-        
+
         # fix literal \n
         raw_key = self._private_key_pem.replace("\\n", "\n")
 
@@ -284,3 +290,134 @@ class CoinbaseBrokerAdapter:
             self._positions[asset] = current + fill.quantity
         else:
             self._positions[asset] = current - fill.quantity
+
+    # ========================================================================
+    # WebSocket User Data Stream (Coinbase Advanced Trade)
+    # ========================================================================
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        simulate: bool | None = None,
+        *,
+        rest_base: str | None = None,
+        key_name: str | None = None,
+        private_key_pem: str | None = None,
+        request_timeout_s: float = 10.0,
+        max_retries: int = 3,
+        retry_backoff_ms: int = 200,
+    ) -> None:
+        self.api_key = api_key or Config.COINBASE_API_KEY
+        self.api_secret = api_secret or Config.COINBASE_API_SECRET
+        self.simulate = simulate if simulate is not None else Config.SIMULATE_MODE
+        self._log = logging.getLogger("qtrader.broker.coinbase")
+        self._rest_base = rest_base or Config.COINBASE_REST_BASE
+        self._key_name = key_name or Config.COINBASE_KEY_NAME
+        self._private_key_pem = private_key_pem or Config.COINBASE_PRIVATE_KEY
+        self._retry = RetryConfig(
+            request_timeout_s=request_timeout_s,
+            max_retries=max_retries,
+            retry_backoff_ms=retry_backoff_ms,
+        )
+        self._session: aiohttp.ClientSession | None = None
+
+        # Simulation state
+        self._positions: dict[str, Decimal] = {}
+        self._orders: dict[str, OrderEvent] = {}
+        self._fills: dict[str, list[FillEvent]] = {}
+        self._quotes: dict[str, dict[str, Decimal]] = {}  # symbol -> {"bid": .., "ask": ..}
+
+        # WebSocket user data stream state
+        self._ws_task: asyncio.Task | None = None
+        self._ws_running = False
+        self._ws_channels: list[str] = ["user", "heartbeat"]
+        self._ws_product_ids: list[str] = []
+        self._on_order_update: Callable[[dict[str, Any]], None] | None = None
+        self._on_balance_update: Callable[[dict[str, Any]], None] | None = None
+        self._ws_base_url = "wss://advanced-trade-ws.coinbase.com"
+
+    def set_order_update_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
+        """Set callback for order update events from WebSocket."""
+        self._on_order_update = handler
+
+    def set_balance_update_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
+        """Set callback for balance update events from WebSocket."""
+        self._on_balance_update = handler
+
+    def add_product(self, product_id: str) -> None:
+        """Add a product (e.g., 'BTC-USD') to subscribe to."""
+        if product_id not in self._ws_product_ids:
+            self._ws_product_ids.append(product_id)
+
+    async def start_websocket(self) -> None:
+        """Start WebSocket connection for real-time order and balance updates."""
+        if self._ws_running:
+            return
+        self._ws_running = True
+        self._ws_task = asyncio.create_task(self._websocket_loop())
+        self._log.info("[COINBASE_WS] WebSocket loop started")
+
+    async def stop_websocket(self) -> None:
+        """Stop WebSocket connection."""
+        self._ws_running = False
+        if self._ws_task:
+            self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except asyncio.CancelledError:
+                pass
+        self._log.info("[COINBASE_WS] WebSocket loop stopped")
+
+    async def _websocket_loop(self) -> None:
+        """Main WebSocket loop with auto-reconnect."""
+        while self._ws_running:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.ws_connect(self._ws_base_url) as ws:
+                        self._log.info(f"[COINBASE_WS] Connected to {self._ws_base_url}")
+                        # Subscribe to channels
+                        subscribe_msg = {
+                            "type": "subscribe",
+                            "product_ids": self._ws_product_ids,
+                            "channel": self._ws_channels,
+                        }
+                        await ws.send_json(subscribe_msg)
+                        self._log.info(
+                            f"[COINBASE_WS] Subscribed to {self._ws_channels} for {self._ws_product_ids}"
+                        )
+
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                await self._handle_ws_message(json.loads(msg.data))
+                            elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                                self._log.warning(
+                                    "[COINBASE_WS] Connection closed/error, reconnecting..."
+                                )
+                                break
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self._log.error(f"[COINBASE_WS] Error: {e}, reconnecting in 5s...")
+                await asyncio.sleep(5)
+
+    async def _handle_ws_message(self, data: dict[str, Any]) -> None:
+        """Handle incoming WebSocket message."""
+        channel = data.get("channel")
+        events = data.get("events", [])
+
+        for event in events:
+            if channel == "user" or "order" in event.get("type", "").lower():
+                # Order update event
+                if self._on_order_update:
+                    self._on_order_update(event)
+            elif "portfolio" in event.get("type", "").lower() or "balance" in str(event).lower():
+                # Balance update event
+                if self._on_balance_update:
+                    self._on_balance_update(event)
+
+    async def close(self) -> None:
+        """Close all connections."""
+        await self.stop_websocket()
+        if self._session is not None and not self._session.closed:
+            await self._session.close()

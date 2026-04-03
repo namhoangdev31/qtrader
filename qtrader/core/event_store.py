@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 from typing import Protocol
+from uuid import UUID
 
 from qtrader.core.event_factory import EventFactory
 from qtrader.core.event_index import EventIndex
@@ -23,10 +25,10 @@ class BaseEventStore(Protocol):
         ...
 
     async def get_events(
-        self, 
+        self,
         partition: str | None = None,
-        start_offset: int | None = None, 
-        end_offset: int | None = None
+        start_offset: int | None = None,
+        end_offset: int | None = None,
     ) -> list[BaseEvent]:
         """Retrieve events based on partition and offset range for replay."""
         ...
@@ -45,14 +47,14 @@ class FileEventStore:
     def __init__(self, base_path: str = "data/event_store"):
         """
         Initialize the partitioned event store.
-        
+
         Args:
             base_path: Root directory for event logs and partitions.
         """
         self.base_path = base_path
         self.partitions_dir = os.path.join(base_path, "partitions")
         os.makedirs(self.partitions_dir, exist_ok=True)
-        
+
         self._index = EventIndex()
         self._rebuild_index()
 
@@ -68,7 +70,7 @@ class FileEventStore:
         for filename in os.listdir(self.partitions_dir):
             if filename.endswith(".jsonl"):
                 filepath = os.path.join(self.partitions_dir, filename)
-                
+
                 try:
                     with open(filepath, encoding="utf-8") as f:
                         for line in f:
@@ -83,13 +85,16 @@ class FileEventStore:
                                 logger.warning(f"Metadata corruption in {filename}: {e}")
                 except Exception as e:
                     logger.error(f"Failed to scan partition log {filename}: {e}")
-                    
-        logger.info(f"Index rebuild complete. Total events indexed: {self._index.total_event_count}")
+
+        logger.info(
+            f"Index rebuild complete. Total events indexed: {self._index.total_event_count}"
+        )
 
     async def append(self, event: BaseEvent) -> int | None:
         """
         Append an event to its partition log if it's not a duplicate.
-        
+        Uses asyncio.to_thread for non-blocking disk IO.
+
         Returns:
             int | None: The offset assigned to the event, or None if it was an idempotent skip.
         """
@@ -100,103 +105,135 @@ class FileEventStore:
 
         # 2. Partition Routing
         partition_key = event.partition_key or "default"
-        
+
         # 3. Assign Offset and Update Index
         offset = self._index.register_event(event.event_id, partition_key)
-        
+
         # 4. Prepare Persisted Event (add offset metadata)
-        # Using model_copy to maintain immutability of the incoming event object
         persisted_event = event.model_copy(update={"offset": offset})
         event_json = persisted_event.model_dump_json()
 
-        # 5. Atomic Append to Partition File
+        # 5. Atomic Append to Partition File (non-blocking via executor)
         safe_partition_key = partition_key.replace("/", "_").replace("\\", "_")
         filepath = os.path.join(self.partitions_dir, f"{safe_partition_key}.jsonl")
         try:
-            with open(filepath, "a", encoding="utf-8") as f:
-                f.write(event_json + "\n")
-                f.flush()
-                # Ensure data is committed to disk for HFT reliability
-                os.fsync(f.fileno())
+            await asyncio.to_thread(self._append_to_file, filepath, event_json)
             return offset
         except Exception as e:
             logger.error(f"Critical storage failure for event {event.event_id}: {e}")
-            # Note: In production, we'd emit a StorageErrorEvent here
             raise
 
+    @staticmethod
+    def _append_to_file(filepath: str, event_json: str) -> None:
+        """Synchronous file append with fsync for durability."""
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(event_json + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+
     async def get_events(
-        self, 
+        self,
         partition: str | None = None,
-        start_offset: int | None = None, 
-        end_offset: int | None = None
+        start_offset: int | None = None,
+        end_offset: int | None = None,
     ) -> list[BaseEvent]:
         """
         Retrieve events from a specific partition based on an offset range.
-        If partition is None, reads across all partitions (ordered only by local offset).
+        Uses asyncio.to_thread for non-blocking disk IO.
         """
-        events = []
-        
         # Determine which logs to read
         if partition:
             safe_partition = partition.replace("/", "_").replace("\\", "_")
             files_to_read = [f"{safe_partition}.jsonl"]
         else:
-            files_to_read = [f for f in os.listdir(self.partitions_dir) if f.endswith(".jsonl")]
+            files_to_read = await asyncio.to_thread(
+                lambda: [f for f in os.listdir(self.partitions_dir) if f.endswith(".jsonl")]
+            )
 
+        events: list[BaseEvent] = []
         for filename in files_to_read:
             filepath = os.path.join(self.partitions_dir, filename)
-            if not os.path.exists(filepath):
+            if not await asyncio.to_thread(os.path.exists, filepath):
                 continue
 
-            with open(filepath, encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        # Reconstruct specialized event subclass via factory
-                        event = EventFactory.from_dict(json.loads(line))
-                        
-                        # Apply offset filters with safety guards
-                        if (start_offset is not None and event.offset is not None 
-                            and event.offset < start_offset):
-                            continue
-                        if (end_offset is not None and event.offset is not None 
-                            and event.offset > end_offset):
-                            continue
-                            
-                        events.append(event)
-                    except Exception:
-                        continue
-                        
+            file_events = await asyncio.to_thread(
+                self._read_and_parse_events, filepath, start_offset, end_offset, filename
+            )
+            events.extend(file_events)
+
         # Default sort by global timestamp for cross-partition queries
         return sorted(events, key=lambda x: x.timestamp)
+
+    @staticmethod
+    def _read_and_parse_events(
+        filepath: str,
+        start_offset: int | None,
+        end_offset: int | None,
+        filename: str,
+    ) -> list[BaseEvent]:
+        """Synchronous event file parsing."""
+        events: list[BaseEvent] = []
+        with open(filepath, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    event = EventFactory.from_dict(json.loads(line))
+                    if (
+                        start_offset is not None
+                        and event.offset is not None
+                        and event.offset < start_offset
+                    ):
+                        continue
+                    if (
+                        end_offset is not None
+                        and event.offset is not None
+                        and event.offset > end_offset
+                    ):
+                        continue
+                    events.append(event)
+                except Exception as e:
+                    logger.warning(f"EVENT_STORE | Corrupted event skipped in {filename}: {e}")
+                    continue
+        return events
 
     async def get_events_by_trace_id(self, trace_id: str | UUID) -> list[BaseEvent]:
         """
         Scan all partitions for a specific trace_id.
-        This enables cross-functional forensic analysis of a single trade lifecycle.
+        Uses asyncio.to_thread for non-blocking disk IO.
         """
         events: list[BaseEvent] = []
         target_trace = str(trace_id)
-        
-        if not os.path.exists(self.partitions_dir):
+
+        if not await asyncio.to_thread(os.path.exists, self.partitions_dir):
             return []
 
-        # Optimization: scan all .jsonl partition logs
-        for filename in os.listdir(self.partitions_dir):
-            if not filename.endswith(".jsonl"):
-                continue
-            
+        files = await asyncio.to_thread(
+            lambda: [f for f in os.listdir(self.partitions_dir) if f.endswith(".jsonl")]
+        )
+
+        for filename in files:
             filepath = os.path.join(self.partitions_dir, filename)
-            with open(filepath, encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        # Pre-check for trace_id before full Pydantic parsing
-                        if target_trace not in line:
-                            continue
-                            
-                        event = EventFactory.from_dict(json.loads(line))
-                        if str(event.trace_id) == target_trace:
-                            events.append(event)
-                    except Exception:
-                        continue
-                        
+            file_events = await asyncio.to_thread(
+                self._read_events_by_trace, filepath, target_trace, filename
+            )
+            events.extend(file_events)
+
         return sorted(events, key=lambda x: x.timestamp)
+
+    @staticmethod
+    def _read_events_by_trace(filepath: str, target_trace: str, filename: str) -> list[BaseEvent]:
+        """Synchronous trace-id event scanning."""
+        events: list[BaseEvent] = []
+        with open(filepath, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    if target_trace not in line:
+                        continue
+                    event = EventFactory.from_dict(json.loads(line))
+                    if str(event.trace_id) == target_trace:
+                        events.append(event)
+                except Exception as e:
+                    logger.warning(
+                        f"EVENT_STORE | Corrupted event skipped in trace scan {filename}: {e}"
+                    )
+                    continue
+        return events

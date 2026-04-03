@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import torch
 from loguru import logger
 
 
@@ -15,7 +14,7 @@ from loguru import logger
 class SeedManager:
     """
     Global Entropy Control System for deterministic execution.
-    
+
     Enforces reproducible randomness across random, numpy, and torch
     using a multi-tiered derivation model.
     """
@@ -30,7 +29,7 @@ class SeedManager:
         """Returns True if the global seed has been successfully injected."""
         return self._is_applied
 
-    def is_applied_method(self) -> bool: # Temporary workaround if I want to keep property
+    def is_applied_method(self) -> bool:  # Temporary workaround if I want to keep property
         return self._is_applied
 
     def __post_init__(self) -> None:
@@ -71,18 +70,23 @@ class SeedManager:
         # 2. NumPy
         np.random.seed(self.global_seed)
 
-        # 3. PyTorch
-        torch.manual_seed(self.global_seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(self.global_seed)
+        # 3. PyTorch (lazy import - optional dependency)
+        try:
+            import torch
 
-        # 4. Deterministic algorithms (CuDNN etc)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+            torch.manual_seed(self.global_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(self.global_seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+        except ImportError:
+            logger.debug("[SEED] PyTorch not available — skipping torch seeding")
 
         self._is_applied = True
-        logger.success("[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch")
-        
+        logger.success(
+            "[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch"
+        )
+
         return self._get_status()
 
     def _get_status(self) -> dict[str, Any]:
@@ -91,7 +95,7 @@ class SeedManager:
             "status": "DETERMINISTIC" if self._is_applied else "UNCONTROLLED",
             "global_seed": self.global_seed,
             "environment": self.environment,
-            "applied": self._is_applied
+            "applied": self._is_applied,
         }
 
     @classmethod

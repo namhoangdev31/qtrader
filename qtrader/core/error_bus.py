@@ -5,7 +5,7 @@ import logging
 import traceback
 from typing import TYPE_CHECKING, Any
 
-from qtrader.core.event import ErrorEvent, EventType
+from qtrader.core.events import ErrorEvent, EventType
 
 if TYPE_CHECKING:
     from qtrader.core.bus import EventBus

@@ -10,11 +10,21 @@ from qtrader.core.types import FillEvent, MarketData, SignalEvent
 
 logger = logging.getLogger(__name__)
 
+
 class ShadowFillEvent:
     """Represents a simulated fill in shadow mode."""
-    def __init__(self, signal_id: str, symbol: str, timestamp: datetime,
-                 side: str, quantity: Decimal, fill_price: Decimal,
-                 slippage: float, latency: float) -> None:
+
+    def __init__(
+        self,
+        signal_id: str,
+        symbol: str,
+        timestamp: datetime,
+        side: str,
+        quantity: Decimal,
+        fill_price: Decimal,
+        slippage: float,
+        latency: float,
+    ) -> None:
         self.signal_id = signal_id
         self.symbol = symbol
         self.timestamp = timestamp
@@ -33,8 +43,9 @@ class ShadowFillEvent:
             "quantity": float(self.quantity),
             "fill_price": float(self.fill_price),
             "slippage": self.slippage,
-            "latency": self.latency
+            "latency": self.latency,
         }
+
 
 class ShadowEngine:
     """
@@ -68,22 +79,30 @@ class ShadowEngine:
         self.recent_shadow_fills: dict[str, ShadowFillEvent] = {}
         self.shadow_positions: dict[str, Decimal] = {}
         self.shadow_cost_basis: dict[str, Decimal] = {}
-        
+
         self.metrics = {
             "shadow_pnl": 0.0,
             "shadow_realized_pnl": 0.0,
             "shadow_unrealized_pnl": 0.0,
             "slippage_diff": 0.0,
-            "execution_error": 0.0
+            "execution_error": 0.0,
         }
         self._running = False
         self._tasks = []
+        self._shadow_start_time: datetime | None = None
+
+        # Standash §4.11: Shadow validation minimum duration (default 7 days)
+        self.min_shadow_duration_s = config.get("min_shadow_duration_s", 7 * 24 * 3600)
+        self._shadow_start_time = datetime.utcnow() if self.shadow_mode else None
 
         # Ensure data lake directory exists
         if self.shadow_mode:
             os.makedirs(self.data_lake_path, exist_ok=True)
 
-        logger.info(f"ShadowEngine initialized with shadow_mode={self.shadow_mode}")
+        logger.info(
+            f"ShadowEngine initialized | shadow_mode={self.shadow_mode} | "
+            f"min_duration={self.min_shadow_duration_s / 86400:.1f} days"
+        )
 
     async def start(self) -> None:
         """Start the shadow engine by subscribing to events."""
@@ -126,10 +145,10 @@ class ShadowEngine:
         """Extract or generate a unique signal ID."""
         # Try to get ID from metadata
         if signal.metadata and isinstance(signal.metadata, dict):
-            if 'signal_id' in signal.metadata:
-                return str(signal.metadata['signal_id'])
-            if 'id' in signal.metadata:
-                return str(signal.metadata['id'])
+            if "signal_id" in signal.metadata:
+                return str(signal.metadata["signal_id"])
+            if "id" in signal.metadata:
+                return str(signal.metadata["id"])
 
         # Generate ID from symbol, timestamp, and signal_type
         # This is not ideal but better than nothing
@@ -150,7 +169,7 @@ class ShadowEngine:
         # Simulation will happen when we have both signal and market data
         # Trigger simulation for this signal
         # Simulation will yield a ShadowFillEvent which is stored and logged.
-        pass # Still waiting for market data to compute price, this is handled in _on_market_data.
+        pass  # Still waiting for market data to compute price, this is handled in _on_market_data.
 
     async def _on_market_data(self, event: MarketData) -> None:
         """Handle incoming market data event."""
@@ -177,16 +196,17 @@ class ShadowEngine:
 
         # [SHADOW_PNL_ENGINE]: Recalculate unrealized PnL for all active positions
         unrealized = 0.0
-        best_bid = orderbook['bids'][0][0] if orderbook['bids'] else Decimal('0')
-        best_ask = orderbook['asks'][0][0] if orderbook['asks'] else Decimal('0')
-        mid_price = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else Decimal('0')
+        best_bid = orderbook["bids"][0][0] if orderbook["bids"] else Decimal("0")
+        best_ask = orderbook["asks"][0][0] if orderbook["asks"] else Decimal("0")
+        mid_price = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else Decimal("0")
 
         if mid_price > 0:
             for symbol, qty in self.shadow_positions.items():
-                if qty == 0: continue
-                avg_cost = self.shadow_cost_basis.get(symbol, Decimal('0'))
+                if qty == 0:
+                    continue
+                avg_cost = self.shadow_cost_basis.get(symbol, Decimal("0"))
                 unrealized += float(qty) * (float(mid_price) - float(avg_cost))
-        
+
         self.metrics["shadow_unrealized_pnl"] = unrealized
         self.metrics["shadow_pnl"] = self.metrics["shadow_realized_pnl"] + unrealized
 
@@ -195,27 +215,27 @@ class ShadowEngine:
         symbol = fill.symbol
         qty = Decimal(str(fill.quantity)) if fill.side == "BUY" else -Decimal(str(fill.quantity))
         price = fill.fill_price
-        
-        current_qty = self.shadow_positions.get(symbol, Decimal('0'))
-        
+
+        current_qty = self.shadow_positions.get(symbol, Decimal("0"))
+
         # Realized PnL logic (LIFO or Average Cost-base reduction)
         # If we are reducing exposure, calculate the delta PnL
         if (current_qty * qty) < 0:
-            avg_cost = self.shadow_cost_basis.get(symbol, Decimal('0'))
+            avg_cost = self.shadow_cost_basis.get(symbol, Decimal("0"))
             close_qty = min(abs(current_qty), abs(qty))
             pnl_increment = float(close_qty) * (float(price) - float(avg_cost))
-            if current_qty < 0: # Closing a short
+            if current_qty < 0:  # Closing a short
                 pnl_increment = -pnl_increment
             self.metrics["shadow_realized_pnl"] += pnl_increment
-            
+
         # Update cost basis if position is increasing
         elif (current_qty * qty) >= 0 or current_qty == 0:
             total_qty = abs(current_qty) + abs(qty)
             if total_qty > 0:
-                old_cost = self.shadow_cost_basis.get(symbol, Decimal('0'))
+                old_cost = self.shadow_cost_basis.get(symbol, Decimal("0"))
                 new_cost = (abs(current_qty) * old_cost + abs(qty) * price) / total_qty
                 self.shadow_cost_basis[symbol] = new_cost
-        
+
         self.shadow_positions[symbol] = current_qty + qty
 
     async def _on_fill(self, event: FillEvent) -> None:
@@ -227,10 +247,12 @@ class ShadowEngine:
         # We need to find a signal that corresponds to this fill
         # Since FillEvent doesn't directly reference a signal, we'll match by symbol and time
         matched_signal_id = None
-        
+
         for signal_id, signal in self.recent_signals.items():
-            if (signal.symbol == event.symbol and 
-                abs((signal.timestamp - event.timestamp).total_seconds()) < 5):  # Within 5 seconds
+            if (
+                signal.symbol == event.symbol
+                and abs((signal.timestamp - event.timestamp).total_seconds()) < 5
+            ):  # Within 5 seconds
                 matched_signal_id = signal_id
                 break
 
@@ -239,7 +261,9 @@ class ShadowEngine:
             await self._update_metrics(event, shadow_fill)
             logger.info(f"Updated metrics for signal {matched_signal_id}")
 
-    async def _simulate_and_record(self, signal_id: str, signal: SignalEvent, orderbook: dict) -> None:
+    async def _simulate_and_record(
+        self, signal_id: str, signal: SignalEvent, orderbook: dict
+    ) -> None:
         """Simulate order execution and record shadow fill."""
         try:
             # Simulate latency
@@ -257,18 +281,26 @@ class ShadowEngine:
             # This is a simplified model - in reality, we'd use the orderbook simulator
             # to get fill price based on quantity and side
             # For now, we'll use a simple mid-price model
-            best_bid = orderbook['bids'][0][0] if orderbook['bids'] else Decimal('0')
-            best_ask = orderbook['asks'][0][0] if orderbook['asks'] else Decimal('0')
-            mid_price = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else Decimal('0')
-            
-            slippage = self.slippage_model.calculate(
-                side=side,
-                quantity=quantity,
-                orderbook=orderbook,
-                volatility=Decimal('0.02')  # Default volatility, would come from market data in practice
-            ) if self.slippage_model else Decimal('0')
+            best_bid = orderbook["bids"][0][0] if orderbook["bids"] else Decimal("0")
+            best_ask = orderbook["asks"][0][0] if orderbook["asks"] else Decimal("0")
+            mid_price = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else Decimal("0")
+
+            slippage = (
+                self.slippage_model.calculate(
+                    side=side,
+                    quantity=quantity,
+                    orderbook=orderbook,
+                    volatility=Decimal(
+                        "0.02"
+                    ),  # Default volatility, would come from market data in practice
+                )
+                if self.slippage_model
+                else Decimal("0")
+            )
             # Convert slippage to price adjustment (assuming slippage is in basis points)
-            slippage_price = mid_price * (Decimal(str(slippage)) / Decimal('10000'))  # bps to decimal
+            slippage_price = mid_price * (
+                Decimal(str(slippage)) / Decimal("10000")
+            )  # bps to decimal
             fill_price = mid_price + (slippage_price if side == "BUY" else -slippage_price)
 
             # Create shadow fill event
@@ -280,7 +312,7 @@ class ShadowEngine:
                 quantity=quantity,
                 fill_price=fill_price,
                 slippage=float(slippage),  # Convert to float for storage
-                latency=latency
+                latency=latency,
             )
 
             # Store shadow fill for matching
@@ -294,13 +326,14 @@ class ShadowEngine:
 
             # Standardized shadow trade log
             from qtrader.execution.trade_logger import TradeLogger
+
             TradeLogger.log_trade(
                 symbol=shadow_fill.symbol,
                 side=shadow_fill.side,
                 quantity=float(shadow_fill.quantity),
                 price=float(shadow_fill.fill_price),
                 trace_id=signal_id,  # signal_id acts as the trace_id in shadow flow
-                timestamp=shadow_fill.timestamp
+                timestamp=shadow_fill.timestamp,
             )
 
         except Exception as e:
@@ -335,45 +368,46 @@ class ShadowEngine:
         except Exception as e:
             logger.error(f"Error updating metrics: {e}")
 
-
     def compare_with_live(self, live_pnl: float, live_trade_count: int) -> dict[str, Any]:
         """[SHADOW_COMPARE] Generate a detailed comparison between live and shadow performance.
-        
+
         Args:
             live_pnl: Realized PnL from the live performance tracker.
             live_trade_count: Number of fills recorded in live trading.
-            
+
         Returns:
             Dictionary containing execution gap, slippage alpha, and tracking error.
         """
         shadow_pnl = self.metrics["shadow_pnl"]
         shadow_trade_count = len(self.recent_shadow_fills)
-        
+
         # Execution Gap: Live PnL - Shadow PnL (Positive means live outperformed shadow)
         execution_gap = live_pnl - shadow_pnl
-        
+
         # Tracking Error: Difference in trade counts (indicates missed signals or fills)
         tracking_error = abs(live_trade_count - shadow_trade_count)
-        
+
         # Slippage Alpha: The average price improvement (or degradation) per trade
         # computed as slippage_diff / trade_count.
         avg_slippage_gap = self.metrics["slippage_diff"] / max(1, live_trade_count)
-        
+
         comparison = {
             "live_pnl": live_pnl,
             "shadow_pnl": shadow_pnl,
             "execution_gap": execution_gap,
-            "execution_gap_pct": (execution_gap / abs(shadow_pnl)) * 100 if shadow_pnl != 0 else 0.0,
+            "execution_gap_pct": (execution_gap / abs(shadow_pnl)) * 100
+            if shadow_pnl != 0
+            else 0.0,
             "live_trade_count": live_trade_count,
             "shadow_trade_count": shadow_trade_count,
             "tracking_error": tracking_error,
             "avg_slippage_gap": avg_slippage_gap,
-            "status": "HEALTHY" if abs(execution_gap) < (abs(shadow_pnl) * 0.1) else "DEGRADED"
+            "status": "HEALTHY" if abs(execution_gap) < (abs(shadow_pnl) * 0.1) else "DEGRADED",
         }
-        
+
         # [SHADOW_AUTO_DISABLE]: Trigger emergency halt if performance gap is too wide
         self.check_auto_disable(comparison)
-        
+
         return comparison
 
     def check_auto_disable(self, comparison: dict[str, Any]) -> None:
@@ -382,29 +416,35 @@ class ShadowEngine:
             return
 
         gap_pct = comparison.get("execution_gap_pct", 0.0)
-        
+
         # Criteria 1: Severe Execution Gap (> 20% degradation vs shadow)
         if gap_pct < -20.0:
             from qtrader.core.types import SystemEvent
+
             reason = f"SHADOW_AUTO_DISABLE | Execution Gap Breach: {gap_pct:.2f}%"
             logger.critical(reason)
             # Create a task to publish the halt event
-            asyncio.create_task(self.event_bus.publish(
-                SystemEvent(type="SYSTEM", action="EMERGENCY_HALT", reason=reason)
-            ))
+            asyncio.create_task(
+                self.event_bus.publish(
+                    SystemEvent(type="SYSTEM", action="EMERGENCY_HALT", reason=reason)
+                )
+            )
 
         # Criteria 2: Tracking Error Discrepancy (> 30% missed trades)
         live_count = comparison.get("live_trade_count", 0)
         shadow_count = comparison.get("shadow_trade_count", 0)
-        if shadow_count > 10: # Only check after a meaningful sample
+        if shadow_count > 10:  # Only check after a meaningful sample
             miss_rate = abs(live_count - shadow_count) / shadow_count
             if miss_rate > 0.3:
                 from qtrader.core.types import SystemEvent
+
                 reason = f"SHADOW_AUTO_DISABLE | High Tracking Error: {miss_rate:.2%} miss rate"
                 logger.critical(reason)
-                asyncio.create_task(self.event_bus.publish(
-                    SystemEvent(type="SYSTEM", action="EMERGENCY_HALT", reason=reason)
-                ))
+                asyncio.create_task(
+                    self.event_bus.publish(
+                        SystemEvent(type="SYSTEM", action="EMERGENCY_HALT", reason=reason)
+                    )
+                )
 
     def get_metrics(self) -> dict[str, float]:
         """Get current metrics."""
@@ -413,3 +453,54 @@ class ShadowEngine:
     def is_running(self) -> bool:
         """Check if engine is running."""
         return self._running
+
+    def is_shadow_duration_met(self) -> bool:
+        """Standash §4.11: Check if minimum shadow validation duration is met.
+
+        Returns True if the shadow engine has been running for at least
+        min_shadow_duration_s (default 7 days).
+        """
+        if self._shadow_start_time is None:
+            return False
+        elapsed = (datetime.utcnow() - self._shadow_start_time).total_seconds()
+        return elapsed >= self.min_shadow_duration_s
+
+    def get_shadow_duration_info(self) -> dict[str, Any]:
+        """Return shadow duration information for monitoring."""
+        if self._shadow_start_time is None:
+            return {
+                "started": False,
+                "elapsed_s": 0,
+                "elapsed_days": 0.0,
+                "required_s": self.min_shadow_duration_s,
+                "required_days": self.min_shadow_duration_s / 86400,
+                "duration_met": False,
+            }
+        elapsed = (datetime.utcnow() - self._shadow_start_time).total_seconds()
+        return {
+            "started": True,
+            "elapsed_s": elapsed,
+            "elapsed_days": round(elapsed / 86400, 2),
+            "required_s": self.min_shadow_duration_s,
+            "required_days": round(self.min_shadow_duration_s / 86400, 2),
+            "duration_met": elapsed >= self.min_shadow_duration_s,
+            "remaining_days": max(0, round((self.min_shadow_duration_s - elapsed) / 86400, 2)),
+        }
+
+    def can_promote_to_live(self) -> tuple[bool, str]:
+        """Check if shadow validation requirements are met for live promotion.
+
+        Standash §4.11: Shadow mode must run for minimum duration before
+        a strategy can be promoted to live trading.
+
+        Returns:
+            (can_promote, reason) tuple.
+        """
+        if not self.is_shadow_duration_met():
+            info = self.get_shadow_duration_info()
+            return False, (
+                f"Shadow duration not met: {info['elapsed_days']:.1f} / "
+                f"{info['required_days']:.1f} days "
+                f"({info['remaining_days']:.1f} days remaining)"
+            )
+        return True, "Shadow validation duration satisfied"

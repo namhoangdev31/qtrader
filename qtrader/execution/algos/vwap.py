@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from qtrader.execution.algos.base import ChildOrder
 
 if TYPE_CHECKING:
-    from qtrader.core.event import OrderEvent
+    from qtrader.core.events import OrderEvent
 
 __all__ = ["VWAPAlgo"]
 
@@ -76,7 +76,7 @@ class VWAPAlgo:
 """
 # Pytest-style examples:
 def test_vwap_profile_quantities() -> None:
-    from qtrader.core.event import OrderEvent, EventType
+    from qtrader.core.events import OrderEvent, EventType
     order = OrderEvent(type=EventType.ORDER, symbol="A", order_type="MARKET", quantity=100.0, side="BUY")
     algo = VWAPAlgo(volume_profile=[0.2, 0.3, 0.5])
     children = algo.schedule(order, {"now": 0.0})

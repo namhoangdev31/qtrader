@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-import threading
+import asyncio
 import time
 import uuid
 
 
 class OrderIDGenerator:
-    """Generate globally unique order IDs with duplicate detection."""
+    """Generate globally unique order IDs with duplicate detection.
+
+    Uses asyncio.Lock for consistency with the async codebase (Standash §37).
+    """
 
     def __init__(self) -> None:
         """Initialize the generator with an in-memory registry."""
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._seen_ids: set[str] = set()
+        self._max_registry_size = 1_000_000  # Memory governance: cap registry size
 
-    def generate_order_id(self, exchange: str, symbol: str) -> str:
+    async def generate_order_id(self, exchange: str, symbol: str) -> str:
         """
         Generate a unique order ID.
 
@@ -27,32 +31,25 @@ class OrderIDGenerator:
 
         Returns:
             A unique order ID string.
-
-        Note:
-            The method is thread-safe and checks for duplicates in-memory.
-            In practice, the collision probability of UUID4 + nanosecond timestamp
-            is astronomically low, but we still check the registry for safety.
         """
-        # Normalize exchange and symbol to uppercase for consistency
         exchange_norm = exchange.upper()
-        symbol.upper()
-        # Get current timestamp in nanoseconds
         timestamp_ns = time.time_ns()
-        # Generate UUID4
         unique_id = uuid.uuid4()
-        # Construct order ID
         order_id = f"{unique_id}-{exchange_norm}-{timestamp_ns}"
 
-        # Thread-safe duplicate check and registration
-        with self._lock:
+        # Async-safe duplicate check and registration
+        async with self._lock:
+            # Trim registry if it exceeds max size (keep recent 50%)
+            if len(self._seen_ids) >= self._max_registry_size:
+                self._seen_ids = set(list(self._seen_ids)[self._max_registry_size // 2 :])
+
             if order_id in self._seen_ids:
-                # This should practically never happen, but we handle it defensively
                 raise RuntimeError(f"Duplicate order ID generated: {order_id}")
             self._seen_ids.add(order_id)
 
         return order_id
 
-    def is_duplicate(self, order_id: str) -> bool:
+    async def is_duplicate(self, order_id: str) -> bool:
         """
         Check if an order ID has been seen before.
 
@@ -62,20 +59,24 @@ class OrderIDGenerator:
         Returns:
             True if the order ID is a duplicate, False otherwise.
         """
-        with self._lock:
+        async with self._lock:
             return order_id in self._seen_ids
 
-    def reset(self) -> None:
+    async def reset(self) -> None:
         """Reset the registry (mainly for testing)."""
-        with self._lock:
+        async with self._lock:
             self._seen_ids.clear()
+
+    def get_registry_size(self) -> int:
+        """Return current registry size for monitoring."""
+        return len(self._seen_ids)
 
 
 # Global singleton instance for convenience
 _order_id_generator = OrderIDGenerator()
 
 
-def generate_order_id(exchange: str, symbol: str) -> str:
+async def generate_order_id(exchange: str, symbol: str) -> str:
     """
     Generate a unique order ID using the global generator.
 
@@ -86,10 +87,10 @@ def generate_order_id(exchange: str, symbol: str) -> str:
     Returns:
         A unique order ID string.
     """
-    return _order_id_generator.generate_order_id(exchange, symbol)
+    return await _order_id_generator.generate_order_id(exchange, symbol)
 
 
-def is_duplicate(order_id: str) -> bool:
+async def is_duplicate(order_id: str) -> bool:
     """
     Check if an order ID is a duplicate using the global generator.
 
@@ -99,4 +100,4 @@ def is_duplicate(order_id: str) -> bool:
     Returns:
         True if the order ID is a duplicate, False otherwise.
     """
-    return _order_id_generator.is_duplicate(order_id)
+    return await _order_id_generator.is_duplicate(order_id)

@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from qtrader.core.event import RiskEvent
+from qtrader.core.events import RiskEvent
 from qtrader.core.types import RiskMetrics
 
 if TYPE_CHECKING:

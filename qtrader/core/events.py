@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import time
+from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class EventType(str, Enum):
     """Consolidated Event Types for the global event system."""
+
     MARKET_DATA = "MARKET_DATA"
     MARKET_DELTA = "MARKET_DELTA"
     GAP_DETECTED = "GAP_DETECTED"
@@ -208,6 +210,7 @@ class RetryOrderPayload(BaseModel):
     attempt: int
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+
 class NAVPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     nav: Decimal
@@ -236,6 +239,7 @@ class FeePayload(BaseModel):
     currency: str = "USD"
     fee_type: str = "TAKER"
     metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 class FundingPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -653,23 +657,35 @@ class BaseEvent(BaseModel):
     Global immutable event schema.
     Guarantees compatibility across EventBus, EventStore, and ReplayEngine.
     """
+
     model_config = ConfigDict(frozen=True)
 
-    event_id: UUID = Field(default_factory=uuid4, description="Unique event identifier for idempotency")
-    trace_id: UUID = Field(default_factory=TraceAuthority.ensure_trace, description="Correlation ID propagated across the pipeline")
+    event_id: UUID = Field(
+        default_factory=uuid4, description="Unique event identifier for idempotency"
+    )
+    trace_id: UUID = Field(
+        default_factory=TraceAuthority.ensure_trace,
+        description="Correlation ID propagated across the pipeline",
+    )
     event_type: EventType = Field(description="The type of the event")
     version: int = Field(default=1, description="Schema version for backward compatibility")
     timestamp: int = Field(
         default_factory=lambda: int(time.time() * 1_000_000),
-        description="Microseconds since epoch (normalized)"
+        description="Microseconds since epoch (normalized)",
     )
     source: str = Field(description="Originating module name")
     payload: Any = Field(description="Event-specific data (BaseModel or dict)")
-    
+
     # Metadata for distributed event bus and storage
-    partition_key: str | None = Field(default=None, description="Key used for deterministic routing")
-    delivery_attempt: int = Field(default=1, description="Number of times this event has been attempted")
-    offset: int | None = Field(default=None, description="Monotonically increasing sequence ID per partition")
+    partition_key: str | None = Field(
+        default=None, description="Key used for deterministic routing"
+    )
+    delivery_attempt: int = Field(
+        default=1, description="Number of times this event has been attempted"
+    )
+    offset: int | None = Field(
+        default=None, description="Monotonically increasing sequence ID per partition"
+    )
 
     @property
     def type(self) -> EventType:
@@ -687,6 +703,7 @@ class EventBusProtocol(Protocol):
 
 class MarketEvent(BaseEvent):
     """Event representing a market update."""
+
     event_type: EventType = EventType.MARKET_DATA
     payload: MarketPayload
 
@@ -709,6 +726,7 @@ class MarketEvent(BaseEvent):
 
 class OrderEvent(BaseEvent):
     """Event representing an order action."""
+
     event_type: EventType = EventType.ORDER
     payload: OrderPayload
 
@@ -731,6 +749,7 @@ class OrderEvent(BaseEvent):
 
 class SignalEvent(BaseEvent):
     """Event representing a trading signal."""
+
     event_type: EventType = EventType.SIGNAL
     payload: SignalPayload
 
@@ -758,6 +777,7 @@ class SignalEvent(BaseEvent):
 
 class RiskEvent(BaseEvent):
     """Event representing a risk limit or violation."""
+
     event_type: EventType = EventType.RISK
     payload: RiskPayload
 
@@ -768,6 +788,7 @@ class RiskEvent(BaseEvent):
 
 class FillEvent(BaseEvent):
     """Event representing an order fill."""
+
     event_type: EventType = EventType.FILL
     payload: FillPayload
 
@@ -778,12 +799,14 @@ class FillEvent(BaseEvent):
 
 class SystemEvent(BaseEvent):
     """Event representing system-wide actions."""
+
     event_type: EventType = EventType.SYSTEM
     payload: SystemPayload
 
 
 class ErrorEvent(BaseEvent):
     """Event representing a system error."""
+
     event_type: EventType = EventType.ERROR
     payload: ErrorPayload
 
@@ -818,12 +841,14 @@ class GapFreeMarketEvent(BaseEvent):
 
 class FeatureEvent(BaseEvent):
     """Event representing raw generated features (alpha values)."""
+
     event_type: EventType = EventType.FEATURES
     payload: FeaturePayload
 
 
 class ValidatedFeatureEvent(BaseEvent):
     """Event representing features that have passed statistical validation."""
+
     event_type: EventType = EventType.VALIDATED_FEATURES
     payload: FeaturePayload
 
@@ -835,6 +860,7 @@ class ClockSyncEvent(BaseEvent):
 
 class NAVEvent(BaseEvent):
     """Event representing a portfolio NAV update."""
+
     event_type: EventType = EventType.NAV_UPDATED
     payload: NAVPayload
 
@@ -844,281 +870,328 @@ class NAVEvent(BaseEvent):
 
 class LedgerEntryEvent(BaseEvent):
     """Event representing a double-entry ledger record."""
+
     event_type: EventType = EventType.LEDGER_ENTRY
     payload: LedgerEntryPayload
 
 
 class FeeEvent(BaseEvent):
     """Event representing a trading fee calculation."""
+
     event_type: EventType = EventType.FEE_CALCULATED
     payload: FeePayload
 
 
 class FundingEvent(BaseEvent):
     """Event representing a funding rate payment."""
+
     event_type: EventType = EventType.FUNDING_CALCULATED
     payload: FundingPayload
 
 
 class ConfigChangeEvent(BaseEvent):
     """Event representing a runtime configuration update."""
+
     event_type: EventType = EventType.CONFIG_CHANGED
     payload: ConfigChangePayload
 
 
 class RiskApprovedEvent(BaseEvent):
     """Event representing a risk approval for an order."""
+
     event_type: EventType = EventType.RISK_APPROVED
     payload: RiskApprovedPayload
 
 
 class RiskRejectedEvent(BaseEvent):
     """Event representing a risk rejection for an order."""
+
     event_type: EventType = EventType.RISK_REJECTED
     payload: RiskRejectedPayload
 
 
 class PipelineErrorEvent(BaseEvent):
     """Event representing a critical pipeline failure."""
+
     event_type: EventType = EventType.PIPELINE_ERROR
     payload: PipelineErrorPayload
 
 
 class DecisionTraceEvent(BaseEvent):
     """Event representing a strategy decision audit trail."""
+
     event_type: EventType = EventType.DECISION_TRACE
     payload: DecisionTracePayload
 
 
 class DecisionErrorEvent(BaseEvent):
     """Event representing a strategy decision failure."""
+
     event_type: EventType = EventType.DECISION_ERROR
     payload: DecisionErrorPayload
 
 
 class AuditWarningEvent(BaseEvent):
     """Event representing a failure in trade lifecycle reconstruction."""
+
     event_type: EventType = EventType.AUDIT_WARNING
     payload: AuditWarningPayload
 
 
 class ReplayAuditErrorEvent(BaseEvent):
     """Event representing a failure in deterministic decision replay."""
+
     event_type: EventType = EventType.REPLAY_FAILURE
     payload: ReplayAuditErrorPayload
 
 
 class ComplianceExportEvent(BaseEvent):
     """Event representing a successful compliance data export."""
+
     event_type: EventType = EventType.COMPLIANCE_EXPORT
     payload: ComplianceExportPayload
 
 
 class ComplianceErrorEvent(BaseEvent):
     """Event representing a failure in regulatory reporting or export."""
+
     event_type: EventType = EventType.COMPLIANCE_ERROR
     payload: ComplianceErrorPayload
 
 
 class ImplementationShortfallEvent(BaseEvent):
     """Event representing the implementation shortfall (TCA) of a trade."""
+
     event_type: EventType = EventType.IMPLEMENTATION_SHORTFALL
     payload: ImplementationShortfallPayload
 
 
 class TCAErrorEvent(BaseEvent):
     """Event representing a failure in Transaction Cost Analysis."""
+
     event_type: EventType = EventType.TCA_ERROR
     payload: TCAErrorPayload
 
 
 class SlippageBreakdownEvent(BaseEvent):
     """Event representing the decomposition of execution slippage."""
+
     event_type: EventType = EventType.SLIPPAGE_BREAKDOWN
     payload: SlippageBreakdownPayload
 
 
 class TCAWarningEvent(BaseEvent):
     """Event representing a non-critical inconsistency during TCA analysis."""
+
     event_type: EventType = EventType.TCA_WARNING
     payload: TCAWarningPayload
 
 
 class BenchmarkComparisonEvent(BaseEvent):
     """Event representing the comparison of execution against market benchmarks."""
+
     event_type: EventType = EventType.BENCHMARK_COMPARISON
     payload: BenchmarkComparisonPayload
 
 
 class BenchmarkErrorEvent(BaseEvent):
     """Event representing a failure in execution benchmarking."""
+
     event_type: EventType = EventType.BENCHMARK_ERROR
     payload: BenchmarkErrorPayload
 
 
 class CostAttributionEvent(BaseEvent):
     """Event representing the granular attribution of trading costs."""
+
     event_type: EventType = EventType.COST_ATTRIBUTION
     payload: CostAttributionPayload
 
 
 class AttributionErrorEvent(BaseEvent):
     """Event representing a failure in cost attribution analysis."""
+
     event_type: EventType = EventType.ATTRIBUTION_ERROR
     payload: AttributionErrorPayload
 
 
 class VenueRankingEvent(BaseEvent):
     """Event representing the comparative ranking of execution venues."""
+
     event_type: EventType = EventType.VENUE_RANKING
     payload: VenueRankingPayload
 
 
 class VenueErrorEvent(BaseEvent):
     """Event representing a failure in venue-specific execution analysis."""
+
     event_type: EventType = EventType.VENUE_ERROR
     payload: VenueErrorPayload
 
 
 class TCAReportEvent(BaseEvent):
     """Event representing the global aggregation of TCA metrics."""
+
     event_type: EventType = EventType.TCA_REPORT
     payload: TCAReportPayload
 
 
 class TCAReportErrorEvent(BaseEvent):
     """Event representing a failure in global TCA report generation."""
+
     event_type: EventType = EventType.TCA_REPORT_ERROR
     payload: TCAReportErrorPayload
 
 
 class StrategyStateEvent(BaseEvent):
     """Event representing a transition in strategy lifecycle state."""
+
     event_type: EventType = EventType.STRATEGY_STATE
     payload: StrategyStatePayload
 
 
 class FSMErrorEvent(BaseEvent):
     """Event representing a failed finite state machine transition."""
+
     event_type: EventType = EventType.FSM_ERROR
     payload: FSMErrorPayload
 
 
 class SandboxReportEvent(BaseEvent):
     """Event representing the performance report of a sandbox simulation."""
+
     event_type: EventType = EventType.SANDBOX_REPORT
     payload: SandboxReportPayload
 
 
 class SandboxErrorEvent(BaseEvent):
     """Event representing a failure or crash in the sandbox environment."""
+
     event_type: EventType = EventType.SANDBOX_ERROR
     payload: SandboxErrorPayload
 
 
 class ModelRiskScoreEvent(BaseEvent):
     """Event representing the quantitative risk score of a trading model."""
+
     event_type: EventType = EventType.MODEL_RISK_SCORE
     payload: ModelRiskScorePayload
 
 
 class RiskScoreErrorEvent(BaseEvent):
     """Event representing a failure in the model risk scoring pipeline."""
+
     event_type: EventType = EventType.RISK_SCORE_ERROR
     payload: RiskScoreErrorPayload
 
 
 class StrategyApprovalEvent(BaseEvent):
     """Event representing the formal approval or rejection of a trading strategy."""
+
     event_type: EventType = EventType.STRATEGY_APPROVAL
     payload: StrategyApprovalPayload
 
 
 class ApprovalErrorEvent(BaseEvent):
     """Event representing a failure in the strategy approval pipeline."""
+
     event_type: EventType = EventType.APPROVAL_ERROR
     payload: ApprovalErrorPayload
 
 
 class StrategyKillEvent(BaseEvent):
     """Event representing an emergency shutdown of a trading strategy."""
+
     event_type: EventType = EventType.STRATEGY_KILL
     payload: StrategyKillPayload
 
 
 class KillErrorEvent(BaseEvent):
     """Event representing a failure in the kill switch system."""
+
     event_type: EventType = EventType.KILL_ERROR
     payload: KillErrorPayload
 
 
 class StressTestResultEvent(BaseEvent):
     """Event representing the result of a system stress test."""
+
     event_type: EventType = EventType.STRESS_TEST_RESULT
     payload: StressTestResultPayload
 
 
 class StressTestErrorEvent(BaseEvent):
     """Event representing a failure or crash in the stress testing pipeline."""
+
     event_type: EventType = EventType.STRESS_TEST_ERROR
     payload: StressTestErrorPayload
 
 
 class FidelityReportEvent(BaseEvent):
     """Event representing the result of a backtest vs live fidelity validation."""
+
     event_type: EventType = EventType.FIDELITY_REPORT
     payload: FidelityReportPayload
 
 
 class FidelityErrorEvent(BaseEvent):
     """Event representing a failure in the fidelity calculation pipeline."""
+
     event_type: EventType = EventType.FIDELITY_ERROR
     payload: FidelityErrorPayload
 
 
 class SimulationAccuracyEvent(BaseEvent):
     """Event representing the statistical accuracy of a market simulation."""
+
     event_type: EventType = EventType.SIMULATION_ACCURACY_REPORT
     payload: SimulationAccuracyPayload
 
 
 class SimulationAccuracyErrorEvent(BaseEvent):
     """Event representing a failure in the simulation accuracy validation pipeline."""
+
     event_type: EventType = EventType.SIMULATION_ACCURACY_ERROR
     payload: SimulationAccuracyErrorPayload
 
 
 class CoverageReportEvent(BaseEvent):
     """Event representing the test coverage status of a system component."""
+
     event_type: EventType = EventType.COVERAGE_REPORT
     payload: CoverageReportPayload
 
 
 class CoverageErrorEvent(BaseEvent):
     """Event representing a failure in the coverage enforcement pipeline."""
+
     event_type: EventType = EventType.COVERAGE_ERROR
     payload: CoverageErrorPayload
 
 
 class ExecutionObjectiveEvent(BaseEvent):
     """Event representing the mathematical cost breakdown of an execution decision."""
+
     event_type: EventType = EventType.EXECUTION_OBJECTIVE
     payload: ExecutionObjectivePayload
 
 
 class ExecutionStateEvent(BaseEvent):
     """Event representing the 7-dimensional microstructure state vector (S_t)."""
+
     event_type: EventType = EventType.EXECUTION_STATE_UPDATE
     payload: ExecutionStatePayload
 
 
 class ExecutionCostEvent(BaseEvent):
     """Event representing the 4-dimensional microstructure cost decomposition."""
+
     event_type: EventType = EventType.EXECUTION_COST_REPORT
     payload: ExecutionCostPayload
 
 
 class MetaDecisionEvent(BaseEvent):
     """Event representing a deterministic meta-control decision (Gov/Life/Constraint)."""
+
     event_type: EventType = EventType.META_DECISION
     payload: MetaDecisionPayload

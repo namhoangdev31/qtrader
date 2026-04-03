@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from qtrader.core.event import SignalEvent
+from qtrader.core.events import SignalEvent
 
 if TYPE_CHECKING:
     import polars as pl

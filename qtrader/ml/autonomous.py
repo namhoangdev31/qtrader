@@ -8,11 +8,12 @@ from dataclasses import dataclass, field
 import polars as pl
 
 from qtrader.core.bus import EventBus
-from qtrader.core.event import (
-    DriftEvent,
-    MarketDataEvent,
-    ModelRetrainEvent,
+from qtrader.core.events import (
+    EventType,
+    MarketEvent,
     SignalEvent,
+    SystemEvent,
+    SystemPayload,
 )
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.registry import ModelRegistry
@@ -29,7 +30,7 @@ DataProvider = Callable[[], Awaitable[pl.DataFrame]]
 @dataclass(slots=True)
 class AutonomousLoop:
     """Production auto-retraining orchestrator that reacts to regime changes and data drift.
-    
+
     Eliminates all polling by subscribing to DRIFT and MARKET_DATA events.
     """
 
@@ -71,7 +72,7 @@ class AutonomousLoop:
 
         target_model_id = self.rotator.on_regime_change(regime_id)
         if target_model_id is not None:
-             self.registry.log_model_iteration(
+            self.registry.log_model_iteration(
                 model_name="regime_rotation",
                 model={"model_id": target_model_id},
                 features=feature_cols,
@@ -80,13 +81,15 @@ class AutonomousLoop:
                 tags={"rotation_event": "true"},
             )
 
-    async def on_market_data(self, event: MarketDataEvent, get_data_func: DataProvider, feature_cols: list[str]) -> None:
+    async def on_market_data(
+        self, event: MarketEvent, get_data_func: DataProvider, feature_cols: list[str]
+    ) -> None:
         """Triggered on new market ticks to check regimes (zero latency)."""
         current_ts = asyncio.get_event_loop().time()
-        
+
         if current_ts - self._last_run_ts < self.interval_s:
             return
-            
+
         try:
             recent_data = await get_data_func()
             await self.run_step(recent_data, feature_cols)
@@ -94,27 +97,40 @@ class AutonomousLoop:
         except Exception as exc:
             log.error("Autonomous market data handler failed", exc_info=exc)
 
-    async def on_drift(self, event: DriftEvent) -> None:
+    async def on_drift(self, event: SystemEvent) -> None:
         """Event-driven retraining trigger: Drift > threshold -> retrain."""
-        if event.drift_score > self.drift_threshold:
-            log.warning("[ML] Significant drift detected (%.3f > %.3f). Triggering retrain...", 
-                        event.drift_score, self.drift_threshold)
-            
-            # Emit ModelRetrainEvent to downstream trainer consumers
-            retrain_event = ModelRetrainEvent(
-                symbol=event.symbol,
-                model_id=str(self._last_regime or "active"),
-                reason=f"Drift score {event.drift_score:.3f} exceeded threshold",
-                metadata={"drift_event": event.__dict__}
+        drift_score = event.payload.metadata.get("drift_score", 0.0)
+        symbol = event.payload.metadata.get("symbol", "unknown")
+
+        if drift_score > self.drift_threshold:
+            log.warning(
+                "[ML] Significant drift detected (%.3f > %.3f). Triggering retrain...",
+                drift_score,
+                self.drift_threshold,
+            )
+
+            # Emit SystemEvent for downstream trainer consumers
+            retrain_event = SystemEvent(
+                source="AutonomousLoop",
+                trace_id=getattr(event, "trace_id", "unknown"),
+                payload=SystemPayload(
+                    action="MODEL_RETRAIN",
+                    reason=f"Drift score {drift_score:.3f} exceeded threshold",
+                    metadata={
+                        "symbol": symbol,
+                        "model_id": str(self._last_regime or "active"),
+                        "drift_score": drift_score,
+                    },
+                ),
             )
             await self.bus.publish(retrain_event)
-            
+
             # Log to registry for auditing
             self.registry.log_model_iteration(
                 model_name="auto_retrain_trigger",
                 model={"status": "pending"},
-                metrics={"drift_score": event.drift_score},
-                tags={"reason": "drift"}
+                metrics={"drift_score": drift_score},
+                tags={"reason": "drift"},
             )
 
 

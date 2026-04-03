@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from qtrader.core.event import OrderEvent
+    from qtrader.core.events import OrderEvent
 
 __all__ = ["ChildOrder", "ExecutionAlgo"]
 

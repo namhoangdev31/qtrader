@@ -2,9 +2,22 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 
 _LOG = logging.getLogger("qtrader.portfolio.drawdown_controller")
+
+
+@dataclass(slots=True)
+class DrawdownConfig:
+    """Standash §4.15: Configurable drawdown thresholds (no magic numbers)."""
+
+    stop_level: float = 0.15  # 15% → STOP
+    heavy_reduce_level: float = 0.10  # 10% → REDUCE_50
+    light_reduce_level: float = 0.05  # 5% → REDUCE_25
+    heavy_reduce_factor: float = 0.5
+    light_reduce_factor: float = 0.75
+    lockout_threshold: float = 0.15  # 15% → operational lock
 
 
 class LiveDrawdownController:
@@ -14,14 +27,18 @@ class LiveDrawdownController:
     Objective: Systematically protect platform capital by reducing or halting
     trading activity as portfolio drawdown escalates.
 
-    Model: Tiered Risk Adjustment (5% / 10% / 15% Rules).
-    Constraint: Principal Preservation Gating (15% Max DD Operational Lock).
+    Model: Tiered Risk Adjustment (configurable 5% / 10% / 15% Rules).
+    Constraint: Principal Preservation Gating (configurable Max DD Operational Lock).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: DrawdownConfig | None = None) -> None:
         """
         Initialize the institutional drawdown controller.
+
+        Args:
+            config: Configurable drawdown thresholds (Standash §4.15).
         """
+        self.config = config or DrawdownConfig()
         # Telemetry for institutional situational awareness.
         self._historical_max_drawdown: float = 0.0
         self._cumulative_adjustment_count: int = 0
@@ -34,10 +51,10 @@ class LiveDrawdownController:
 
         Forensic Logic:
         1. Drawdown Computation: $DD = (Peak - Current) / Peak$.
-        2. Tiered Modulation:
-           - $DD \ge 15\% \implies$ Multiplier = 0.00 (STOP).
-           - $DD \ge 10\% \implies$ Multiplier = 0.50 (REDUCE_50).
-           - $DD \ge 5 \% \implies$ Multiplier = 0.75 (REDUCE_25).
+        2. Tiered Modulation (configurable thresholds):
+           - $DD \ge$ stop_level $\implies$ Multiplier = 0.00 (STOP).
+           - $DD \ge$ heavy_reduce_level $\implies$ Multiplier = heavy_reduce_factor.
+           - $DD \ge$ light_reduce_level $\implies$ Multiplier = light_reduce_factor.
            - Else $\implies$ Multiplier = 1.00 (NORMAL).
         """
         start_time = time.time()
@@ -57,19 +74,15 @@ class LiveDrawdownController:
         applied_risk_factor = 1.0
         risk_action_level = "NORMAL"
 
-        # 2. Tiered Operational Rule Evaluation (5% / 10% / 15%).
-        stop_level = 0.15
-        heavy_reduce = 0.10
-        light_reduce = 0.05
-
-        if current_drawdown >= stop_level:
+        # 2. Tiered Operational Rule Evaluation (configurable thresholds).
+        if current_drawdown >= self.config.stop_level:
             applied_risk_factor = 0.0
             risk_action_level = "STOP"
-        elif current_drawdown >= heavy_reduce:
-            applied_risk_factor = 0.5
+        elif current_drawdown >= self.config.heavy_reduce_level:
+            applied_risk_factor = self.config.heavy_reduce_factor
             risk_action_level = "REDUCE_50"
-        elif current_drawdown >= light_reduce:
-            applied_risk_factor = 0.75
+        elif current_drawdown >= self.config.light_reduce_level:
+            applied_risk_factor = self.config.light_reduce_factor
             risk_action_level = "REDUCE_25"
         else:
             applied_risk_factor = 1.0
@@ -110,10 +123,9 @@ class LiveDrawdownController:
         """
         situational awareness for institutional principal preservation.
         """
-        lockout_threshold = 0.15
         return {
             "status": "DD_GOVERNANCE",
             "maxly_historical_drawdown": round(self._historical_max_drawdown, 4),
             "governance_event_count": self._cumulative_adjustment_count,
-            "lockout_active": self._historical_max_drawdown >= lockout_threshold,
+            "lockout_active": self._historical_max_drawdown >= self.config.lockout_threshold,
         }

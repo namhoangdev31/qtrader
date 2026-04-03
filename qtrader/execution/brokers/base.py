@@ -1,6 +1,6 @@
 from typing import Protocol, runtime_checkable
 
-from qtrader.core.event import FillEvent, OrderEvent
+from qtrader.core.events import FillEvent, OrderEvent
 
 
 @runtime_checkable

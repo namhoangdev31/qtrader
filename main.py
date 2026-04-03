@@ -7,132 +7,111 @@ import sys
 from decimal import Decimal
 from datetime import datetime
 
+from loguru import logger
+
 from qtrader.core.event_bus import EventBus
-from qtrader.core.logger import StructuredLogger
-from qtrader.core.types import MarketData, EventType, AlphaOutput
+from qtrader.core.events import MarketEvent, MarketPayload, EventType
+from qtrader.core.types import MarketData, AlphaOutput
 from qtrader.strategy.alpha.alpha_base import AlphaBase
 from qtrader.strategy.validation.feature_validator import SimpleFeatureValidator
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.portfolio.allocator import SimpleAllocator
 from qtrader.risk.runtime import RuntimeRiskEngine
-from qtrader.execution.oms_adapter import ExecutionOMSAdapter
+from qtrader.oms.oms_adapter import OMSAdapter
 from qtrader.execution.execution_engine import SimulatedExchangeAdapter
-from qtrader.execution.oms import UnifiedOMS  # Import the real UnifiedOMS
+from qtrader.core.orchestrator import TradingOrchestrator
 
 
 class ExampleAlpha(AlphaBase):
     """Example alpha generator for demonstration."""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__("example_alpha")
-    
+
     async def generate(self, market_data: MarketData) -> AlphaOutput:
         """Generate a simple example alpha."""
-        # In reality, this would calculate actual alpha factors
-        # For demo, we'll return a simple moving average crossover signal
-        alpha_value = Decimal('0.05')  # Placeholder alpha value
-        
+        alpha_value = Decimal("0.05")
+
         return AlphaOutput(
             symbol=market_data.symbol,
             timestamp=market_data.timestamp,
             alpha_values={"example_alpha": alpha_value},
-            metadata={"alpha_type": "example"}
+            metadata={"alpha_type": "example"},
         )
 
 
-async def main():
+async def main() -> None:
     """Main function to run the QTrader system."""
-    # Setup logging
-    logger = StructuredLogger("qtrader_main")
     logger.info("Starting QTrader system")
-    
+
     # Setup event bus
-    event_bus = EventBus(logger=logger)
-    
+    event_bus = EventBus()
+
     # Create components
-    alpha_generator = ExampleAlpha()
+    alpha_module = ExampleAlpha()
     feature_validator = SimpleFeatureValidator()
-    
+
     # Create strategies
     probabilistic_strategy = ProbabilisticStrategy(
         symbol="AAPL",
-        capital=Decimal('100000')
+        capital=Decimal("100000"),
     )
-    
+
     ensemble_strategy = EnsembleStrategy(
         strategies=[probabilistic_strategy],
-        performance_window=20
+        performance_window=20,
     )
-    
-    # Use ensemble strategy
-    strategy = ensemble_strategy
-    
+
     allocator = SimpleAllocator()
-    
-    # Create mock OMS and risk engine
-    oms = UnifiedOMS()  # Use the imported UnifiedOMS
-    risk_engine = RuntimeRiskEngine(oms=oms)
-    
+
+    # Create OMS adapter
+    oms_adapter = OMSAdapter()
+
+    # Create risk engine
+    risk_engine = RuntimeRiskEngine()
+
     # Create a simulated exchange adapter for testing
     simulated_adapter = SimulatedExchangeAdapter(name="SimulatedExchange")
-    # For demonstration, set a price for a symbol
-    simulated_adapter.set_price("AAPL", Decimal('150.0'))
-    
-    # Create execution OMS adapter with the simulated exchange
-    exchange_adapters = {"simulated": simulated_adapter}
-    oms_adapter = ExecutionOMSAdapter(
-        exchange_adapters=exchange_adapters,
-        routing_mode="smart",
-        max_order_size=Decimal('10000'),
-        split_size=Decimal('5000')
-    )
-    # Start the execution engine
-    await oms_adapter.start()
-    
-    # Create orchestrator (no config needed anymore)
-    orchestrator = QTraderEngine(
+    simulated_adapter.set_price("AAPL", Decimal("150.0"))
+
+    # Create orchestrator
+    orchestrator = TradingOrchestrator(
         event_bus=event_bus,
-        logger=logger,
-        alpha_generator=alpha_generator,
+        market_data_adapter=None,
+        alpha_modules=[alpha_module],
         feature_validator=feature_validator,
-        strategy=strategy,
-        allocator=allocator,
-        risk_engine=risk_engine,
-        oms_adapter=oms_adapter
+        strategies=[probabilistic_strategy],
+        ensemble_strategy=ensemble_strategy,
+        portfolio_allocator=allocator,
+        runtime_risk_engine=risk_engine,
+        oms_adapter=oms_adapter,
     )
-    
+
     # Setup signal handling for graceful shutdown
-    def signal_handler():
+    def signal_handler() -> None:
         logger.info("Received shutdown signal")
-        asyncio.create_task(orchestrator.stop())
-        asyncio.create_task(oms_adapter.stop())
-    
+        asyncio.create_task(orchestrator.halt_core("SHUTDOWN_SIGNAL"))
+
     # Register signal handlers
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, signal_handler)
-    
+    for sig_name in ("SIGTERM", "SIGINT"):
+        sig = getattr(signal, sig_name, None)
+        if sig is not None:
+            try:
+                loop.add_signal_handler(sig, signal_handler)
+            except NotImplementedError:
+                pass  # Windows doesn't support add_signal_handler
+
     try:
-        # Start the orchestrator
-        await orchestrator.start()
-        
-        # Keep the system running
-        logger.info("QTrader system is running. Press Ctrl+C to stop.")
-        while orchestrator._running:
-            await asyncio.sleep(1)
-            
+        # Initialize and start the orchestrator
+        orchestrator.initialize()
+        await orchestrator.run()
+
     except Exception as e:
         logger.error(f"Error in main loop: {e}", exc_info=True)
     finally:
-        # Ensure cleanup
-        await orchestrator.stop()
-        await oms_adapter.stop()
         logger.info("QTrader system stopped")
-
-
-# Import QTraderEngine after defining dependencies to avoid circular imports
-from qtrader.core.orchestrator import QTraderEngine
 
 
 if __name__ == "__main__":

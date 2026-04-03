@@ -1,4 +1,5 @@
 """Consolidated Alpha Combiner: Single source of truth for factor/signal aggregation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,7 +11,9 @@ import polars as pl
 @runtime_checkable
 class AlphaBase(Protocol):
     """Protocol for alpha factors/generators."""
+
     name: str
+
     def compute(self, data: pl.DataFrame) -> pl.Series: ...
     async def generate(self, data: any) -> any: ...
 
@@ -27,8 +30,10 @@ class AlphaCombiner:
     _alphas: dict[str, dict[str, float]] = field(default_factory=dict, init=False)
     _previous_signal: float = 0.0
 
-    def combine_features(self, market_data: pl.DataFrame, factors: list[AlphaBase]) -> dict[str, pl.Series] | None:
-        """ Vectorized combination of multiple polars factors into a feature dict. """
+    def combine_features(
+        self, market_data: pl.DataFrame, factors: list[AlphaBase]
+    ) -> dict[str, pl.Series] | None:
+        """Vectorized combination of multiple polars factors into a feature dict."""
         features = {}
         for alpha in factors:
             try:
@@ -36,12 +41,17 @@ class AlphaCombiner:
                 if feature_series.len() != len(market_data):
                     continue
                 features[alpha.name] = feature_series
-            except Exception:
-                return None
+            except Exception as e:
+                import logging
+
+                logging.getLogger(f"qtrader.alpha.combiner").error(
+                    f"Alpha {alpha.name} failed during combination: {e}"
+                )
+                continue  # Skip this alpha, don't fail the whole combination
         return features
 
     def register_signal(self, name: str, signal: float, ic: float = 1.0) -> None:
-        """ Register a scalar signal from a specific alpha stream. """
+        """Register a scalar signal from a specific alpha stream."""
         self._alphas[name] = {"signal": float(signal), "ic": float(ic)}
 
     def get_composite_signal(self) -> float:
@@ -61,8 +71,10 @@ class AlphaCombiner:
 
         # Clamp and Dampen
         new_signal = max(-1.0, min(1.0, new_signal))
-        blended = (1.0 - self.dampening_factor) * new_signal + self.dampening_factor * self._previous_signal
-        
+        blended = (
+            1.0 - self.dampening_factor
+        ) * new_signal + self.dampening_factor * self._previous_signal
+
         self._previous_signal = float(blended)
         return self._previous_signal
 
@@ -70,7 +82,8 @@ class AlphaCombiner:
         """Compute relative weights based on IC or Equal weighting."""
         names = list(ics.keys())
         n = len(names)
-        if n == 0: return {}
+        if n == 0:
+            return {}
 
         if self.method == "equal":
             return {name: 1.0 / n for name in names}
@@ -78,21 +91,26 @@ class AlphaCombiner:
         # Weight by positive IC
         pos_ics = {name: max(ic, 0.0) for name, ic in ics.items()}
         total = sum(pos_ics.values())
-        
+
         if total <= 0.0:
             return {name: 1.0 / n for name in names}
-            
+
         return {name: val / total for name, val in pos_ics.items()}
 
-    def update_historical_ic(self, alpha_name: str, predicted: pl.Series, realized: pl.Series) -> float:
+    def update_historical_ic(
+        self, alpha_name: str, predicted: pl.Series, realized: pl.Series
+    ) -> float:
         """Update the IC estimate for a factor using Rank Correlation."""
-        if predicted.len() < 2: return 0.0
-        
+        if predicted.len() < 2:
+            return 0.0
+
         pred_rank = predicted.rank()
         real_rank = realized.rank()
-        
-        ic_val = float(pl.DataFrame({"p": pred_rank, "r": real_rank}).select(pl.corr("p", "r")).item() or 0.0)
-        
+
+        ic_val = float(
+            pl.DataFrame({"p": pred_rank, "r": real_rank}).select(pl.corr("p", "r")).item() or 0.0
+        )
+
         if alpha_name in self._alphas:
             self._alphas[alpha_name]["ic"] = ic_val
         return ic_val

@@ -69,17 +69,18 @@ class BaseAlpha(ABC):
         # Compute raw alpha
         try:
             raw = self._compute_raw(df)
-        except Exception:
-            # On any error, return neutral fallback
-            return pl.Series(
-                name=self.name, values=[0.0] * df.height, dtype=pl.Float64
+        except Exception as e:
+            # On any error, return neutral fallback with logging
+            import logging
+
+            logging.getLogger(f"qtrader.alpha.{self.name}").error(
+                f"Alpha {self.name} computation failed, returning neutral fallback: {e}"
             )
+            return pl.Series(name=self.name, values=[0.0] * df.height, dtype=pl.Float64)
 
         # Ensure output length matches input
         if raw.len() != df.height:
-            return pl.Series(
-                name=self.name, values=[0.0] * df.height, dtype=pl.Float64
-            )
+            return pl.Series(name=self.name, values=[0.0] * df.height, dtype=pl.Float64)
 
         # Ensure Float64 dtype
         if raw.dtype != pl.Float64:

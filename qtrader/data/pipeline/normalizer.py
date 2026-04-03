@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from qtrader.core.event import EventType, MarketDataEvent
+from qtrader.core.events import EventType, MarketEvent
 from qtrader.data.pipeline.base import DataNormalizer
 
 
 class UnifiedNormalizer(DataNormalizer):
-    """Normalizes raw data from multiple venues (Coinbase, Binance) into MarketDataEvent.
+    """Normalizes raw data from multiple venues (Coinbase, Binance) into MarketEvent.
     
     This implementation handles the venue-specific mapping logic centrally.
     """
 
-    def normalize(self, raw_data: dict[str, Any]) -> MarketDataEvent:
+    def normalize(self, raw_data: dict[str, Any]) -> MarketEvent:
         """
-        Convert raw feed dictionary to a standardized MarketDataEvent.
+        Convert raw feed dictionary to a standardized MarketEvent.
         """
         venue = raw_data.get("venue", "unknown").lower()
         symbol = raw_data.get("symbol", "unknown")
@@ -26,7 +26,7 @@ class UnifiedNormalizer(DataNormalizer):
             return self._normalize_binance(raw_data)
         else:
             # Fallback/Generic mapping
-            return MarketDataEvent(
+            return MarketEvent(
                 type=EventType.MARKET_DATA,
                 symbol=symbol,
                 trace_id=trace_id,
@@ -34,8 +34,8 @@ class UnifiedNormalizer(DataNormalizer):
                 metadata={"venue": venue}
             )
 
-    def _normalize_coinbase(self, data: dict[str, Any]) -> MarketDataEvent:
-        return MarketDataEvent(
+    def _normalize_coinbase(self, data: dict[str, Any]) -> MarketEvent:
+        return MarketEvent(
             type=EventType.MARKET_DATA,
             symbol=data.get("symbol", "unknown"),
             seq_id=data.get("seq_id"),
@@ -49,9 +49,9 @@ class UnifiedNormalizer(DataNormalizer):
             metadata={"venue": "coinbase"}
         )
 
-    def _normalize_binance(self, data: dict[str, Any]) -> MarketDataEvent:
+    def _normalize_binance(self, data: dict[str, Any]) -> MarketEvent:
         raw_payload = data.get("data", {})
-        return MarketDataEvent(
+        return MarketEvent(
             type=EventType.MARKET_DATA,
             symbol=data.get("symbol", "unknown"),
             seq_id=data.get("seq_id"),

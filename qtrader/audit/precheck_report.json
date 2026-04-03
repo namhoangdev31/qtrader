@@ -1,9 +1,8 @@
 {
-  "timestamp": "2026-04-01T10:11:33.143159+00:00",
+  "timestamp": "2026-04-03T15:15:09.704889+00:00",
   "ready": false,
   "status": "BLOCKED",
   "failed_checks": [
-    "TraceAuthority",
     "FloatScan"
   ],
   "details": [
@@ -19,8 +18,8 @@
     },
     {
       "name": "TraceAuthority",
-      "status": false,
-      "message": "Trace context missing"
+      "status": true,
+      "message": "Trace context ready"
     },
     {
       "name": "EnforcementEngine",
@@ -30,7 +29,7 @@
     {
       "name": "FloatScan",
       "status": false,
-      "message": "Detected 701 high-risk float usages"
+      "message": "Detected 12 high-risk float usages"
     }
   ]
 }

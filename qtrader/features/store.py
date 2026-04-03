@@ -49,6 +49,7 @@ class FeatureStore:
     def _init_duckdb(self) -> None:
         try:
             import duckdb  # type: ignore[import]
+
             self._conn = duckdb.connect(self.duckdb_path)
             _LOG.debug("DuckDB feature store initialized at %s", self.duckdb_path)
         except Exception as exc:
@@ -94,24 +95,18 @@ class FeatureStore:
                 _LOG.warning("DuckDB write failed (%s); falling back to Parquet.", exc)
         self._save_parquet(df, symbol, timeframe, mode)
 
-    def _save_duckdb(
-        self, df: pl.DataFrame, symbol: str, timeframe: str, mode: str
-    ) -> None:
+    def _save_duckdb(self, df: pl.DataFrame, symbol: str, timeframe: str, mode: str) -> None:
         tbl = self._table_name(symbol, timeframe)
         conn: duckdb.DuckDBPyConnection = self._conn  # type: ignore[assignment]
         df.to_arrow()
         if mode == "overwrite":
             conn.execute(f'DROP TABLE IF EXISTS "{tbl}"')
         # CREATE or INSERT
-        conn.execute(
-            f'CREATE TABLE IF NOT EXISTS "{tbl}" AS SELECT * FROM arrow WHERE 1=0'
-        )
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{tbl}" AS SELECT * FROM arrow WHERE 1=0')
         conn.execute(f'INSERT INTO "{tbl}" SELECT * FROM arrow')
         _LOG.debug("Saved %d rows to DuckDB table '%s'.", df.height, tbl)
 
-    def _save_parquet(
-        self, df: pl.DataFrame, symbol: str, timeframe: str, mode: str
-    ) -> None:
+    def _save_parquet(self, df: pl.DataFrame, symbol: str, timeframe: str, mode: str) -> None:
         path = self._parquet_path(symbol, timeframe)
         path.parent.mkdir(parents=True, exist_ok=True)
         if mode == "append" and path.exists():
@@ -237,12 +232,14 @@ class FeatureStore:
                 syms = set()
                 for t in tables:
                     if t.startswith("features_"):
-                        parts = t[len("features_"):].rsplit("_", 1)
+                        parts = t[len("features_") :].rsplit("_", 1)
                         if parts:
                             syms.add(parts[0].replace("_", "/"))
                 return sorted(syms)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger("qtrader.features.store").warning(
+                    f"FeatureStore: DuckDB metadata query failed, falling back to parquet: {e}"
+                )
         # Parquet fallback
         symbols: list[str] = []
         for sym_dir in self.base_path.glob("symbol=*"):

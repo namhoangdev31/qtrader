@@ -30,8 +30,12 @@ class AlphaRegistry:
         if not isinstance(name, str):
             try:
                 name = getattr(alpha_cls(), "name", None)
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+
+                logging.getLogger("qtrader.alpha.registry").warning(
+                    f"Failed to instantiate alpha class to read name attribute: {e}"
+                )
         if not isinstance(name, str):
             raise ValueError("Alpha class must define a string 'name' attribute.")
         cls._registry[name] = alpha_cls
@@ -127,4 +131,3 @@ def test_engine_compute_all_has_composite() -> None:
     out = engine.compute_all(df)
     assert "momentum" in out.columns and "composite_alpha" in out.columns
 """
-

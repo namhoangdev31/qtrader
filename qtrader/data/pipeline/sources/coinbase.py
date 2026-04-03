@@ -6,16 +6,16 @@ from typing import Any
 import websockets
 
 from qtrader.core.config import Config
-from qtrader.core.event import MarketDataEvent
+from qtrader.core.events import MarketEvent
 
 
 class CoinbaseConnector:
     """
-    Connects to Coinbase Advanced Trade WebSocket API and emits MarketDataEvent.
+    Connects to Coinbase Advanced Trade WebSocket API and emits MarketEvent.
 
     Notes:
     - This is a minimal public-channel connector meant to feed OMS market_state/SOR.
-    - Events are normalized into `MarketDataEvent(symbol=..., data={...})` with `venue="coinbase"`.
+    - Events are normalized into `MarketEvent(symbol=..., data={...})` with `venue="coinbase"`.
     """
 
     WS_URL = "wss://advanced-trade-websocket.coinbase.com"
@@ -32,10 +32,10 @@ class CoinbaseConnector:
         self.api_secret = api_secret or Config.COINBASE_API_SECRET
         self.channel = channel
         self.is_running = False
-        self.callback: Callable[[MarketDataEvent], Any] | None = None
+        self.callback: Callable[[MarketEvent], Any] | None = None
         self._log = logging.getLogger("qtrader.data.coinbase_ws")
 
-    async def connect(self, callback: Callable[[MarketDataEvent], Any]) -> None:
+    async def connect(self, callback: Callable[[MarketEvent], Any]) -> None:
         self.callback = callback
         self.is_running = True
 
@@ -63,7 +63,7 @@ class CoinbaseConnector:
                 # Zero Latency: Immediate retry without sleep
                 continue
 
-    def _normalize(self, data: dict[str, Any]) -> MarketDataEvent | None:
+    def _normalize(self, data: dict[str, Any]) -> MarketEvent | None:
         # Coinbase Advanced Trade WS envelopes contain channel + events list.
         channel = data.get("channel")
         if channel != "ticker":
@@ -81,7 +81,7 @@ class CoinbaseConnector:
                 bid = float(t.get("best_bid") or price or 0.0)
                 ask = float(t.get("best_ask") or price or 0.0)
 
-                return MarketDataEvent(
+                return MarketEvent(
                     symbol=symbol,
                     data={
                         "venue": "coinbase",

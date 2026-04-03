@@ -1,5 +1,6 @@
 """Multi-exchange adapter that routes orders to the best exchange using a smart router."""
 
+import asyncio
 import logging
 from decimal import Decimal
 from typing import Any
@@ -38,26 +39,43 @@ class MultiExchangeAdapter(ExchangeAdapter):
         self.logger = logger.getChild("MultiExchangeAdapter")
         self.logger.info(f"MultiExchangeAdapter initialized with {len(exchanges)} exchanges")
 
-    async def _gather_market_data(self, symbol: str) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Decimal]], dict[str, float]]:
-        """Gather market data, fees, and latency from all exchanges for a symbol."""
-        market_data = {}
-        fees_data = {}
-        latency_data = {}
-        for exchange_name, adapter in self.exchanges.items():
+    async def _gather_market_data(
+        self, symbol: str
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Decimal]], dict[str, float]]:
+        """Gather market data, fees, and latency from all exchanges for a symbol.
+
+        Uses asyncio.gather() for parallel execution across venues (Standash §2.5).
+        """
+
+        async def _fetch_orderbook(
+            name: str, adapter: ExchangeAdapter
+        ) -> tuple[str, dict[str, Any]]:
             try:
                 orderbook = await adapter.get_orderbook(symbol)
-                market_data[exchange_name] = orderbook
+                return name, orderbook
             except Exception as e:
-                self.logger.error(f"Failed to get orderbook from {exchange_name}: {e}")
-                market_data[exchange_name] = {"bids": [], "asks": []}
+                self.logger.error(f"Failed to get orderbook from {name}: {e}")
+                return name, {"bids": [], "asks": []}
+
+        async def _fetch_fees(
+            name: str, adapter: ExchangeAdapter
+        ) -> tuple[str, dict[str, Decimal]]:
             try:
                 fees = await adapter.get_fees(symbol)
-                fees_data[exchange_name] = fees
+                return name, fees
             except Exception as e:
-                self.logger.error(f"Failed to get fees from {exchange_name}: {e}")
-                fees_data[exchange_name] = {"maker": Decimal('0'), "taker": Decimal('0')}
-            # Latency data is not yet available; default to 0
-            latency_data[exchange_name] = 0.0
+                self.logger.error(f"Failed to get fees from {name}: {e}")
+                return name, {"maker": Decimal("0"), "taker": Decimal("0")}
+
+        # Parallel execution: all venues queried simultaneously
+        orderbook_results, fees_results = await asyncio.gather(
+            asyncio.gather(*[_fetch_orderbook(n, a) for n, a in self.exchanges.items()]),
+            asyncio.gather(*[_fetch_fees(n, a) for n, a in self.exchanges.items()]),
+        )
+
+        market_data = dict(orderbook_results)
+        fees_data = dict(fees_results)
+        latency_data = {name: 0.0 for name in self.exchanges}
         return market_data, fees_data, latency_data
 
     async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
@@ -90,7 +108,9 @@ class MultiExchangeAdapter(ExchangeAdapter):
             return False, error_msg
 
         # Prepare list of exchanges to try, starting with the selected one
-        exchanges_to_try = [exchange_name] + [name for name in self.exchanges.keys() if name != exchange_name]
+        exchanges_to_try = [exchange_name] + [
+            name for name in self.exchanges.keys() if name != exchange_name
+        ]
         for exch_name in exchanges_to_try:
             adapter = self.exchanges[exch_name]
             self.logger.debug(f"Attempting to send order {order.order_id} to {exch_name}")
@@ -124,9 +144,7 @@ class MultiExchangeAdapter(ExchangeAdapter):
                         f"Exchange {exchange_name} failed to cancel order {order_id}: {error}"
                     )
             except Exception as e:
-                self.logger.error(
-                    f"Error cancelling order {order_id} on {exchange_name}: {e}"
-                )
+                self.logger.error(f"Error cancelling order {order_id} on {exchange_name}: {e}")
         # If none succeeded
         error_msg = f"Order {order_id} not found or could not be cancelled on any exchange"
         self.logger.warning(error_msg)
@@ -135,65 +153,79 @@ class MultiExchangeAdapter(ExchangeAdapter):
     async def get_position(self, symbol: str) -> Decimal:
         """
         Get the total position across all exchanges for a symbol.
+        Uses asyncio.gather() for parallel position queries.
         """
-        total_position = Decimal('0')
-        for exchange_name, exchange_adapter in self.exchanges.items():
+
+        async def _fetch_pos(name: str, adapter: ExchangeAdapter) -> Decimal:
             try:
-                pos = await exchange_adapter.get_position(symbol)
-                total_position += pos
-                self.logger.debug(
-                    f"Position from {exchange_name} for {symbol}: {pos}"
-                )
+                return await adapter.get_position(symbol)
             except Exception as e:
-                self.logger.error(
-                    f"Error getting position for {symbol} from {exchange_name}: {e}"
-                )
+                self.logger.error(f"Error getting position for {symbol} from {name}: {e}")
+                return Decimal("0")
+
+        # Parallel: query all exchanges simultaneously
+        results = await asyncio.gather(*[_fetch_pos(n, a) for n, a in self.exchanges.items()])
+        total_position = sum(results, Decimal("0"))
         self.logger.info(f"Total position for {symbol}: {total_position}")
         return total_position
 
     # Additional methods for the smart router to get market data, etc.
     async def get_positions(self) -> dict[str, Decimal]:
-        """Get current positions from all exchanges."""
-        all_positions: dict[str, Decimal] = {}
-        for exchange_name, exchange_adapter in self.exchanges.items():
+        """Get current positions from all exchanges using parallel queries."""
+
+        async def _fetch_positions(name: str, adapter: ExchangeAdapter) -> dict[str, Decimal]:
             try:
-                positions = await exchange_adapter.get_positions()
-                for symbol, pos in positions.items():
-                    all_positions[symbol] = all_positions.get(symbol, Decimal('0')) + pos
+                return await adapter.get_positions()
             except Exception as e:
-                self.logger.error(
-                    f"Error getting positions from {exchange_name}: {e}"
-                )
+                self.logger.error(f"Error getting positions from {name}: {e}")
+                return {}
+
+        # Parallel: query all exchanges simultaneously
+        results = await asyncio.gather(*[_fetch_positions(n, a) for n, a in self.exchanges.items()])
+        all_positions: dict[str, Decimal] = {}
+        for positions in results:
+            for symbol, pos in positions.items():
+                all_positions[symbol] = all_positions.get(symbol, Decimal("0")) + pos
         return all_positions
 
     async def get_orderbook(self, symbol: str) -> dict[str, Any]:
         """
         Get orderbook for a symbol. We'll return the orderbook from the first exchange
         that has data. In a real system, we might merge orderbooks.
+        Uses asyncio.gather() for parallel queries.
         """
-        for exchange_name, exchange_adapter in self.exchanges.items():
+
+        async def _fetch_orderbook(name: str, adapter: ExchangeAdapter) -> dict[str, Any]:
             try:
-                orderbook = await exchange_adapter.get_orderbook(symbol)
-                if orderbook:
-                    return orderbook
+                return await adapter.get_orderbook(symbol)
             except Exception as e:
-                self.logger.error(
-                    f"Error getting orderbook for {symbol} from {exchange_name}: {e}"
-                )
+                self.logger.error(f"Error getting orderbook for {symbol} from {name}: {e}")
+                return {}
+
+        # Parallel: query all exchanges simultaneously
+        results = await asyncio.gather(*[_fetch_orderbook(n, a) for n, a in self.exchanges.items()])
+        for orderbook in results:
+            if orderbook:
+                return orderbook
         return {}
 
     async def get_fees(self, symbol: str) -> dict[str, Decimal]:
         """
         Get trading fees for a symbol. We'll return the fees from the first exchange.
         In a real system, we might need to specify which exchange we are trading on.
+        Uses asyncio.gather() for parallel queries.
         """
-        for exchange_name, exchange_adapter in self.exchanges.items():
+
+        async def _fetch_fees(name: str, adapter: ExchangeAdapter) -> dict[str, Decimal]:
             try:
-                fees = await exchange_adapter.get_fees(symbol)
-                if fees:
-                    return fees
+                return await adapter.get_fees(symbol)
             except Exception as e:
-                self.logger.error(
-                    f"Error getting fees for {symbol} from {exchange_name}: {e}"
-                )
+                self.logger.error(f"Error getting fees for {symbol} from {name}: {e}")
+                return {}
+
+        # Parallel: query all exchanges simultaneously
+        results = await asyncio.gather(*[_fetch_fees(n, a) for n, a in self.exchanges.items()])
+        for fees in results:
+            if fees:
+                return fees
         return {}

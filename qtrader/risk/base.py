@@ -1,14 +1,23 @@
+from abc import ABC, abstractmethod
 from typing import Protocol, runtime_checkable
 
-from qtrader.core.event import OrderEvent, RiskEvent
+from qtrader.core.events import OrderEvent, RiskEvent
+
+
+class RiskModule(ABC):
+    """Abstract base class for all risk management modules."""
+
+    @abstractmethod
+    def evaluate(self, *args, **kwargs) -> dict:
+        """Evaluate risk and return metrics/actions."""
+        ...
 
 
 @runtime_checkable
 class PositionSizer(Protocol):
     """Protocol for calculating trade size."""
 
-    def calculate_quantity(self, symbol: str, price: float, signal_strength: float) -> float:
-        ...
+    def calculate_quantity(self, symbol: str, price: float, signal_strength: float) -> float: ...
 
 
 @runtime_checkable

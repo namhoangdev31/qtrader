@@ -302,7 +302,7 @@ class ExecutionEngine:
         
         # Subscribe to retries if event bus is available
         if self._event_bus:
-            from qtrader.core.event import EventType
+            from qtrader.core.events import EventType
             self._event_bus.subscribe(EventType.RETRY_ORDER, self._on_retry_order)
             
         # Background tasks
@@ -362,7 +362,7 @@ class ExecutionEngine:
             if attempt <= self.max_retry_attempts:
                 self.logger.warning(f"Order send failed (attempt {attempt}), scheduling retry via event: {result}")
                 if self._event_bus:
-                    from qtrader.core.event import EventType, RetryOrderEvent
+                    from qtrader.core.events import EventType, RetryOrderEvent
                     retry_event = RetryOrderEvent(order=order, attempt=attempt + 1)
                     await self._event_bus.publish(EventType.RETRY_ORDER, retry_event)
                 return False, None
@@ -376,7 +376,7 @@ class ExecutionEngine:
             self.logger.error(f"Unexpected error executing order (attempt {attempt}): {e}", exc_info=True)
             if attempt <= self.max_retry_attempts:
                 if self._event_bus:
-                    from qtrader.core.event import EventType, RetryOrderEvent
+                    from qtrader.core.events import EventType, RetryOrderEvent
                     await self._event_bus.publish(EventType.RETRY_ORDER, RetryOrderEvent(order=order, attempt=attempt + 1))
             elif self.enable_failover_queue and self.failover_queue is not None:
                 await self.failover_queue.put((order, datetime.utcnow()))
@@ -384,7 +384,7 @@ class ExecutionEngine:
     
     async def _on_retry_order(self, event: Any) -> None:
         """Handler for RetryOrderEvent."""
-        from qtrader.core.event import RetryOrderEvent
+        from qtrader.core.events import RetryOrderEvent
         if isinstance(event, RetryOrderEvent):
             await self.execute_order(event.order, attempt=event.attempt)
     

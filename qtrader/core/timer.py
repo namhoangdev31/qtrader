@@ -1,23 +1,28 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 
-from qtrader.core.event import Event, EventType
+from qtrader.core.events import EventType, SystemEvent, SystemPayload
 from qtrader.core.types import EventBusProtocol
 
 
-class HeartbeatEvent(Event):
+def HeartbeatEvent(timestamp: datetime | None = None) -> SystemEvent:
     """Periodic system heartbeat event."""
-    def __init__(self, timestamp: datetime | None = None) -> None:
-        super().__init__(
-            type=EventType.HEARTBEAT, 
-            timestamp=timestamp or datetime.utcnow()
-        )
+    return SystemEvent(
+        source="TimerService",
+        trace_id=uuid4(),
+        payload=SystemPayload(
+            action="HEARTBEAT",
+            reason="LIVELINESS",
+            metadata={"timestamp": (timestamp or datetime.now(timezone.utc)).isoformat()},
+        ),
+    )
 
 
 class TimerService:
     """Centralized clock for the event-driven system.
-    
-    Publishes HEARTBEAT events at regular intervals to eliminate local 
+
+    Publishes HEARTBEAT events at regular intervals to eliminate local
     polling and sleep() calls in other components.
     """
 
@@ -46,7 +51,7 @@ class TimerService:
 
     async def _run(self) -> None:
         """Main heartbeat emission loop.
-        
+
         This is the ONLY allowed persistent loop with sleep in the production path,
         serving as the system's global pulse.
         """
@@ -54,15 +59,14 @@ class TimerService:
             try:
                 # Publish heartbeat
                 await self.event_bus.publish(HeartbeatEvent())
-                
+
                 # Precise interval wait
-                # In HFT, we might use a spin-wait if sub-ms precision is needed,
-                # but for general coordination, asyncio.sleep(interval) is reactive.
                 await asyncio.sleep(self.interval_s)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 # Log error and continue pulse
                 import logging
+
                 logging.getLogger("qtrader.timer").error(f"Heartbeat failure: {e}")
                 await asyncio.sleep(self.interval_s)

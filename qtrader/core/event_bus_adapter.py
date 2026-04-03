@@ -5,7 +5,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any, Generic, TypeVar
 
-from qtrader.core.event import EventType
+from qtrader.core.events import EventType
 from qtrader.core.event_bus import EventBus
 
 T = TypeVar("T")

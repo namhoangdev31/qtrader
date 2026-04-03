@@ -86,14 +86,19 @@ try:
         """FastAPI dependency to validate JWT token and return payload."""
         try:
             return _auth_manager.decode_access_token(token)
-        except Exception:
+        except Exception as e:
+            import logging
+
+            logging.getLogger("qtrader.security.jwt_auth").warning(f"JWT decode failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    async def get_current_active_user(payload: TokenPayload = Depends(get_current_user_token)) -> TokenPayload:
+    async def get_current_active_user(
+        payload: TokenPayload = Depends(get_current_user_token),
+    ) -> TokenPayload:
         """FastAPI dependency that also sets the async-safe RBAC context variable."""
         # Inject the role into the current execution context for @rbac_required decorators
         set_context_role(payload["role"])

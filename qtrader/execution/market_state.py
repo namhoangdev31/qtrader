@@ -1,6 +1,6 @@
 from typing import Any
 
-from qtrader.core.event import MarketDataEvent
+from qtrader.core.events import MarketEvent
 from qtrader.oms.order_management_system import UnifiedOMS
 
 try:
@@ -37,7 +37,7 @@ class MarketStateUpdater:
         self.default_venue = default_venue
         self._orderbooks: dict[tuple[str, str], OrderbookEngine] = {}
 
-    async def on_market_data(self, event: MarketDataEvent) -> None:
+    async def on_market_data(self, event: MarketEvent) -> None:
         data = event.data or {}
         venue = str(data.get("venue") or self.default_venue)
 

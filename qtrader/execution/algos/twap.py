@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from qtrader.execution.algos.base import ChildOrder
 
 if TYPE_CHECKING:
-    from qtrader.core.event import OrderEvent
+    from qtrader.core.events import OrderEvent
 
 __all__ = ["TWAPAlgo"]
 
@@ -76,7 +76,7 @@ class TWAPAlgo:
 """
 # Pytest-style examples:
 def test_twap_schedule_slice_count() -> None:
-    from qtrader.core.event import OrderEvent, EventType
+    from qtrader.core.events import OrderEvent, EventType
     order = OrderEvent(type=EventType.ORDER, symbol="AAPL", order_type="MARKET", quantity=100.0, side="BUY")
     algo = TWAPAlgo(duration_seconds=60, slice_count=5)
     children = algo.schedule(order, {"now": 1000.0})
@@ -84,7 +84,7 @@ def test_twap_schedule_slice_count() -> None:
     assert sum(c.quantity for c in children) == 100.0
 
 def test_twap_weights_sum_to_one() -> None:
-    from qtrader.core.event import OrderEvent, EventType
+    from qtrader.core.events import OrderEvent, EventType
     order = OrderEvent(type=EventType.ORDER, symbol="X", order_type="MARKET", quantity=30.0, side="SELL")
     algo = TWAPAlgo(duration_seconds=300, slice_count=3)
     out = algo.schedule(order, {"now": 0.0})

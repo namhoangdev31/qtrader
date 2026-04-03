@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from qtrader.core.event import EventType, GapFreeMarketEvent, RecoveryCompletedEvent
+from qtrader.core.events import EventType, GapFreeMarketEvent, RecoveryCompletedEvent
 
 if TYPE_CHECKING:
     from qtrader.core.event_bus import EventBus

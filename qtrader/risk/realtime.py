@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from qtrader.core.bus import EventBus
-    from qtrader.core.event import RiskEvent
+    from qtrader.core.events import RiskEvent
 
 __all__ = ["RealTimeRiskEngine"]
 

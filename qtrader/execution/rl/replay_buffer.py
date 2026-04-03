@@ -1,4 +1,4 @@
-import random
+import numpy as np
 from collections import deque
 from typing import Any
 
@@ -52,7 +52,7 @@ class ExperienceReplayBuffer:
         Returns:
             List of transition tuples.
         """
-        return random.sample(self._buffer, min(len(self._buffer), batch_size))
+        return np.random.choice(self._buffer, min(len(self._buffer), batch_size))
 
     def __len__(self) -> int:
         """

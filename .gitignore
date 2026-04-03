@@ -23,3 +23,5 @@ mlruns/
 .DS_Store
 rust_core/.cargo
 qtrader/.clone
+qtrader/_deprecated
+tests/_deprecated_tests

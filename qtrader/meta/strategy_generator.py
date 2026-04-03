@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import random
+import numpy as np
 
 
 class StrategyGenerator:
@@ -46,24 +46,24 @@ class StrategyGenerator:
         """
         # Base case: return a feature name
         if depth <= 0 or not self.features:
-            return random.choice(self.features) if self.features else "1.0"
+            return np.random.choice(self.features) if self.features else "1.0"
 
         # Determine step: Unary op, Binary op, or Leaf
         # We weigh leaves and ops to ensure meaningful expressions
-        choice = random.random()
+        choice = np.random.random()
         prob_leaf = 0.3
         prob_unary = 0.3
 
         if choice < prob_leaf:
-            return random.choice(self.features)
+            return np.random.choice(self.features)
 
         if choice < (prob_leaf + prob_unary) and self.unary_ops:
-            op = random.choice(self.unary_ops)
+            op = np.random.choice(self.unary_ops)
             inner = self.generate_expression(depth - 1)
             return f"{op}({inner})"
 
         # Binary operator construction
-        op = random.choice(self.binary_ops)
+        op = np.random.choice(self.binary_ops)
         left = self.generate_expression(depth - 1)
         right = self.generate_expression(depth - 1)
         return f"({left} {op} {right})"
@@ -86,7 +86,7 @@ class StrategyGenerator:
         iters = 0
 
         while len(candidates) < count and iters < limit_iter:
-            expr = self.generate_expression(depth=random.randint(1, max_depth))
+            expr = self.generate_expression(depth=np.random.randint(1, max_depth))
             candidates.add(expr)
             iters += 1
 
