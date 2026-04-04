@@ -173,6 +173,10 @@ class StateStore:
             self._state.timestamp = datetime.now(timezone.utc)
 
         # Publish state snapshot for replication (Standash §5.2)
+        self._publish_if_primary()
+
+    def _publish_if_primary(self) -> None:
+        """Publish state snapshot if this node is PRIMARY."""
         if self._replicator and self._replicator.state.local_role.value == "PRIMARY":
             self._replicator.publish_state(self._snapshot_state())
 
@@ -187,6 +191,7 @@ class StateStore:
             self._state.portfolio_value = value
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+        self._publish_if_primary()
 
     async def get_equity_curve(self) -> list[tuple[datetime, Decimal]]:
         """Get a copy of the equity curve."""
@@ -199,6 +204,7 @@ class StateStore:
             self._state.equity_curve.append((timestamp, value))
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+        self._publish_if_primary()
 
     async def get_active_orders(self) -> dict[str, Order]:
         """Get a copy of all active orders."""
@@ -217,6 +223,7 @@ class StateStore:
             self._state.active_orders[order.order_id] = order.copy()
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+        self._publish_if_primary()
 
     async def remove_order(self, order_id: str) -> None:
         """Remove a completed/cancelled order from active orders."""
@@ -224,6 +231,7 @@ class StateStore:
             self._state.active_orders.pop(order_id, None)
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+        self._publish_if_primary()
 
     async def get_risk_state(self) -> RiskState:
         """Get a copy of the risk state."""

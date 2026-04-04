@@ -315,6 +315,20 @@ class TradingOrchestrator:
                     f"[ORCHESTRATOR] Determinism engaged | Seed: {self.seed_manager.global_seed}"
                 )
 
+            # 4.6 HFT CPU Pinning (Standash §4.10) — Auto-apply on boot
+            try:
+                from qtrader.core.cpu_affinity import CPUPinningConfig, apply_cpu_pinning
+
+                pinning_config = CPUPinningConfig(
+                    orchestrator_cores=[0, 1],  # Pin orchestrator to cores 0-1
+                    execution_cores=[2, 3],  # Pin execution to cores 2-3
+                    ml_cores=[4, 5, 6, 7],  # Pin ML to cores 4-7
+                )
+                apply_cpu_pinning(pinning_config)
+                logger.info("[ORCHESTRATOR] CPU Pinning applied (Standash §4.10)")
+            except Exception as e:
+                logger.debug(f"[ORCHESTRATOR] CPU Pinning not available: {e}")
+
             # 5. Architectural Validation (Legacy)
             self.validate()
 

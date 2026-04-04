@@ -13,6 +13,7 @@ from qtrader.core.events import FillEvent, OrderEvent
 from qtrader.execution.brokers.base import BrokerAdapter
 from qtrader.execution.http import RetryConfig, request_json
 from qtrader.risk.kill_switch import GlobalKillSwitch
+from qtrader.security.order_signing import OrderSigner, SignedOrder
 
 
 class BinanceBrokerAdapter(BrokerAdapter):
@@ -28,6 +29,7 @@ class BinanceBrokerAdapter(BrokerAdapter):
         max_retries: int = 3,
         retry_backoff_ms: int = 200,
         kill_switch: GlobalKillSwitch | None = None,
+        order_signer: OrderSigner | None = None,
     ) -> None:
         self.api_key = api_key or Config.BINANCE_API_KEY
         self.api_secret = api_secret or Config.BINANCE_API_SECRET
@@ -47,6 +49,7 @@ class BinanceBrokerAdapter(BrokerAdapter):
         )
         self._session: aiohttp.ClientSession | None = None
         self.kill_switch = kill_switch
+        self.order_signer = order_signer
 
         # WebSocket user data stream state
         self._listen_key: str | None = None
@@ -89,6 +92,22 @@ class BinanceBrokerAdapter(BrokerAdapter):
     async def submit_order(self, order: OrderEvent) -> str:
         """Submits a LIMIT or MARKET order to Binance."""
         try:
+            # Sign order before submission (Standash §5.3)
+            if self.order_signer:
+                order_data = {
+                    "symbol": order.symbol.upper(),
+                    "side": order.side.upper(),
+                    "quantity": str(order.quantity),
+                    "price": str(order.price) if order.price else None,
+                    "order_type": order.order_type,
+                }
+                signed_order = self.order_signer.sign_order(order_data)
+                self._log.info(
+                    "Order signed: key=%s, nonce=%d",
+                    signed_order.signing_key_id,
+                    self.order_signer._nonce_counter - 1,
+                )
+
             params = {
                 "symbol": order.symbol.upper(),
                 "side": order.side.upper(),
@@ -219,12 +238,21 @@ class BinanceBrokerAdapter(BrokerAdapter):
         self._log.info("[BINANCE_WS] WebSocket loop stopped")
 
     async def _websocket_loop(self) -> None:
-        """Main WebSocket loop with auto-reconnect."""
+        """Main WebSocket loop with auto-reconnect and TCP_NODELAY."""
         while self._ws_running:
             try:
                 ws_url = f"{self.ws_url}/ws/{self._listen_key}"
-                async with aiohttp.ClientSession() as session:
+                connector = aiohttp.TCPConnector(force_close=True)
+                async with aiohttp.ClientSession(connector=connector) as session:
                     async with session.ws_connect(ws_url) as ws:
+                        # TCP_NODELAY: Disable Nagle's algorithm for low-latency (Standash §5.1)
+                        transport = ws._response.connection.transport
+                        if transport and hasattr(transport, "get_extra_info"):
+                            sock = transport.get_extra_info("socket")
+                            if sock:
+                                sock.setsockopt(6, 1, 1)  # TCP_NODELAY = 1
+                                self._log.debug("[BINANCE_WS] TCP_NODELAY enabled")
+
                         self._log.info(f"[BINANCE_WS] Connected to {ws_url}")
                         async for msg in ws:
                             if msg.type == aiohttp.WSMsgType.TEXT:

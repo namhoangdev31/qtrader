@@ -27,6 +27,7 @@ from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
 from qtrader.execution.http import RetryConfig, request_json
 from qtrader.risk.kill_switch import GlobalKillSwitch
+from qtrader.security.order_signing import OrderSigner, SignedOrder
 
 logger = logging.getLogger("qtrader.broker.coinbase")
 
@@ -109,6 +110,8 @@ class CoinbaseBrokerAdapter:
         paper_commission_rate: float = 0.001,
         # Kill switch for critical failure handling
         kill_switch: GlobalKillSwitch | None = None,
+        # Order signing (Standash §5.3)
+        order_signer: OrderSigner | None = None,
     ) -> None:
         self.api_key = api_key or Config.COINBASE_API_KEY
         self.api_secret = api_secret or Config.COINBASE_API_SECRET
@@ -123,6 +126,7 @@ class CoinbaseBrokerAdapter:
         )
         self._session: aiohttp.ClientSession | None = None
         self.kill_switch = kill_switch
+        self.order_signer = order_signer
 
         # Paper trading config
         self.paper_slippage_bps = paper_slippage_bps
@@ -323,6 +327,23 @@ class CoinbaseBrokerAdapter:
 
             return broker_oid
 
+        # Sign order before submission (Standash §5.3)
+        if self.order_signer:
+            order_data = {
+                "symbol": order.symbol,
+                "side": order.side,
+                "quantity": str(order.quantity),
+                "price": str(order.price) if order.price else None,
+                "order_type": order.order_type,
+            }
+            signed_order = self.order_signer.sign_order(order_data)
+            logger.info(
+                "Order signed: %s (key=%s, nonce=%d)",
+                broker_oid,
+                signed_order.signing_key_id,
+                self.order_signer._nonce_counter - 1,
+            )
+
         # Live mode: Coinbase Advanced Trade REST (JWT).
         path = "/brokerage/orders"
         url = f"{self._rest_base}{path}"
@@ -521,11 +542,20 @@ class CoinbaseBrokerAdapter:
         logger.info("[COINBASE_WS] WebSocket loop stopped")
 
     async def _websocket_loop(self) -> None:
-        """Main WebSocket loop with auto-reconnect."""
+        """Main WebSocket loop with auto-reconnect and TCP_NODELAY."""
         while self._ws_running:
             try:
-                async with aiohttp.ClientSession() as session:
+                connector = aiohttp.TCPConnector(force_close=True)
+                async with aiohttp.ClientSession(connector=connector) as session:
                     async with session.ws_connect(self._ws_base_url) as ws:
+                        # TCP_NODELAY: Disable Nagle's algorithm for low-latency (Standash §5.1)
+                        transport = ws._response.connection.transport
+                        if transport and hasattr(transport, "get_extra_info"):
+                            sock = transport.get_extra_info("socket")
+                            if sock:
+                                sock.setsockopt(6, 1, 1)  # TCP_NODELAY = 1
+                                logger.debug("[COINBASE_WS] TCP_NODELAY enabled")
+
                         logger.info(f"[COINBASE_WS] Connected to {self._ws_base_url}")
 
                         # Subscribe to market data channels

@@ -12,6 +12,7 @@ from qtrader.core.state_store import Position, StateStore
 from qtrader.core.types import FillEvent, LoggerProtocol, OrderEvent
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine, WarModeConfig
+from qtrader.ml.phi2_controller import Phi2DecisionController
 
 from .orderbook_simulator import OrderbookSimulator
 
@@ -381,12 +382,59 @@ class ExecutionEngine:
 
             # === WAR MODE CHECK (Standash §6.4) ===
             if self.war_mode.status.is_active:
-                if not self.war_mode.config.allow_new_positions:
+                # Check if this is a hedging order (opposite side to existing position)
+                current_pos = await self.state_store.get_position(order.symbol)
+                is_hedge = False
+                is_unwind = False
+                if current_pos and current_pos.quantity != 0:
+                    if order.side == "BUY" and current_pos.quantity < 0:
+                        is_hedge = True  # Buying to cover short
+                    elif order.side == "SELL" and current_pos.quantity > 0:
+                        is_hedge = True  # Selling to close long
+                    # Unwind: reducing existing position
+                    if (order.side == "SELL" and current_pos.quantity > 0) or (
+                        order.side == "BUY" and current_pos.quantity < 0
+                    ):
+                        is_unwind = True
+
+                # Apply War Mode restrictions
+                if is_hedge and not self.war_mode.config.allow_hedging:
+                    self.logger.critical(
+                        f"[WAR MODE] Order rejected: {order.symbol} {order.side} — "
+                        f"Hedging not allowed in War Mode"
+                    )
+                    return False, "WAR_MODE_ACTIVE: Hedging not allowed"
+
+                if is_unwind and not self.war_mode.config.allow_unwind:
+                    self.logger.critical(
+                        f"[WAR MODE] Order rejected: {order.symbol} {order.side} — "
+                        f"Unwinding not allowed in War Mode"
+                    )
+                    return False, "WAR_MODE_ACTIVE: Unwinding not allowed"
+
+                if not is_hedge and not is_unwind and not self.war_mode.config.allow_new_positions:
                     self.logger.critical(
                         f"[WAR MODE] Order rejected: {order.symbol} {order.side} — "
                         f"New positions blocked in War Mode"
                     )
                     return False, "WAR_MODE_ACTIVE: New positions blocked"
+
+                # Check max exposure limit
+                if (
+                    self.war_mode.status.current_exposure_pct
+                    > self.war_mode.config.max_exposure_pct
+                ):
+                    self.logger.critical(
+                        f"[WAR MODE] Order rejected: {order.symbol} — "
+                        f"Exposure {self.war_mode.status.current_exposure_pct:.1%} exceeds "
+                        f"limit {self.war_mode.config.max_exposure_pct:.1%}"
+                    )
+                    return False, "WAR_MODE_ACTIVE: Max exposure exceeded"
+
+                self.logger.info(
+                    f"[WAR MODE] Order allowed: {order.symbol} {order.side} — "
+                    f"{'Hedge' if is_hedge else 'Unwind' if is_unwind else 'New'} order permitted"
+                )
 
         try:
             success, result = await self.exchange_adapter.send_order(order)
@@ -519,6 +567,32 @@ class ExecutionEngine:
             trace_id=trace_id,
             timestamp=fill_event.timestamp,
         )
+
+        # ML Explainability: Log decision attribution (Standash §13)
+        self._log_explainability(fill_event, trace_id)
+
+    def _log_explainability(self, fill_event: FillEvent, trace_id: str) -> None:
+        """Log ML explainability for executed fills (Standash §13).
+
+        Records which factors contributed to the trade decision,
+        providing institutional transparency for audit and compliance.
+        """
+        try:
+            # Extract decision metadata from fill event
+            metadata = getattr(fill_event, "metadata", {})
+            explanation = metadata.get("explanation", "No explanation available")
+            reasoning = metadata.get("reasoning", "No reasoning available")
+            ml_confidence = metadata.get("confidence", 0.0)
+            ml_signal = metadata.get("ml_signal", "UNKNOWN")
+
+            self.logger.info(
+                f"[EXPLAINABILITY] Trade {trace_id} | "
+                f"Signal: {ml_signal} | Confidence: {ml_confidence:.0%} | "
+                f"Reasoning: {reasoning} | "
+                f"Explanation: {explanation[:200]}"
+            )
+        except Exception as e:
+            self.logger.debug(f"[EXPLAINABILITY] Failed to log explainability: {e}")
 
     def _on_order_cancelled(self, order_id: str) -> None:
         """Callback to handle an order cancellation."""
