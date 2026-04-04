@@ -5,8 +5,6 @@ from typing import Protocol, runtime_checkable
 
 import polars as pl
 
-__all__ = ["Alpha", "_zscore"]
-
 
 @runtime_checkable
 class Alpha(Protocol):
@@ -110,13 +108,15 @@ def _zscore(series: pl.Series, window: int) -> pl.Series:
         pl.col("x").rolling_std(window, min_samples=1).alias("s"),
     )
     z = (roll["x"] - roll["m"]) / (roll["s"] + 1e-12)
-    # Ensure we preserve nulls/NaNs for periods with insufficient samples or constant values
     return z.to_frame("z").with_columns(
         pl.when(roll["s"].is_not_null() & roll["s"].is_not_nan() & (roll["s"] > 1e-15))
         .then(pl.col("z"))
         .otherwise(None)
         .alias("z")
     )["z"]
+
+
+AlphaBase = BaseAlpha
 
 
 """

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from qtrader.strategy.alpha.alpha_base import AlphaBase
+from qtrader.alpha.base import AlphaBase
 from qtrader.strategy.base import BaseStrategy
 
 __all__ = ["CrossSectionalMomentum", "MomentumAlpha", "TimeSeriesMomentum"]
