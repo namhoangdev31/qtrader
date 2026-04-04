@@ -7,6 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
 
+from decimal import Decimal
 from qtrader.core.types import FillEvent, OrderEvent, SignalEvent
 
 __all__ = ["BaseStrategy", "Strategy"]
@@ -47,6 +48,8 @@ class BaseStrategy:
         fills_log: Polars DataFrame of historical fills with columns:
             symbol, side, qty, price, pnl, timestamp.
     """
+
+    DEFAULT_MIN_FILLS: int = 10
 
     symbol: str
     capital: float = 100_000.0
@@ -95,7 +98,8 @@ class BaseStrategy:
         Args:
             event: Executed `FillEvent` for an order.
         """
-        qty_signed = float(event.quantity) if event.side.upper() == "BUY" else -float(event.quantity)
+        side_upper = event.side.upper()
+        qty_signed = float(event.quantity) if side_upper == "BUY" else -float(event.quantity)
         prev_qty = self._position.get(event.symbol, 0.0)
         self._position[event.symbol] = prev_qty + qty_signed
 
@@ -139,7 +143,7 @@ class BaseStrategy:
         Returns:
             Mapping from symbol to expected value estimate.
         """
-        if self.fills_log.height < 10:
+        if self.fills_log.height < self.DEFAULT_MIN_FILLS:
             return {}
 
         df = self.fills_log
@@ -147,23 +151,35 @@ class BaseStrategy:
         losses = df.filter(pl.col("pnl") < 0.0)
 
         total_counts = df.group_by("symbol").len().rename({"len": "total"})
-        win_counts = wins.group_by("symbol").len().rename({"len": "wins"}) if wins.height > 0 else pl.DataFrame(
-            {
-                "symbol": pl.Series([], dtype=pl.String),
-                "wins": pl.Series([], dtype=pl.UInt32),
-            },
+        win_counts = (
+            wins.group_by("symbol").len().rename({"len": "wins"})
+            if wins.height > 0
+            else pl.DataFrame(
+                {
+                    "symbol": pl.Series([], dtype=pl.String),
+                    "wins": pl.Series([], dtype=pl.UInt32),
+                },
+            )
         )
-        avg_win = wins.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_win")) if wins.height > 0 else pl.DataFrame(
-            {
-                "symbol": pl.Series([], dtype=pl.String),
-                "avg_win": pl.Series([], dtype=pl.Float64),
-            },
+        avg_win = (
+            wins.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_win"))
+            if wins.height > 0
+            else pl.DataFrame(
+                {
+                    "symbol": pl.Series([], dtype=pl.String),
+                    "avg_win": pl.Series([], dtype=pl.Float64),
+                },
+            )
         )
-        avg_loss = losses.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_loss")) if losses.height > 0 else pl.DataFrame(
-            {
-                "symbol": pl.Series([], dtype=pl.String),
-                "avg_loss": pl.Series([], dtype=pl.Float64),
-            },
+        avg_loss = (
+            losses.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_loss"))
+            if losses.height > 0
+            else pl.DataFrame(
+                {
+                    "symbol": pl.Series([], dtype=pl.String),
+                    "avg_loss": pl.Series([], dtype=pl.Float64),
+                },
+            )
         )
 
         joined = (
@@ -228,7 +244,6 @@ class BaseStrategy:
         Returns:
             Constructed `OrderEvent` instance.
         """
-        from decimal import Decimal
         timestamp = datetime.now()
         # Generate a simple order ID based on symbol and timestamp
         order_id = f"{self.symbol}_{int(timestamp.timestamp())}"

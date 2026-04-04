@@ -99,7 +99,7 @@ from qtrader.oms.oms_adapter import OMSAdapter
 from qtrader.portfolio.allocator import AllocatorBase
 from qtrader.risk.network_kill_switch import NetworkKillSwitch
 from qtrader.risk.runtime import RuntimeRiskEngine
-from qtrader.alpha.base import AlphaBase
+from qtrader.alpha.base import BaseAlpha
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.validation.feature_validator import FeatureValidator
@@ -112,7 +112,7 @@ class TradingOrchestrator:
         self,
         event_bus: EventBusProtocol,
         market_data_adapter: object,
-        alpha_modules: list[AlphaBase],
+        alpha_modules: list[BaseAlpha],
         feature_validator: FeatureValidator,
         strategies: list[ProbabilisticStrategy],
         ensemble_strategy: EnsembleStrategy,

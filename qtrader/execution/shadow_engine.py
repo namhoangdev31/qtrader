@@ -266,52 +266,61 @@ class ShadowEngine:
     ) -> None:
         """Simulate order execution and record shadow fill."""
         try:
-            # Simulate latency
-            latency = self.latency_model.predict() if self.latency_model else 0.0
+            # 1. Volatility-dependent Latency Scaling
+            # High volatility typically leads to higher network congestion/engine lag
+            base_latency = self.latency_model.predict() if self.latency_model else 0.05
+            volatility = Decimal(str(signal.metadata.get("volatility", 0.02)))
+            vol_scaler = 1.0 + (float(volatility) * 10.0)  # Simple linear scaling for simulation
+            latency = base_latency * vol_scaler
+            
             # Simulated fill time = signal timestamp + latency
             fill_time = signal.timestamp + timedelta(seconds=latency)
 
-            # Determine order parameters from signal
-            # SignalEvent doesn't have side/quantity, we need to infer from signal_type and strength
-            side = "BUY" if signal.signal_type in ["LONG", "EXIT_SHORT"] else "SELL"
-            # Use strength as a proxy for quantity (in practice, this would come from position sizing)
-            quantity = abs(signal.strength)  # Simplified
-
-            # Simulate execution using orderbook
-            # This is a simplified model - in reality, we'd use the orderbook simulator
-            # to get fill price based on quantity and side
-            # For now, we'll use a simple mid-price model
-            best_bid = orderbook["bids"][0][0] if orderbook["bids"] else Decimal("0")
-            best_ask = orderbook["asks"][0][0] if orderbook["asks"] else Decimal("0")
-            mid_price = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else Decimal("0")
-
-            slippage = (
-                self.slippage_model.calculate(
-                    side=side,
-                    quantity=quantity,
-                    orderbook=orderbook,
-                    volatility=Decimal(
-                        "0.02"
-                    ),  # Default volatility, would come from market data in practice
-                )
-                if self.slippage_model
-                else Decimal("0")
-            )
-            # Convert slippage to price adjustment (assuming slippage is in basis points)
-            slippage_price = mid_price * (
-                Decimal(str(slippage)) / Decimal("10000")
-            )  # bps to decimal
-            fill_price = mid_price + (slippage_price if side == "BUY" else -slippage_price)
+            # 2. Depth-Aware Execution Simulation
+            side = "buy" if signal.signal_type in ["LONG", "EXIT_SHORT"] else "sell"
+            quantity = float(abs(signal.strength))
+            
+            if self.orderbook_simulator:
+                # Prepare order for simulation
+                order = {
+                    "size": quantity,
+                    "side": side,
+                    "type": "market",
+                }
+                # Convert Decimal orderbook to float for simulator
+                sim_book = {
+                    "bids": [(float(p), float(s)) for p, s in orderbook.get("bids", [])],
+                    "asks": [(float(p), float(s)) for p, s in orderbook.get("asks", [])],
+                }
+                
+                fill_result = self.orderbook_simulator.simulate_order(order, sim_book)
+                fill_price = Decimal(str(fill_result["avg_price"]))
+                slippage = Decimal(str(fill_result["slippage"]))
+                
+                # If fill failed (avg_price = 0), use mid-price + penalty
+                if fill_price == 0:
+                    best_bid = orderbook["bids"][0][0] if orderbook["bids"] else Decimal("0")
+                    best_ask = orderbook["asks"][0][0] if orderbook["asks"] else Decimal("0")
+                    mid_price = (best_bid + best_ask) / 2
+                    fill_price = mid_price * Decimal("1.02") if side == "buy" else mid_price * Decimal("0.98")
+                    slippage = fill_price - mid_price
+            else:
+                # Fallback to mid-price model if no simulator
+                best_bid = orderbook["bids"][0][0] if orderbook["bids"] else Decimal("0")
+                best_ask = orderbook["asks"][0][0] if orderbook["asks"] else Decimal("0")
+                mid_price = (best_bid + best_ask) / 2
+                fill_price = mid_price
+                slippage = Decimal("0")
 
             # Create shadow fill event
             shadow_fill = ShadowFillEvent(
                 signal_id=signal_id,
                 symbol=signal.symbol,
                 timestamp=fill_time,
-                side=side,
-                quantity=quantity,
+                side=side.upper(),
+                quantity=Decimal(str(quantity)),
                 fill_price=fill_price,
-                slippage=float(slippage),  # Convert to float for storage
+                slippage=float(slippage),
                 latency=latency,
             )
 
@@ -332,7 +341,7 @@ class ShadowEngine:
                 side=shadow_fill.side,
                 quantity=float(shadow_fill.quantity),
                 price=float(shadow_fill.fill_price),
-                trace_id=signal_id,  # signal_id acts as the trace_id in shadow flow
+                trace_id=signal_id,
                 timestamp=shadow_fill.timestamp,
             )
 

@@ -91,7 +91,7 @@ class AtomicTrioPipeline:
         tabpfn_model_id: str = "Prior-Labs/tabpfn_2_5",
         tabpfn_device: str = "cpu",
         tabpfn_n_estimators: int = 4,
-        phi2_model_id: str = "microsoft/phi-2",
+        phi2_model_id: str = "mlx-community/phi-2",
         phi2_backend: str = "auto",
         phi2_use_rule_based_fallback: bool = True,
     ) -> None:

@@ -31,8 +31,15 @@ class BaseAlpha(ABC):
     All alpha implementations should inherit from this class.
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        standardize: bool = False,
+        standardize_window: int = 100,
+    ) -> None:
         self.name = name
+        self.standardize = standardize
+        self.standardize_window = standardize_window
 
     @abstractmethod
     def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
@@ -84,10 +91,14 @@ class BaseAlpha(ABC):
         if raw.dtype != pl.Float64:
             raw = raw.cast(pl.Float64)
 
+        # Optional standardization (z-score)
+        if self.standardize:
+            raw = _zscore(raw, self.standardize_window)
+
         # Replace non-finite values with zero (neutral fallback)
         raw = raw.fill_nan(0.0).fill_null(0.0)
 
-        return raw
+        return raw.rename(self.name)
 
 
 def _zscore(series: pl.Series, window: int) -> pl.Series:
@@ -114,9 +125,6 @@ def _zscore(series: pl.Series, window: int) -> pl.Series:
         .otherwise(None)
         .alias("z")
     )["z"]
-
-
-AlphaBase = BaseAlpha
 
 
 """

@@ -16,13 +16,13 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from qtrader.alpha.base import AlphaBase
+from qtrader.alpha.base import BaseAlpha
 from qtrader.core.types import AlphaOutput, MarketData
 
 logger = logging.getLogger("qtrader.alpha.ml_alpha_engine")
 
 
-class MLAlphaEngine(AlphaBase):
+class MLAlphaEngine(BaseAlpha):
     """ML-enhanced Alpha Engine using the Atomic Trio.
 
     Integrates:

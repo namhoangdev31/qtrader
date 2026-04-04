@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from qtrader.alpha.base import AlphaBase
+from qtrader.alpha.base import BaseAlpha
 from qtrader.strategy.base import BaseStrategy
 
 __all__ = ["CrossSectionalMomentum", "MomentumAlpha", "TimeSeriesMomentum"]
@@ -29,7 +29,7 @@ class CrossSectionalMomentum(BaseStrategy):
         """Rank symbols by trailing return and assign signals.
 
         Args:
-            returns: T×N wide DataFrame of returns, columns are symbols.
+            returns: T x N wide DataFrame of returns, columns are symbols.
 
         Returns:
             DataFrame with columns:
@@ -120,7 +120,7 @@ class TimeSeriesMomentum(BaseStrategy):
 
 
 @dataclass(slots=True)
-class MomentumAlpha(AlphaBase):
+class MomentumAlpha(BaseAlpha):
     """
     Momentum alpha factor: z-scored returns over a lookback window.
 
@@ -135,16 +135,15 @@ class MomentumAlpha(AlphaBase):
 
     lookback: int = 30
 
-    def _compute(self, df: pl.DataFrame) -> pl.Series:
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
         """
         Compute the momentum alpha factor.
 
         Args:
-            df: Input DataFrame with at least the columns ["open", "high", "low", "close", "volume"].
+            df: Input DataFrame with required OHLCV columns.
 
         Returns:
-            A pl.Series of dtype Float64 representing the z-scored returns.
-            The length matches the input DataFrame's height.
+            A pl.Series of dtype Float64 representing the returns.
         """
         # Calculate simple returns: (close_t / close_{t-1}) - 1
         returns_expr = pl.col("close").pct_change()

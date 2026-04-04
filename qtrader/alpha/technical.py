@@ -4,48 +4,52 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from qtrader.alpha.base import BaseAlpha
+
 __all__ = ["MeanReversionAlpha", "MomentumAlpha", "TrendAlpha"]
 
 
 @dataclass(slots=True)
-class MomentumAlpha:
+class MomentumAlpha(BaseAlpha):
     """Price momentum with volatility adjustment."""
 
     lookback: int = 20
     zscore_window: int = 252
     name: str = "momentum"
 
-    def compute(self, df: pl.DataFrame) -> pl.Series:
-        """Compute volatility-adjusted momentum and z-score it."""
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.zscore_window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw volatility-adjusted momentum."""
         close = df.get_column("close")
         log_close = close.log()
         log_ret = log_close - log_close.shift(self.lookback)
         ret_std = log_ret.rolling_std(self.lookback)
-        log_ret / (ret_std + 1e-12)
-        
-        signal = log_ret / (ret_std + 1e-12)
-        return signal.rename(self.name)
+        return log_ret / (ret_std + 1e-12)
 
 
 @dataclass(slots=True)
-class MeanReversionAlpha:
+class MeanReversionAlpha(BaseAlpha):
     """Short-term price reversal."""
 
     lookback: int = 5
     zscore_window: int = 60
     name: str = "mean_reversion"
 
-    def compute(self, df: pl.DataFrame) -> pl.Series:
-        """Compute mean reversion signal from recent price deviations."""
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.zscore_window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw mean reversion signal."""
         close = df.get_column("close")
         mean = close.rolling_mean(self.lookback)
         std = close.rolling_std(self.lookback)
-        signal = -(close - mean) / (std + 1e-12)
-        return signal.fill_nan(0.0).fill_null(0.0).rename(self.name)
+        return -(close - mean) / (std + 1e-12)
 
 
 @dataclass(slots=True)
-class TrendAlpha:
+class TrendAlpha(BaseAlpha):
     """Moving average crossover with ATR filter."""
 
     fast_window: int = 10
@@ -54,8 +58,11 @@ class TrendAlpha:
     zscore_window: int = 100
     name: str = "trend"
 
-    def compute(self, df: pl.DataFrame) -> pl.Series:
-        """Compute trend-following alpha using SMA crossover and ATR."""
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.zscore_window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw trend-following alpha."""
         close = df.get_column("close")
         high = df.get_column("high")
         low = df.get_column("low")
@@ -70,8 +77,7 @@ class TrendAlpha:
         true_range = pl.select(pl.max_horizontal(tr1, tr2, tr3)).to_series()
         atr = true_range.rolling_mean(self.atr_window)
 
-        signal = (sma_fast - sma_slow) / (atr + 1e-12)
-        return signal.rename(self.name)
+        return (sma_fast - sma_slow) / (atr + 1e-12)
 
 
 """

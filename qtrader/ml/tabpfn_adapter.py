@@ -258,7 +258,6 @@ class TabPFNRiskAdapter:
             perturbed = baseline_array.copy()
             perturbed[0, i] = perturbed[0, i] * 1.5 + 0.1
             perturbed_prob = self._model.predict_proba(perturbed)[0]
-            perturbed_class = np.argmax(perturbed_prob)
             importance[name] = float(
                 abs(baseline_prob[baseline_class] - perturbed_prob[baseline_class])
             )

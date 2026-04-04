@@ -80,7 +80,7 @@ class Phi2DecisionController:
 
     def __init__(
         self,
-        model_id: str = "microsoft/phi-2",
+        model_id: str = "mlx-community/phi-2",
         model_size: str = "2.7b",
         backend: str = "auto",
         use_rule_based_fallback: bool = True,
@@ -124,7 +124,7 @@ class Phi2DecisionController:
         try:
             from mlx_lm import load  # type: ignore
 
-            self._model, self._tokenizer = load("microsoft/phi-2")
+            self._model, self._tokenizer = load(self.model_id)
         except ImportError:
             logger.warning("[PHI2] mlx_lm not installed, using rule-based fallback")
             self._model = None
@@ -209,41 +209,36 @@ class Phi2DecisionController:
         market_context: dict[str, Any] | None,
         system_state: dict[str, Any] | None,
     ) -> str:
-        """Build the decision prompt for Phi-2."""
-        prompt = """You are a quantitative trading decision engine.
-Analyze the following inputs and make a trading decision.
+        instruct = (
+            "Instruct: Act as a quantitative trading decision engine. "
+            "Analyze inputs and provide a trading decision in strict JSON format.\n"
+            "Required Fields: action (BUY/SELL/HOLD/HEDGE/CLOSE_ALL/REDUCE_POSITION), "
+            "confidence (0-1), reasoning, risk_adjustment (0-1), position_size_multiplier (0-1), "
+            "stop_loss_pct, take_profit_pct, time_horizon (short/medium/long), explanation.\n\n"
+        )
+        prompt = instruct
 
-Respond in JSON format with these fields:
-{
-    "action": "BUY" | "SELL" | "HOLD" | "HEDGE" | "CLOSE_ALL" | "REDUCE_POSITION",
-    "confidence": 0.0-1.0,
-    "reasoning": "Brief explanation of the decision",
-    "risk_adjustment": 0.0-1.0,
-    "position_size_multiplier": 0.0-1.0,
-    "stop_loss_pct": 0.0-5.0,
-    "take_profit_pct": 0.0-10.0,
-    "time_horizon": "short" | "medium" | "long",
-    "explanation": "Detailed explainability for compliance"
-}
-
-"""
         if chronos_forecast:
-            prompt += f"\nChronos-2 Forecast:\n- Trend: {chronos_forecast.get('trend_direction', 'UNKNOWN')}\n"
-            prompt += f"- Prediction length: {chronos_forecast.get('prediction_length', 0)}\n"
-            prompt += f"- Inference time: {chronos_forecast.get('inference_time_ms', 0):.1f}ms\n"
+            trend = chronos_forecast.get("trend_direction", "UNKNOWN")
+            prompt += f"Chronos-2 Forecast:\n- Trend: {trend}\n"
+            mean_vals = chronos_forecast.get("mean")
+            if mean_vals:
+                # Chronos-2 mean might be a list or array
+                mean_val = mean_vals[-1]
+                prompt += f"- Target Price Change: {float(mean_val):.2%}\n"
 
         if tabpfn_risk:
-            prompt += f"\nTabPFN Risk Classification:\n- Class: {tabpfn_risk.get('class_label', 'UNKNOWN')}\n"
-            prompt += f"- Confidence: {tabpfn_risk.get('confidence', 0):.2%}\n"
-            prompt += f"- Risk Score: {tabpfn_risk.get('risk_score', 0):.2f}\n"
+            label = tabpfn_risk.get("class_label", "UNKNOWN")
+            prompt += f"TabPFN Risk Analysis:\n- Label: {label}\n"
+            prompt += f"- Probabilities: {tabpfn_risk.get('probabilities', {})}\n"
 
         if market_context:
-            prompt += f"\nMarket Context: {json.dumps(market_context, indent=2)}\n"
+            prompt += f"Market Context:\n{json.dumps(market_context, indent=2)}\n"
 
         if system_state:
-            prompt += f"\nSystem State: {json.dumps(system_state, indent=2)}\n"
+            prompt += f"System State:\n{json.dumps(system_state, indent=2)}\n"
 
-        prompt += "\nDecision (JSON only):"
+        prompt += "\nOutput: {"
         return prompt
 
     def _generate_mlx(self, prompt: str) -> str:
@@ -375,7 +370,6 @@ Respond in JSON format with these fields:
         # 2. TabPFN risk analysis
         if tabpfn_risk:
             risk_class = tabpfn_risk.get("class_label", "SAFE")
-            risk_score = tabpfn_risk.get("risk_score", 0.5)
 
             if risk_class == "DANGER":
                 action = DecisionAction.HOLD

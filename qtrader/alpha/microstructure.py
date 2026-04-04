@@ -4,61 +4,68 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from qtrader.alpha.base import _zscore
+from qtrader.alpha.base import BaseAlpha
 
 __all__ = ["AmihudIlliquidityAlpha", "OrderImbalanceAlpha", "VPINAlpha"]
 
 
 @dataclass(slots=True)
-class OrderImbalanceAlpha:
+class OrderImbalanceAlpha(BaseAlpha):
     """Bid-ask volume imbalance as short-term directional signal."""
 
     window: int = 100
     name: str = "order_imbalance"
 
-    def compute(self, df: pl.DataFrame) -> pl.Series:
-        """Compute z-scored order imbalance from L1 data."""
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw order imbalance from L1 data."""
         if "bid_size" not in df.columns or "ask_size" not in df.columns:
             raise ValueError("OrderImbalanceAlpha requires 'bid_size' and 'ask_size' columns.")
         bid = df.get_column("bid_size")
         ask = df.get_column("ask_size")
         denom = bid + ask
         imbalance = (bid - ask) / denom
-        imbalance = imbalance.to_frame("imb").with_columns(
+        return imbalance.to_frame("imb").with_columns(
             pl.when(pl.col("imb").is_finite()).then(pl.col("imb")).otherwise(0.0).alias("imb"),
         )["imb"]
-        return _zscore(imbalance, self.window).rename(self.name)
 
 
 @dataclass(slots=True)
-class AmihudIlliquidityAlpha:
+class AmihudIlliquidityAlpha(BaseAlpha):
     """Amihud (2002) illiquidity proxy. High illiq → mean reversion signal."""
 
     window: int = 20
     name: str = "amihud"
 
-    def compute(self, df: pl.DataFrame) -> pl.Series:
-        """Compute Amihud illiquidity and return its negative z-score."""
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw Amihud illiquidity."""
         close = df.get_column("close")
         volume = df.get_column("volume")
         ret = close.pct_change().abs()
         dollar_vol = close * volume
         illiq = ret / dollar_vol
-        illiq = illiq.to_frame("x").with_columns(
+        # Invert the signal: high illiq -> negative return expectation
+        return -(illiq.to_frame("x").with_columns(
             pl.when(pl.col("x").is_finite()).then(pl.col("x")).otherwise(0.0).alias("x"),
-        )["x"]
-        z = _zscore(illiq, self.window)
-        return (-z).rename(self.name)
+        )["x"])
 
 
 @dataclass(slots=True)
-class VPINAlpha:
+class VPINAlpha(BaseAlpha):
     """Flow toxicity proxy (VPIN-style). High toxicity → adverse selection risk."""
 
     window: int = 50
     name: str = "vpin"
 
-    def compute(self, df: pl.DataFrame) -> pl.Series:
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
         """Approximate VPIN using sign of price change to classify volume."""
         close = df.get_column("close")
         open_ = df.get_column("open")
@@ -72,11 +79,10 @@ class VPINAlpha:
         sell_roll = sell_vol.rolling_sum(self.window)
         tot_roll = volume.rolling_sum(self.window)
         vpin = (buy_roll - sell_roll).abs() / tot_roll
-        vpin = vpin.to_frame("x").with_columns(
+        # Invert the signal: high toxicity -> negative alpha
+        return -(vpin.to_frame("x").with_columns(
             pl.when(pl.col("x").is_finite()).then(pl.col("x")).otherwise(0.0).alias("x"),
-        )["x"]
-        z = _zscore(vpin, self.window)
-        return (-z).rename(self.name)
+        )["x"])
 
 
 """
