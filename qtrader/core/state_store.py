@@ -4,6 +4,7 @@ Memory-safe implementation:
 - Bounded equity curve with circular buffer (max 100k entries)
 - Copy-on-write semantics instead of deepcopy inside locks
 - Configurable retention limits to prevent OOM
+- State replication support for failover (Standash §5.2)
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+
+from qtrader.core.state_replication import StateReplicator
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +137,7 @@ class StateStore:
         max_equity_points: int = MAX_EQUITY_CURVE_POINTS,
         max_active_orders: int = MAX_ACTIVE_ORDERS,
         max_positions: int = MAX_POSITIONS,
+        replicator: StateReplicator | None = None,
     ) -> None:
         self._state = SystemState()
         self._state.equity_curve = deque(maxlen=max_equity_points)
@@ -142,6 +146,7 @@ class StateStore:
         self._max_equity_points = max_equity_points
         self._max_active_orders = max_active_orders
         self._max_positions = max_positions
+        self._replicator = replicator
 
     async def get_positions(self) -> dict[str, Position]:
         """Get a copy of all positions (copy-on-write, no deepcopy)."""
@@ -166,6 +171,10 @@ class StateStore:
             self._state.positions[position.symbol] = position.copy()
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+
+        # Publish state snapshot for replication (Standash §5.2)
+        if self._replicator and self._replicator.state.local_role.value == "PRIMARY":
+            self._replicator.publish_state(self._snapshot_state())
 
     async def get_portfolio_value(self) -> Decimal:
         """Get the portfolio value."""
@@ -307,4 +316,38 @@ class StateStore:
             "positions": len(self._state.positions),
             "max_positions": self._max_positions,
             "state_version": self._state.version,
+            "replicator_role": (
+                self._replicator.state.local_role.value if self._replicator else "NONE"
+            ),
+        }
+
+    def _snapshot_state(self) -> dict[str, Any]:
+        """Create a snapshot of the current state for replication."""
+        return {
+            "version": self._state.version,
+            "positions": {
+                sym: {
+                    "quantity": str(pos.quantity),
+                    "average_price": str(pos.average_price),
+                    "market_value": str(pos.market_value),
+                }
+                for sym, pos in self._state.positions.items()
+            },
+            "active_orders": {
+                oid: {
+                    "symbol": order.symbol,
+                    "side": order.side,
+                    "quantity": str(order.quantity),
+                    "status": order.status,
+                }
+                for oid, order in self._state.active_orders.items()
+            },
+            "portfolio_value": str(self._state.portfolio_value),
+            "cash": str(self._state.cash),
+            "risk_state": {
+                "portfolio_var": str(self._state.risk_state.portfolio_var),
+                "max_drawdown": str(self._state.risk_state.max_drawdown),
+                "leverage": str(self._state.risk_state.leverage),
+            },
+            "timestamp": self._state.timestamp.isoformat(),
         }

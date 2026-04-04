@@ -340,14 +340,19 @@ class ShadowEngine:
             logger.error(f"Error simulating shadow fill for signal {signal_id}: {e}")
 
     async def _write_shadow_fill(self, shadow_fill: ShadowFillEvent) -> None:
-        """Write shadow fill to data lake."""
+        """Write shadow fill to data lake (non-blocking via executor)."""
         try:
             filename = f"shadow_fills_{datetime.now().strftime('%Y%m%d')}.jsonl"
             filepath = os.path.join(self.data_lake_path, filename)
-            with open(filepath, "a") as f:
-                f.write(json.dumps(shadow_fill.to_dict()) + "\n")
+            await asyncio.to_thread(self._append_shadow_fill, filepath, shadow_fill)
         except Exception as e:
             logger.error(f"Failed to write shadow fill to data lake: {e}")
+
+    @staticmethod
+    def _append_shadow_fill(filepath: str, shadow_fill: ShadowFillEvent) -> None:
+        """Synchronous file append for shadow fill data."""
+        with open(filepath, "a") as f:
+            f.write(json.dumps(shadow_fill.to_dict()) + "\n")
 
     async def _update_metrics(self, live_fill: FillEvent, shadow_fill: ShadowFillEvent) -> None:
         """Update metrics by comparing live and shadow fills."""

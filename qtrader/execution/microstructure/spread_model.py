@@ -73,7 +73,9 @@ class SpreadDynamicsModel:
             min_spread = 1e-8
             return max(min_spread, predicted)
 
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             # High-performance silent failover for industrial-grade stability
             if self._spreads:
                 return float(sum(self._spreads) / len(self._spreads))

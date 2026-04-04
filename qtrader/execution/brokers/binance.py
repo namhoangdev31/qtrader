@@ -12,6 +12,7 @@ from qtrader.core.config import Config
 from qtrader.core.events import FillEvent, OrderEvent
 from qtrader.execution.brokers.base import BrokerAdapter
 from qtrader.execution.http import RetryConfig, request_json
+from qtrader.risk.kill_switch import GlobalKillSwitch
 
 
 class BinanceBrokerAdapter(BrokerAdapter):
@@ -26,6 +27,7 @@ class BinanceBrokerAdapter(BrokerAdapter):
         request_timeout_s: float = 10.0,
         max_retries: int = 3,
         retry_backoff_ms: int = 200,
+        kill_switch: GlobalKillSwitch | None = None,
     ) -> None:
         self.api_key = api_key or Config.BINANCE_API_KEY
         self.api_secret = api_secret or Config.BINANCE_API_SECRET
@@ -44,6 +46,7 @@ class BinanceBrokerAdapter(BrokerAdapter):
             retry_backoff_ms=retry_backoff_ms,
         )
         self._session: aiohttp.ClientSession | None = None
+        self.kill_switch = kill_switch
 
         # WebSocket user data stream state
         self._listen_key: str | None = None
@@ -85,21 +88,30 @@ class BinanceBrokerAdapter(BrokerAdapter):
 
     async def submit_order(self, order: OrderEvent) -> str:
         """Submits a LIMIT or MARKET order to Binance."""
-        params = {
-            "symbol": order.symbol.upper(),
-            "side": order.side.upper(),
-            "type": order.order_type.upper(),
-            "quantity": order.quantity,
-        }
-        if order.price:
-            params["price"] = order.price
-            params["timeInForce"] = "GTC"
+        try:
+            params = {
+                "symbol": order.symbol.upper(),
+                "side": order.side.upper(),
+                "type": order.order_type.upper(),
+                "quantity": order.quantity,
+            }
+            if order.price:
+                params["price"] = order.price
+                params["timeInForce"] = "GTC"
 
-        res = await self._request("POST", "/api/v3/order", signed=True, params=params)
-        broker_oid = str(res.get("orderId", ""))
-        if broker_oid:
-            self._order_symbol[broker_oid] = params["symbol"]
-        return broker_oid
+            res = await self._request("POST", "/api/v3/order", signed=True, params=params)
+            broker_oid = str(res.get("orderId", ""))
+            if broker_oid:
+                self._order_symbol[broker_oid] = params["symbol"]
+            return broker_oid
+        except ConnectionError as e:
+            self._log.critical(f"[BINANCE] CRITICAL: Exchange connection lost: {e}")
+            if self.kill_switch:
+                self.kill_switch.trigger_on_critical_failure("BROKER_DISCONNECT", str(e))
+            raise
+        except Exception as e:
+            self._log.error(f"[BINANCE] Order submit failed: {e}", exc_info=True)
+            raise
 
     async def cancel_order(self, order_id: str) -> bool:
         symbol = self._order_symbol.get(order_id)
@@ -264,7 +276,7 @@ class BinanceBrokerAdapter(BrokerAdapter):
                     signed=False,
                     params={"listenKey": self._listen_key},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                self._log.warning(f"[BINANCE] Failed to close listen key: {e}")
         if self._session is not None and not self._session.closed:
             await self._session.close()

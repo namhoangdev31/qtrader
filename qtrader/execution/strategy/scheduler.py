@@ -88,7 +88,9 @@ class ExecutionScheduler:
             # Failsafe: Uniform TWAP fallback if optimizer results in zero everywhere
             return [float(total_qty / horizon_steps)] * horizon_steps
 
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("ExecutionScheduler: optimization failed, using TWAP", exc_info=True)
             return [float(total_qty / horizon_steps)] * horizon_steps
 

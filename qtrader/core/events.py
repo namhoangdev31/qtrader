@@ -224,8 +224,8 @@ class NAVPayload(BaseModel):
 class LedgerEntryPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     account_id: str
-    debit: float
-    credit: float
+    debit: Decimal
+    credit: Decimal
     currency: str = "USD"
     description: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)

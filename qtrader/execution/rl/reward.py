@@ -82,7 +82,9 @@ class ExecutionRewardFunction:
             reward_cap = 1000.0
             return float(max(-reward_cap, min(reward_cap, total_reward)))
 
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("ExecutionRewardFunction: failed to compute reward", exc_info=True)
             # Silent failover to zero reward (neutral signal) to avoid crashing RL update loop
             return 0.0

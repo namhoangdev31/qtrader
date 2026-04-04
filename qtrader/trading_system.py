@@ -152,8 +152,11 @@ class TradingSystem:
             )
         )
 
-        # === 3. Execution (Broker) ===
-        self.broker = CoinbaseBrokerAdapter(simulate=self.config.simulate)
+        # === 3. Execution (Broker) — wired with kill_switch ===
+        self.broker = CoinbaseBrokerAdapter(
+            simulate=self.config.simulate,
+            kill_switch=self.kill_switch,
+        )
 
         # === 4. Reconciliation ===
         # Note: ReconciliationEngine requires event_bus and oms, which we'll wire later
@@ -489,6 +492,10 @@ class TradingSystem:
                 f"confidence={signal['confidence']:.0%} "
                 f"reason={signal['reasoning']}"
             )
+        except ConnectionError as e:
+            self._stats["errors"] += 1
+            logger.critical(f"[ORDER] CRITICAL: Broker connection lost: {e}")
+            self.kill_switch.trigger_on_critical_failure("BROKER_DISCONNECT", str(e))
         except Exception as e:
             self._stats["errors"] += 1
             logger.error(f"Order execution failed: {e}")

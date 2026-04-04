@@ -32,7 +32,7 @@ class PnLAttribution:
     @property
     def attribution_pct(self) -> dict[str, float]:
         """Return attribution as percentages of total PnL."""
-        total = float(abs(self.total_pnl))
+        total = abs(float(self.total_pnl))
         if total < 1e-10:
             return {"alpha": 0.0, "execution": 0.0, "fees": 0.0}
         return {

@@ -99,6 +99,8 @@ class MultiVenueLiquidityModel:
 
             return l_v
 
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("MultiVenueLiquidityModel: failed to compute venue liquidity", exc_info=True)
             return 0.0

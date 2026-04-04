@@ -8,6 +8,7 @@ from qtrader.core.events import EventType, FillEvent, SystemEvent, SystemPayload
 from qtrader.core.state_store import StateStore
 from qtrader.core.types import EventBusProtocol
 from qtrader.oms.order_management_system import UnifiedOMS
+from qtrader.risk.kill_switch import GlobalKillSwitch
 
 
 class ReconciliationEngine:
@@ -29,11 +30,13 @@ class ReconciliationEngine:
         oms: UnifiedOMS,
         state_store: StateStore,
         recon_interval_s: float = 60.0,
+        kill_switch: GlobalKillSwitch | None = None,
     ) -> None:
         self.event_bus = event_bus
         self.oms = oms
         self.state_store = state_store
         self.recon_interval_s = recon_interval_s
+        self.kill_switch = kill_switch
         self._log = logging.getLogger("qtrader.execution.reconciliation")
         self._fill_processed_events: dict[str, asyncio.Event] = defaultdict(asyncio.Event)
         self._periodic_task: asyncio.Task | None = None
@@ -112,6 +115,12 @@ class ReconciliationEngine:
                 f"PERIODIC_RECON | {len(mismatches)} mismatch(es) detected | "
                 f"Triggering TRADING_HALT"
             )
+            # Trigger kill switch for reconciliation mismatch
+            if self.kill_switch:
+                self.kill_switch.trigger_on_critical_failure(
+                    "RECON_MISMATCH",
+                    f"{len(mismatches)} position mismatch(es) between OMS and exchange",
+                )
             halt_event = SystemEvent(
                 source="ReconciliationEngine",
                 trace_id=getattr(self, "_trace_id", "periodic_recon"),

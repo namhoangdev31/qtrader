@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
     from qtrader.core.bus import EventBus
     from qtrader.core.events import RiskEvent
+    from qtrader.risk.kill_switch import GlobalKillSwitch
 
 __all__ = ["RealTimeRiskEngine"]
 
@@ -38,6 +39,7 @@ class RealTimeRiskEngine:
 
     limits: Sequence[RiskLimit] = field(default_factory=tuple)
     event_bus: EventBus | None = None
+    kill_switch: GlobalKillSwitch | None = None
     positions: pl.DataFrame = field(
         default_factory=lambda: pl.DataFrame(
             {
@@ -107,14 +109,14 @@ class RealTimeRiskEngine:
                     df = df.drop("weight")
                 df = pl.concat((df, new_row), how="vertical")
 
-        total_abs_mv = float(df.get_column("market_value").abs().sum())
+        total_abs_mv = df.get_column("market_value").abs().sum()
         if total_abs_mv > 0.0:
             df = df.with_columns((pl.col("market_value").abs() / total_abs_mv).alias("weight"))
         else:
             df = df.with_columns(pl.lit(0.0).alias("weight"))
 
         self.positions = df
-        self.equity = float(self.positions.get_column("market_value").sum())
+        self.equity = self.positions.get_column("market_value").sum()
         self.hwm = max(self.hwm, self.equity)
         self.current_drawdown = self._compute_drawdown()
 
@@ -153,7 +155,9 @@ class RealTimeRiskEngine:
             return 0.0
         losses = (-self.pnl_history).to_frame("loss")
         # Quantile of loss distribution (right tail).
-        var_loss = float(losses.select(pl.col("loss").quantile(confidence, interpolation="nearest")).item())
+        var_loss = float(
+            losses.select(pl.col("loss").quantile(confidence, interpolation="nearest")).item()
+        )
         if var_loss <= 0.0:
             return 0.0
         scaled = var_loss * (horizon_days**0.5)
@@ -194,7 +198,7 @@ class RealTimeRiskEngine:
 
     def _build_portfolio_state(self) -> PortfolioState:
         """Construct a `PortfolioState` from the current engine state."""
-        daily_pnl = float(self.pnl_history.tail(1).item()) if self.pnl_history.len() > 0 else 0.0
+        daily_pnl = self.pnl_history.tail(1).item() if self.pnl_history.len() > 0 else 0.0
         var_95 = self.compute_var(confidence=0.95, horizon_days=1)
         hhi = self.compute_hhi()
         return PortfolioState(
@@ -225,6 +229,8 @@ class RealTimeRiskEngine:
     async def publish_breaches(self) -> list[RiskEvent]:
         """Publish any breached limits as `RiskEvent`s to the event bus.
 
+        Also triggers the kill switch if critical limits are breached.
+
         Returns:
             The list of breached `RiskEvent`s.
         """
@@ -234,6 +240,12 @@ class RealTimeRiskEngine:
 
         for event in breaches:
             await self.event_bus.publish(event)
+            # Trigger kill switch for critical breaches
+            if self.kill_switch and event.payload.risk_type in ("DRAWDOWN", "VAR", "EXPOSURE"):
+                self.kill_switch.trigger_on_critical_failure(
+                    "RISK_LIMIT_BREACH",
+                    f"{event.payload.risk_type}: value={event.payload.value} > threshold={event.payload.threshold}",
+                )
         _LOG.debug("Published %d risk breaches", len(breaches))
         return breaches
 
@@ -277,4 +289,3 @@ async def test_publish_breaches_uses_event_bus(event_bus: EventBus) -> None:
     events = await engine.publish_breaches()
     assert events == []
 """
-

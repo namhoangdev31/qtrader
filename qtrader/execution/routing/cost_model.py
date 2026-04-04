@@ -94,7 +94,9 @@ class RoutingCostModel:
 
             return float(c_spread + c_slippage + c_fee)
 
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error(f"RoutingCostModel: failed to compute cost for {venue_name}", exc_info=True)
             # Return effectively infinite cost for failed prediction to discourage venue selection
             failsafe_penalty = 1e18

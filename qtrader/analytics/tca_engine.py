@@ -171,4 +171,4 @@ class TCAEngine:
         if total_vol == 0:
             return 0.0
 
-        return float((df["p"] * df["q"]).sum()) / float(total_vol)
+        return (df["p"] * df["q"]).sum() / total_vol

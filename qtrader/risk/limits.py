@@ -137,7 +137,7 @@ class MaxConcentrationLimit:
             return None
 
         max_weight_expr = state.positions.get_column("weight").abs().max()
-        max_weight_value = float(max_weight_expr) if max_weight_expr is not None else 0.0
+        max_weight_value = max_weight_expr if max_weight_expr is not None else 0.0
 
         if max_weight_value <= self._max_weight and state.hhi <= self._max_weight:
             return None
@@ -172,7 +172,7 @@ class GrossExposureLimit:
             return None
 
         gross_exposure_series = state.positions.get_column("market_value").abs().sum()
-        gross_exposure = float(gross_exposure_series)
+        gross_exposure = gross_exposure_series
         leverage = gross_exposure / state.equity
 
         if leverage <= self._max_leverage:

@@ -26,6 +26,7 @@ from qtrader.core.decimal_adapter import d
 from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
 from qtrader.execution.http import RetryConfig, request_json
+from qtrader.risk.kill_switch import GlobalKillSwitch
 
 logger = logging.getLogger("qtrader.broker.coinbase")
 
@@ -106,6 +107,8 @@ class CoinbaseBrokerAdapter:
         paper_slippage_bps: float = 5.0,
         paper_latency_ms: float = 50.0,
         paper_commission_rate: float = 0.001,
+        # Kill switch for critical failure handling
+        kill_switch: GlobalKillSwitch | None = None,
     ) -> None:
         self.api_key = api_key or Config.COINBASE_API_KEY
         self.api_secret = api_secret or Config.COINBASE_API_SECRET
@@ -119,6 +122,7 @@ class CoinbaseBrokerAdapter:
             retry_backoff_ms=retry_backoff_ms,
         )
         self._session: aiohttp.ClientSession | None = None
+        self.kill_switch = kill_switch
 
         # Paper trading config
         self.paper_slippage_bps = paper_slippage_bps
@@ -352,14 +356,23 @@ class CoinbaseBrokerAdapter:
         }
 
         session = await self._get_session()
-        resp = await request_json(
-            session=session,
-            method="POST",
-            url=url,
-            headers=self._auth_headers(method="POST", path=path),
-            json_body=body,
-            retry=self._retry,
-        )
+        try:
+            resp = await request_json(
+                session=session,
+                method="POST",
+                url=url,
+                headers=self._auth_headers(method="POST", path=path),
+                json_body=body,
+                retry=self._retry,
+            )
+        except ConnectionError as e:
+            logger.critical(f"[COINBASE] CRITICAL: Exchange connection lost: {e}")
+            if self.kill_switch:
+                self.kill_switch.trigger_on_critical_failure("BROKER_DISCONNECT", str(e))
+            raise
+        except Exception as e:
+            logger.error(f"[COINBASE] Order submit failed: {e}", exc_info=True)
+            raise RuntimeError(f"Coinbase order submit failed: {e}")
 
         if isinstance(resp, dict) and resp.get("success") is True:
             success = resp.get("success_response") or {}

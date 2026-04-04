@@ -9,7 +9,13 @@ from typing import Any
 _LOG = logging.getLogger(__name__)
 
 
-__all__ = ["ATRPositionSizer", "PositionSizer", "RiskAdaptivePositionSizer", "RiskParitySizer", "VolTargetSizer"]
+__all__ = [
+    "ATRPositionSizer",
+    "PositionSizer",
+    "RiskAdaptivePositionSizer",
+    "RiskParitySizer",
+    "VolTargetSizer",
+]
 
 
 class RiskAdaptivePositionSizer:
@@ -142,7 +148,7 @@ class VolTargetSizer:
         if realized_vol <= 0.0 or capital <= 0.0:
             return 0.0
         position_value = (self.target_vol / realized_vol) * capital
-        return float(position_value)
+        return position_value
 
 
 @dataclass(slots=True)
@@ -168,7 +174,7 @@ class ATRPositionSizer:
         dollar_risk_per_share = atr
         total_risk_budget = capital * self.risk_per_trade_pct
         raw_shares = total_risk_budget / dollar_risk_per_share
-        return float(max(0, floor(raw_shares)))
+        return max(0, floor(raw_shares))
 
 
 @dataclass(slots=True)
@@ -193,7 +199,7 @@ class RiskParitySizer:
         total = sum(inv_vol.values())
         if total <= 0.0:
             n = len(positive)
-            equal_alloc = capital / float(n)
+            equal_alloc = capital / n
             return {s: equal_alloc for s in vols}
 
         weights = {s: v / total for s, v in inv_vol.items()}
@@ -212,9 +218,7 @@ class PositionSizer:
     """
 
     @staticmethod
-    def compute_kelly_fraction(
-        win_prob: float, win_loss_ratio: float, f_max: float = 1.0
-    ) -> float:
+    def compute_kelly_fraction(win_prob: float, win_loss_ratio: float, f_max: float = 1.0) -> float:
         """
         Compute the Kelly fraction for optimal positioning.
 

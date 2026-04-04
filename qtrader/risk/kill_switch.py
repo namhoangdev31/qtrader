@@ -331,3 +331,27 @@ class GlobalKillSwitch:
             "actions_executed": list(self._actions_executed),
             "actions_failed": list(self._actions_failed),
         }
+
+    def trigger_on_critical_failure(self, error_type: str, error_message: str) -> None:
+        """Trigger kill switch on critical system failure.
+
+        This method is called when a critical exception occurs that could
+        compromise system integrity or capital safety.
+
+        Args:
+            error_type: Type of critical failure (e.g., 'BROKER_DISCONNECT', 'DATA_CORRUPTION').
+            error_message: Detailed error message.
+        """
+        if self._is_system_halted:
+            return  # Already halted
+
+        self._is_system_halted = True
+        self._kill_reason = f"CRITICAL_FAILURE: {error_type} — {error_message}"
+        self._kill_timestamp = time.time()
+
+        _LOG.critical(
+            f"[KILL_SWITCH] TRIGGERED BY CRITICAL FAILURE | {error_type} | "
+            f"{error_message} | SHUTDOWN_SEQUENCE_INITIATED"
+        )
+
+        self._actions_executed.append(f"CRITICAL_FAILURE_TRIGGER: {error_type}")
