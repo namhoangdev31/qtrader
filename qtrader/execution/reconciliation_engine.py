@@ -85,14 +85,31 @@ class ReconciliationEngine:
 
         # Get all tracked positions from OMS
         oms_positions = await self._get_all_oms_positions()
+        
+        # Also check assets that might be in broker but NOT in OMS yet
+        all_symbols = set(oms_positions.keys())
+        for name, adapter in self.oms.adapters.items():
+            try:
+                balances = await adapter.get_balance()
+                for asset in balances:
+                    all_symbols.add(asset)
+            except Exception:
+                pass
 
         mismatches: list[dict] = []
-        for symbol, oms_qty in oms_positions.items():
+        for symbol in all_symbols:
+            oms_qty = oms_positions.get(symbol, Decimal("0"))
             try:
                 exchange_qty = await self._fetch_exchange_position(symbol)
                 diff = oms_qty - exchange_qty
 
-                if abs(diff) > Decimal("1e-8"):
+                if abs(diff) > Decimal("1e-5"): # Increased tolerance for paper trading
+                    # SPECIAL CASE: If OMS is 0 and it's paper trading, we might want to sync
+                    if oms_qty == 0 and exchange_qty != 0:
+                        self._log.info(f"PERIODIC_RECON | First-run sync: {symbol} -> {exchange_qty}")
+                        await self.state_store.update_position(symbol, exchange_qty, Decimal("0"))
+                        continue
+
                     mismatches.append(
                         {
                             "symbol": symbol,

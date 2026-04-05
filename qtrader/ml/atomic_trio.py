@@ -265,3 +265,49 @@ class AtomicTrioPipeline:
                 + self._phi2.get_model_info().get("estimated_memory_mb", 0)
             ),
         }
+
+
+if __name__ == "__main__":
+    # Internal service for ML Engine
+    import os
+    import uvicorn
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+
+    app = FastAPI(title="QTrader ML Engine — Atomic Trio Service")
+
+    # Shared pipeline instance
+    pipeline = AtomicTrioPipeline(
+        chronos_model_id=os.getenv("CHRONOS_MODEL_ID", "amazon/chronos-2"),
+        tabpfn_model_id=os.getenv("TABPFN_MODEL_ID", "Prior-Labs/tabpfn_2_5"),
+        phi2_model_id=os.getenv("PHI2_MODEL_ID", "mlx-community/phi-2"),
+    )
+
+    class PredictionRequest(BaseModel):
+        historical_prices: list[float] | None = None
+        market_features: dict[str, float] | None = None
+        market_context: dict[str, Any] | None = None
+        system_state: dict[str, Any] | None = None
+        prediction_length: int = 10
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "healthy", "service": "ML_ENGINE"}
+
+    @app.get("/info")
+    async def info() -> dict[str, Any]:
+        return pipeline.get_pipeline_info()
+
+    @app.post("/predict")
+    async def predict(req: PredictionRequest) -> dict[str, Any]:
+        result = pipeline.run(
+            historical_prices=req.historical_prices,
+            market_features=req.market_features,
+            market_context=req.market_context,
+            system_state=req.system_state,
+            prediction_length=req.prediction_length,
+        )
+        return result.to_dict()
+
+    # Start Uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)

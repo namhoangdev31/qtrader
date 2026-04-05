@@ -3,22 +3,26 @@ services:
   # QTrader Orchestrator — Main trading engine
   # ============================================================
   orchestrator:
+    container_name: qt-orchestrator
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    command: ["uv", "run", "python", "live_trader.py"]
-    ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
-      - hf_cache:/app/.cache/huggingface
+    command: ["python", "live_trader.py"]
     env_file:
       - .env
     environment:
       - PYTHONPATH=/app
       - SERVICE_TYPE=ORCHESTRATOR
+      - QTRADER_EXCHANGE=coinbase
+      - QTRADER_SYMBOLS=BTC-USD
+      - QTRADER_TESTNET=true
+      - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - ML_ENGINE_URL=http://qt-ml-engine:8001
+    volumes:
+      - hf_cache:/app/.cache/huggingface
     restart: always
     depends_on:
       timescaledb:
@@ -26,11 +30,10 @@ services:
       mlflow:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "pgrep -f live_trader.py || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 60s
     deploy:
       resources:
         limits:
@@ -39,17 +42,58 @@ services:
           memory: 4G
 
   # ============================================================
-  # ML Engine — Atomic Trio (Chronos-2, TabPFN 2.5, Phi-2)
+  # Dashboard UI — Paper Trading FastAPI
   # ============================================================
-  ml_engine:
+  api_dashboard:
+    container_name: qt-dashboard
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    command: ["uv", "run", "python", "-m", "qtrader.ml.atomic_trio"]
-    volumes:
-      - .:/app
-      - hf_cache:/app/.cache/huggingface
+    command: ["uvicorn", "qtrader.api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_TYPE=API_DASHBOARD
+      - QTRADER_SYMBOLS=BTC-USD
+      - ML_ENGINE_URL=http://qt-ml-engine:8001
+      - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
+      - QTRADER_TESTNET=true
+    restart: always
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  # ============================================================
+  # ML Engine — Atomic Trio (Chronos-2, TabPFN 2.5, Phi-2)
+  # ============================================================
+  ml_engine:
+    container_name: qt-ml-engine
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    command: ["python", "-m", "qtrader.ml.atomic_trio"]
+    ports:
+      - "8001:8001"
     env_file:
       - .env
     environment:
@@ -59,15 +103,18 @@ services:
       - CHRONOS_MODEL_ID=${CHRONOS_MODEL_ID:-amazon/chronos-2}
       - TABPFN_MODEL_ID=${TABPFN_MODEL_ID:-Prior-Labs/tabpfn_2_5}
       - PHI2_MODEL_ID=${PHI2_MODEL_ID:-microsoft/phi-2}
+      - TABPFN_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiMjhmNGJlMGQtMTk1Yi00OGIzLWI4M2QtMDJlMzQxZDg3YTkxIiwiZXhwIjoxODA2ODYxMjY1fQ.23E_0s3YGBioYqpTBhRxplQMFHwLMJa3TiJKfzszulk
+    volumes:
+      - hf_cache:/app/.cache/huggingface
     restart: always
     depends_on:
       - mlflow
     healthcheck:
-      test: ["CMD", "python", "-c", "from qtrader.ml.atomic_trio import AtomicTrioPipeline; print('OK')"]
-      interval: 60s
-      timeout: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -79,8 +126,8 @@ services:
   # TimescaleDB — Time-series database
   # ============================================================
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
-    platform: linux/arm64
+    container_name: qt-timescaledb
+    image: timescale/timescaledb:2.14.2-pg16
     ports:
       - "5433:5432"
     environment:
@@ -100,8 +147,8 @@ services:
   # MLflow — Experiment tracking & model registry
   # ============================================================
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
-    platform: linux/arm64
+    container_name: qt-mlflow
+    image: ghcr.io/mlflow/mlflow:v2.14.1
     ports:
       - "5050:5000"
     command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
@@ -113,6 +160,7 @@ services:
   # Redis — Cache & message broker
   # ============================================================
   redis:
+    container_name: qt-redis
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -125,11 +173,32 @@ services:
       timeout: 5s
       retries: 3
 
+  # ============================================================
+  # Frontend UI — Next.js Dashboard
+  # ============================================================
+  frontend:
+    container_name: qt-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    restart: always
+    depends_on:
+      api_dashboard:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
 volumes:
   timescaledb_data:
   mlflow_data:
   redis_data:
-  hf_cache:  # Persistent cache for HuggingFace models
+  hf_cache:
 
 networks:
   default:

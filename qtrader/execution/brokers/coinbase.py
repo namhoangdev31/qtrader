@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Callable, Optional
 
+d = Decimal
+
 import aiohttp
 
 from qtrader.core.config import Config
@@ -49,15 +51,13 @@ class PaperAccount:
 
     @property
     def equity(self) -> Decimal:
-        return self.cash + sum(
-            self.positions.get(asset, d(0)) * d(0)  # Simplified
-            for asset in self.positions
-        )
+        """Total equity (Cash + Market Value)."""
+        return self.cash
 
     def update_position(self, asset: str, qty: Decimal, price: Decimal, side: str) -> None:
         """Update position and track PnL."""
-        current = self.positions.get(asset, d(0))
-        avg_price = self.avg_entry_prices.get(asset, d(0))
+        current = self.positions.get(asset, Decimal("0"))
+        avg_price = self.avg_entry_prices.get(asset, Decimal("0"))
 
         if side.upper() == "BUY":
             # Add to position
@@ -115,7 +115,8 @@ class CoinbaseBrokerAdapter:
     ) -> None:
         self.api_key = api_key or Config.COINBASE_API_KEY
         self.api_secret = api_secret or Config.COINBASE_API_SECRET
-        self.simulate = simulate if simulate is not None else Config.SIMULATE_MODE
+        # Force Paper Trading (simulate=True)
+        self.simulate = True
         self._rest_base = rest_base or Config.COINBASE_REST_BASE
         self._key_name = key_name or Config.COINBASE_KEY_NAME
         self._private_key_pem = private_key_pem or Config.COINBASE_PRIVATE_KEY
@@ -142,10 +143,10 @@ class CoinbaseBrokerAdapter:
         self._ws_task: asyncio.Task | None = None
         self._ws_running = False
         self._ws_product_ids: list[str] = []
-        self._on_order_update: Callable[[dict[str, Any]], None] | None = None
-        self._on_balance_update: Callable[[dict[str, Any]], None] | None = None
-        self._on_market_data: Callable[[dict[str, Any]], None] | None = None
-        self._ws_base_url = "wss://advanced-trade-ws.coinbase.com"
+        self._on_order_update: Callable[[dict[str, Any]], Any] | None = None
+        self._on_balance_update: Callable[[dict[str, Any]], Any] | None = None
+        self._on_market_data: Callable[[dict[str, Any]], Any] | None = None
+        self._ws_base_url = "wss://ws-feed.exchange.coinbase.com/"
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -295,14 +296,13 @@ class CoinbaseBrokerAdapter:
         broker_oid = str(uuid.uuid4())
         self.paper_account.orders[broker_oid] = order
         logger.info(
-            "Placing %s %s for %s (simulate=%s)",
+            "Placing %s %s for %s (PAPER TRADING MODE)",
             order.order_type,
             order.side,
             order.symbol,
-            self.simulate,
         )
 
-        if self.simulate:
+        if True:  # Forced simulate mode
             # Simulate network latency
             if self.paper_latency_ms > 0:
                 await asyncio.sleep(self.paper_latency_ms / 1000.0)
@@ -470,11 +470,11 @@ class CoinbaseBrokerAdapter:
 
     async def get_balance(self) -> dict:
         if self.simulate:
-            return {
-                "cash": float(self.paper_account.cash),
-                "positions": {k: float(v) for k, v in self.paper_account.positions.items()},
-                "realized_pnl": float(self.paper_account.realized_pnl),
-            }
+            # Return flat mapping of Asset -> Quantity for ReconciliationEngine
+            balances = {"USD": self.paper_account.cash}
+            for asset, qty in self.paper_account.positions.items():
+                balances[asset] = qty
+            return balances
 
         path = "/brokerage/accounts"
         url = f"{self._rest_base}{path}"
@@ -513,7 +513,7 @@ class CoinbaseBrokerAdapter:
         """Set callback for balance update events from WebSocket."""
         self._on_balance_update = handler
 
-    def set_market_data_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
+    def set_market_data_handler(self, handler: Callable[[dict[str, Any]], Any]) -> None:
         """Set callback for market data events (level2, ticker)."""
         self._on_market_data = handler
 
@@ -558,15 +558,22 @@ class CoinbaseBrokerAdapter:
 
                         logger.info(f"[COINBASE_WS] Connected to {self._ws_base_url}")
 
-                        # Subscribe to market data channels
+                        # Subscribe to Standard Exchange Feed (ws-feed)
                         subscribe_msg = {
                             "type": "subscribe",
                             "product_ids": self._ws_product_ids,
-                            "channel": ["level2", "ticker", "user"],
+                            "channels": [
+                                "level2",
+                                "heartbeat",
+                                {
+                                    "name": "ticker",
+                                    "product_ids": self._ws_product_ids
+                                }
+                            ]
                         }
                         await ws.send_json(subscribe_msg)
                         logger.info(
-                            f"[COINBASE_WS] Subscribed to level2, ticker, user for {self._ws_product_ids}"
+                            f"[COINBASE_WS] Subscribed to level2, heartbeat, ticker for {self._ws_product_ids}"
                         )
 
                         async for msg in ws:
@@ -584,30 +591,30 @@ class CoinbaseBrokerAdapter:
                 await asyncio.sleep(5)
 
     async def _handle_ws_message(self, data: dict[str, Any]) -> None:
-        """Handle incoming WebSocket message."""
-        channel = data.get("channel")
-        events = data.get("events", [])
+        """Handle incoming WebSocket message from Standard Exchange Feed."""
+        msg_type = data.get("type")
 
-        # Market data updates
-        if channel in ("level2", "ticker"):
+        # Market data updates (Ticker)
+        if msg_type == "ticker":
+            if self._on_market_data:
+                if asyncio.iscoroutinefunction(self._on_market_data):
+                    await self._on_market_data(data)
+                else:
+                    self._on_market_data(data)
+            
+            product_id = data.get("product_id", "")
+            bid = d(str(data.get("best_bid", "0")))
+            ask = d(str(data.get("best_ask", "0")))
+            
+            if bid > 0 and ask > 0:
+                self.update_quote(product_id, bid, ask)
+
+        # Level 2 updates (Orderbook)
+        elif msg_type in ("l2update", "snapshot"):
             if self._on_market_data:
                 self._on_market_data(data)
-            # Auto-update quotes from ticker
-            if channel == "ticker" and events:
-                for event in events:
-                    product_id = event.get("product_id", "")
-                    bid = d(str(event.get("best_bid", "0")))
-                    ask = d(str(event.get("best_ask", "0")))
-                    if bid > 0 and ask > 0:
-                        self.update_quote(product_id, bid, ask)
 
-        # Order / balance updates
-        if channel == "user":
-            for event in events:
-                event_type = event.get("type", "").lower()
-                if "order" in event_type and self._on_order_update:
-                    self._on_order_update(event)
-                elif (
-                    "portfolio" in event_type or "balance" in event_type
-                ) and self._on_balance_update:
-                    self._on_balance_update(event)
+        # Heartbeat
+        elif msg_type == "heartbeat":
+            # logger.debug(f"[COINBASE_WS] Heartbeat for {data.get('product_id')}")
+            pass

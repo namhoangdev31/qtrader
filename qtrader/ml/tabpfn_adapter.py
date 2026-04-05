@@ -107,8 +107,14 @@ class TabPFNRiskAdapter:
                 device=self.device,
                 n_estimators=self.n_estimators,
             )
+            # Warm-up fit is REQUIRED for TabPFN 2.5 to initialize internal schemas
+            # and avoid 'inferred_feature_schema_' attribute errors.
+            dummy_X = np.random.rand(10, len(self._feature_names))
+            dummy_y = np.random.randint(0, 3, 10) # 3 classes: SAFE, WARNING, DANGER
+            self._model.fit(dummy_X, dummy_y)
+            
             self._is_loaded = True
-            logger.info(f"[TABPFN] Model loaded: {self.model_id}")
+            logger.info(f"[TABPFN] Model loaded and warm-fitted: {self.model_id}")
         except ImportError:
             logger.warning(
                 "[TABPFN] tabpfn package not installed. Install with: pip install tabpfn"
@@ -158,8 +164,12 @@ class TabPFNRiskAdapter:
         start_time = time.time()
 
         if self._model is not None and hasattr(self._model, "predict_proba"):
-            probabilities = self._model.predict_proba(feature_array)[0]
-            class_idx = int(np.argmax(probabilities))
+            try:
+                probabilities = self._model.predict_proba(feature_array)[0]
+                class_idx = int(np.argmax(probabilities))
+            except Exception as e:
+                logger.warning(f"[TABPFN] predict_proba failed: {e}. Falling back to rule-based.")
+                probabilities, class_idx = self._rule_based_classify(features)
         else:
             probabilities, class_idx = self._rule_based_classify(features)
 

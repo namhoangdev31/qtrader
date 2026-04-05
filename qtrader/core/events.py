@@ -746,6 +746,18 @@ class OrderEvent(BaseEvent):
     def quantity(self) -> Decimal:
         return self.payload.quantity
 
+    @property
+    def order_type(self) -> str:
+        return self.payload.order_type
+
+    @property
+    def side(self) -> str:
+        return self.payload.action
+
+    @property
+    def price(self) -> Decimal | None:
+        return self.payload.price
+
 
 class SignalEvent(BaseEvent):
     """Event representing a trading signal."""

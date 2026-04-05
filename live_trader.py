@@ -241,68 +241,101 @@ async def run_live_trader(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
+    """Parse command line arguments with environment variable defaults."""
+    import os
+
     parser = argparse.ArgumentParser(description="QTrader Live Trading Engine")
 
     # Exchange configuration
     parser.add_argument(
         "--exchange",
         type=str,
-        default="binance",
+        default=os.getenv("QTRADER_EXCHANGE", "coinbase"),
         help="Comma-separated list of exchanges (binance,coinbase)",
     )
     parser.add_argument(
-        "--symbols", type=str, default="BTC-USDT", help="Comma-separated list of trading symbols"
+        "--symbols",
+        type=str,
+        default=os.getenv("QTRADER_SYMBOLS", "BTC-USD"),
+        help="Comma-separated list of trading symbols",
     )
-    parser.add_argument("--testnet", action="store_true", help="Use testnet/sandbox mode")
+    parser.add_argument(
+        "--testnet",
+        action="store_true",
+        default=True,  # Forced Paper Trading
+        help="Use testnet/sandbox mode (ALWAYS TRUE for Paper Trading)",
+    )
 
     # API keys
-    parser.add_argument("--binance-api-key", type=str, default=None)
-    parser.add_argument("--binance-api-secret", type=str, default=None)
-    parser.add_argument("--coinbase-api-key", type=str, default=None)
-    parser.add_argument("--coinbase-api-secret", type=str, default=None)
+    parser.add_argument(
+        "--binance-api-key", type=str, default=os.getenv("BINANCE_API_KEY")
+    )
+    parser.add_argument(
+        "--binance-api-secret", type=str, default=os.getenv("BINANCE_API_SECRET")
+    )
+    parser.add_argument(
+        "--coinbase-api-key", type=str, default=os.getenv("COINBASE_API_KEY")
+    )
+    parser.add_argument(
+        "--coinbase-api-secret", type=str, default=os.getenv("COINBASE_API_SECRET")
+    )
 
     # Risk limits
     parser.add_argument(
         "--max-drawdown",
         type=float,
-        default=0.20,
+        default=float(os.getenv("MAX_DRAWDOWN", "0.20")),
         help="Maximum drawdown before kill switch (default: 0.20)",
     )
     parser.add_argument(
         "--max-loss",
         type=float,
-        default=1000000,
+        default=float(os.getenv("MAX_LOSS", "1000000")),
         help="Maximum absolute loss before kill switch (default: 1000000)",
     )
     parser.add_argument(
         "--auto-liquidate",
         action="store_true",
+        default=os.getenv("AUTO_LIQUIDATE", "false").lower() == "true",
         help="Automatically liquidate positions on kill switch trigger",
     )
-    parser.add_argument("--max-order-qty", type=float, default=1000, help="Maximum order quantity")
+    parser.add_argument(
+        "--max-order-qty",
+        type=float,
+        default=float(os.getenv("MAX_ORDER_QTY", "1000")),
+        help="Maximum order quantity",
+    )
     parser.add_argument(
         "--max-order-notional",
         type=float,
-        default=1000000,
+        default=float(os.getenv("MAX_ORDER_NOTIONAL", "1000000")),
         help="Maximum order notional value (USD)",
     )
     parser.add_argument(
-        "--max-position", type=float, default=100, help="Maximum position per symbol"
+        "--max-position",
+        type=float,
+        default=float(os.getenv("MAX_POSITION", "100")),
+        help="Maximum position per symbol",
     )
     parser.add_argument(
         "--max-orders-per-second",
         type=float,
-        default=10,
+        default=float(os.getenv("MAX_OPS", "10")),
         help="Maximum order submission rate per second",
     )
 
     # Alerting
     parser.add_argument(
-        "--alert-slack", type=str, default=None, help="Slack webhook URL for alerts"
+        "--alert-slack",
+        type=str,
+        default=os.getenv("ALERT_SLACK_WEBHOOK"),
+        help="Slack webhook URL for alerts",
     )
     parser.add_argument(
-        "--alert-pagerduty", type=str, default=None, help="PagerDuty routing key for alerts"
+        "--alert-pagerduty",
+        type=str,
+        default=os.getenv("ALERT_PAGERDUTY_KEY"),
+        help="PagerDuty routing key for alerts",
     )
 
     return parser.parse_args()

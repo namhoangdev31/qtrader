@@ -59,6 +59,7 @@ from qtrader.core.events import (
     SystemPayload,
 )
 from qtrader.core.state_store import StateStore
+from qtrader.core.event_bus import EventBus
 from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
 from qtrader.ml.atomic_trio import AtomicTrioPipeline
 from qtrader.risk.kill_switch import GlobalKillSwitch
@@ -126,16 +127,28 @@ class TradingSystem:
     8. Monitoring → Alerts + latency tracking + PnL attribution
     """
 
-    def __init__(self, config: TradingSystemConfig | None = None) -> None:
+    def __init__(self, config: TradingSystemConfig | None = None, ml_pipeline: Any | None = None) -> None:
         self.config = config or TradingSystemConfig()
         self.state_store = StateStore()
+        self.event_bus = EventBus()
 
-        # === 1. ML Alpha Engine (Atomic Trio) ===
-        self.ml_pipeline = AtomicTrioPipeline(
-            chronos_model_id=self.config.chronos_model_id,
-            tabpfn_model_id=self.config.tabpfn_model_id,
-            phi2_model_id=self.config.phi2_model_id,
-        )
+        # === 1. ML Alpha Engine (Atomic Trio) — Support Offloading ===
+        if ml_pipeline is not None:
+            self.ml_pipeline = ml_pipeline
+        else:
+            ml_url = os.environ.get("ML_ENGINE_URL")
+            if ml_url:
+                from qtrader.ml.remote_client import RemoteAtomicTrioPipeline
+                self.ml_pipeline = RemoteAtomicTrioPipeline(base_url=ml_url)
+                logger.info(f"[TRADING_SYSTEM] Using Remote ML Engine at {ml_url}")
+            else:
+                from qtrader.ml.atomic_trio import AtomicTrioPipeline
+                self.ml_pipeline = AtomicTrioPipeline(
+                    chronos_model_id=self.config.chronos_model_id,
+                    tabpfn_model_id=self.config.tabpfn_model_id,
+                    phi2_model_id=self.config.phi2_model_id,
+                )
+                logger.info("[TRADING_SYSTEM] Using Local ML Engine (RAM heavy)")
 
         # === 2. Risk Management ===
         self.kill_switch = GlobalKillSwitch(
@@ -157,6 +170,8 @@ class TradingSystem:
             simulate=self.config.simulate,
             kill_switch=self.kill_switch,
         )
+        # Wire Market Data to EventBus (Push-based architecture)
+        self.broker.set_market_data_handler(self._on_market_data_update)
 
         # === 4. Reconciliation ===
         # Note: ReconciliationEngine requires event_bus and oms, which we'll wire later
@@ -222,6 +237,16 @@ class TradingSystem:
             f"Symbols: {', '.join(self.config.symbols)}",
         )
 
+        # Initial startup alerts and logging completed above.
+        
+        # Configure and start Market Data WebSocket
+        for symbol in self.config.symbols:
+            self.broker.add_product(symbol)
+        await self.broker.start_websocket()
+
+        # Start EventBus and main pipeline
+        await self.event_bus.start()
+
         # Start main pipeline loop
         await self._run_pipeline()
 
@@ -230,6 +255,7 @@ class TradingSystem:
         logger.info("TRADING SYSTEM — STOPPING")
         self._running = False
         self._shutdown_event.set()
+        await self.event_bus.stop()
 
         # Send shutdown alert
         await self._send_alert(
@@ -257,6 +283,37 @@ class TradingSystem:
         """Handle OS shutdown signal."""
         logger.warning("Shutdown signal received — initiating graceful shutdown")
         self._shutdown_event.set()
+
+    async def _on_market_data_update(self, data: dict[str, Any]) -> None:
+        """Handle market data update from broker and publish to EventBus."""
+        symbol = data.get("product_id") or data.get("symbol")
+        if not symbol:
+            return
+            
+        # Update quote store (polling compatibility)
+        price = Decimal(str(data.get("price", "0")))
+        if price > 0:
+            self.broker._quotes[symbol] = {"price": price}
+            
+        # Publish to EventBus (Push-based compatibility)
+        bid = Decimal(str(data.get("best_bid", "0")))
+        ask = Decimal(str(data.get("best_ask", "0")))
+        
+        # Log ticker update for container observability
+        logger.debug(f"[TICKER] {symbol} | Price: {price} | Bid: {bid} | Ask: {ask}")
+        
+        event = MarketEvent(
+            event_type=EventType.MARKET_DATA,
+            symbol=symbol,
+            source="broker.coinbase",
+            payload=MarketPayload(
+                symbol=symbol,
+                bid=bid,
+                ask=ask,
+                data=data
+            )
+        )
+        await self.event_bus.publish(event)
 
     async def _run_pipeline(self) -> None:
         """Main pipeline loop — the heartbeat of the trading system."""
@@ -405,7 +462,7 @@ class TradingSystem:
             "spread_bps": 2.0,
         }
 
-        result = self.ml_pipeline.run(
+        result = await self.ml_pipeline.run(
             historical_prices=historical[-100:],
             market_features=features,
             market_context={
@@ -429,9 +486,31 @@ class TradingSystem:
     def _generate_signal(self, symbol: str, ml_result: dict[str, Any]) -> dict[str, Any] | None:
         """Generate trading signal from ML result."""
         decision = ml_result["decision"]
-        action = decision.action.value
-        confidence = decision.confidence
-        position_size = decision.position_size_multiplier
+        
+        # Robust field extraction (supports dict, class object, or string fallback)
+        if isinstance(decision, str):
+            action = str(decision)
+            confidence = 0.0
+            position_size = 0.0
+            sl = tp = 0.0
+            reasoning = explanation = "Direct String Fallback"
+        elif isinstance(decision, dict):
+            action = str(decision.get("action", "HOLD"))
+            confidence = float(decision.get("confidence", 0.0))
+            position_size = float(decision.get("position_size_multiplier", 0.0))
+            sl = float(decision.get("stop_loss_pct", 0.0))
+            tp = float(decision.get("take_profit_pct", 0.0))
+            reasoning = str(decision.get("reasoning", ""))
+            explanation = str(decision.get("explanation", ""))
+        else:
+            # Assume TradingDecision object (local pipeline)
+            action = str(decision.action.value if hasattr(decision.action, "value") else decision.action)
+            confidence = float(decision.confidence)
+            position_size = float(decision.position_size_multiplier)
+            sl = float(decision.stop_loss_pct)
+            tp = float(decision.take_profit_pct)
+            reasoning = str(decision.reasoning)
+            explanation = str(decision.explanation)
 
         if action == "HOLD" or confidence < 0.3:
             return None
@@ -445,10 +524,10 @@ class TradingSystem:
             "strength": signal_strength,
             "confidence": confidence,
             "position_size_multiplier": position_size,
-            "stop_loss_pct": decision.stop_loss_pct,
-            "take_profit_pct": decision.take_profit_pct,
-            "reasoning": decision.reasoning,
-            "explanation": decision.explanation,
+            "stop_loss_pct": sl,
+            "take_profit_pct": tp,
+            "reasoning": reasoning,
+            "explanation": explanation,
         }
 
     def _check_risk(self, signal: dict[str, Any]) -> bool:
@@ -526,8 +605,16 @@ class TradingSystem:
         # Compare
         mismatches = 0
         for symbol, broker_qty in broker_positions.items():
-            store_qty = store_positions.get(symbol, Decimal("0"))
-            if abs(broker_qty - float(store_qty)) > 0.0001:
+            store_qty = Decimal(str(store_positions.get(symbol, 0)))
+            diff = abs(Decimal(str(broker_qty)) - store_qty)
+            
+            if diff > Decimal("1e-5"):
+                # First run sync: Store is empty, Broker has position
+                if store_qty == 0 and broker_qty != 0:
+                    logger.info(f"[RECON] First-run sync for {symbol}: {broker_qty}")
+                    await self.state_store.update_position(symbol, Decimal(str(broker_qty)), Decimal("0"))
+                    continue
+                    
                 mismatches += 1
                 logger.warning(f"[RECON MISMATCH] {symbol}: broker={broker_qty}, store={store_qty}")
 
@@ -570,6 +657,7 @@ def create_trading_system(
     simulate: bool = True,
     symbols: list[str] | None = None,
     hf_token: str | None = None,
+    ml_pipeline: Any | None = None,
 ) -> TradingSystem:
     """Factory function to create a fully wired Trading System."""
     config = TradingSystemConfig(
@@ -581,7 +669,7 @@ def create_trading_system(
         slack_webhook_url=os.environ.get("SLACK_WEBHOOK_URL"),
         pagerduty_routing_key=os.environ.get("PAGERDUTY_ROUTING_KEY"),
     )
-    return TradingSystem(config)
+    return TradingSystem(config, ml_pipeline=ml_pipeline)
 
 
 async def main() -> None:

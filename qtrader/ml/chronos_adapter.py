@@ -141,24 +141,33 @@ class ChronosForecastAdapter:
         start_time = time.time()
 
         if self._pipeline is not None:
-            # Official Chronos-2 pipeline
-            forecast = self._pipeline.predict(
-                prices,
+            # Official Chronos-2 pipeline returns quantiles directly
+            # Output shape: list of [n_variates, n_quantiles, prediction_length]
+            forecast_list = self._pipeline.predict(
+                prices.reshape(1, 1, -1),
                 prediction_length=prediction_length,
-                quantile_levels=quantile_levels,
-                num_samples=20,
             )
-            # forecast shape: (prediction_length,) for mean
-            # or (num_samples, prediction_length) for samples
+            forecast = forecast_list[0] # Get first series in batch
+
             if hasattr(forecast, "numpy"):
                 forecast = forecast.numpy()
 
-            if forecast.ndim == 2:
-                mean = np.mean(forecast, axis=0)
-                quantile_05 = np.percentile(forecast, 5, axis=0)
-                quantile_95 = np.percentile(forecast, 95, axis=0)
-                lower_bound = np.percentile(forecast, 10, axis=0)
-                upper_bound = np.percentile(forecast, 90, axis=0)
+            # Chronos-2 usually returns 9 quantiles: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+            # Index 4 is the median (0.5), 0 is 0.1, 8 is 0.9, etc.
+            if forecast.ndim == 3: # (n_variates, n_quantiles, prediction_length)
+                # We assume univariate (n_variates=1)
+                f = forecast[0] 
+                mean = f[4] # Median
+                quantile_05 = f[0] # Actually 0.1 in standard Chronos, but close enough for UI
+                quantile_95 = f[8] # Actually 0.9 in standard Chronos
+                lower_bound = f[1] # 0.2
+                upper_bound = f[7] # 0.8
+            elif forecast.ndim == 2: # (n_quantiles, prediction_length)
+                mean = forecast[4]
+                quantile_05 = forecast[0]
+                quantile_95 = forecast[8]
+                lower_bound = forecast[1]
+                upper_bound = forecast[7]
             else:
                 mean = forecast
                 quantile_05 = forecast * 0.95
