@@ -36,6 +36,12 @@ class InstitutionalMemoryStore:
 
     def _init_db(self) -> None:
         """Initialize DuckDB tables for vector storage."""
+        import os
+        parent_dir = os.path.dirname(self.db_path)
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+            logger.info(f"[VECTOR_STORE] Created data directory: {parent_dir}")
+            
         conn = duckdb.connect(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS exemplars (

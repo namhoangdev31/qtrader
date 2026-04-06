@@ -35,9 +35,22 @@ class LiveConfigSchema(BaseModel):
     position_size_pct: float = Field(default=0.20, description="Max capital allocation per trade")
     min_hold_time_s: int = Field(default=5, description="Minimum duration for a trade")
     
-    # Simulation Fidelity
+    # Simulation & Baseline
     sim_latency_ms_range: tuple[float, float] = Field(default=(50.0, 300.0))
     sim_slippage_bps: float = Field(default=5.0)
+    reference_price_btc: float = Field(default=65000.0, description="Simulator baseline BTC")
+    reference_price_eth: float = Field(default=3500.0, description="Simulator baseline ETH")
+    
+    # Memory & Performance
+    max_md_points: int = Field(default=5000, description="Max market data points in memory")
+    md_prune_target: int = Field(default=1000, description="Points to retain on prune")
+    
+    # Strategy & Engine
+    ml_weight: float = Field(default=0.6, description="Weight for ML signals (0.0-1.0)")
+    traditional_weight: float = Field(default=0.4, description="Weight for technical signals (0.0-1.0)")
+    signal_interval_s: float = Field(default=1.0, description="Signal processing tick interval")
+    volatility_multiplier: float = Field(default=1.0, description="Scaling factor for signal thresholds")
+    min_history_for_alpha: int = Field(default=20, description="Min price points for ML prediction")
 
 
 class DynamicConfigManager:
@@ -61,7 +74,7 @@ class DynamicConfigManager:
         self._lock = threading.Lock()
         self._initialized = True
 
-    def get(self, key: str) -> Any:
+    def get(self, key: str, default: Any = None) -> Any:
         """Get parameter value, prioritizing AI overrides."""
         with self._lock:
             if key in self._overrides:
@@ -72,7 +85,7 @@ class DynamicConfigManager:
                 return getattr(self._config, key.lower())
             except AttributeError:
                 # Fallback for keys that might not match exact naming
-                return getattr(self._config, key, None)
+                return getattr(self._config, key, default)
 
     def set_override(self, key: str, value: Any) -> None:
         """Apply an AI or manual override."""

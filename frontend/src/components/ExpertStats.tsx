@@ -64,14 +64,14 @@ export const ExpertStats: React.FC<ExpertStatsProps> = ({ snapshot }) => {
       />
       <StatItem 
         label="Exp. Value (EV)" 
-        value={`${snapshot.adaptive.expected_value >= 0 ? '+' : ''}${snapshot.adaptive.expected_value.toFixed(4)}`} 
+        value={`${(snapshot.adaptive?.expected_value ?? 0) >= 0 ? '+' : ''}${(snapshot.adaptive?.expected_value ?? 0).toFixed(4)}`} 
         subValue="Profit per Trade"
-        color={snapshot.adaptive.expected_value >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+        color={(snapshot.adaptive?.expected_value ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}
         icon={<Shield size={18} className="text-blue-400" />}
       />
       <StatItem 
         label="Growth Rate" 
-        value={`${sessionGrowth >= 0 ? '+' : ''}${sessionGrowth.toFixed(2)}%`} 
+        value={`${(sessionGrowth || 0) >= 0 ? '+' : ''}${(sessionGrowth || 0).toFixed(2)}%`} 
         subValue="Session Performance"
         color={sessionGrowth >= 0 ? 'text-emerald-400' : 'text-rose-400'}
         icon={<TrendingUp size={18} className="text-emerald-400" />}
@@ -82,13 +82,13 @@ export const ExpertStats: React.FC<ExpertStatsProps> = ({ snapshot }) => {
 
 function StatItem({ label, value, subValue, color = 'text-white', icon }: { label: string, value: string, subValue: string, color?: string, icon?: React.ReactNode }) {
   return (
-    <div className="bg-[#161a25] p-5 border-r border-b border-[#1e222d] last:border-r-0">
-      <div className="flex items-center gap-2 mb-2">
+    <div className="bg-[#161a25] p-1 border-r border-b border-[#1e222d] last:border-r-0">
+      <div className="flex items-center gap-1 mb-0.5">
         {icon}
-        <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+        <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">{label}</span>
       </div>
-      <div className={`text-xl font-black tracking-tighter ${color}`}>{value}</div>
-      <div className="text-[10px] text-slate-600 font-medium uppercase mt-1 px-1 border-l-2 border-slate-800 ml-0.5">{subValue}</div>
+      <div className={`text-[11px] font-black tracking-tighter ${color}`}>{value}</div>
+      <div className="text-[7px] text-slate-600 font-medium uppercase mt-0.5 px-0.5 border-l border-slate-800 ml-0.5">{subValue}</div>
     </div>
   );
 }

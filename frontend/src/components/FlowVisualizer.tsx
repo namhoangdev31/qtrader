@@ -31,59 +31,59 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ lastTickTimestam
   }, [lastTickTimestamp, lastSignal]);
 
   return (
-    <div className="bg-[#161a25] border border-[#1e222d] rounded-lg p-6 flex flex-col items-center justify-between h-full min-h-[300px]">
-      <div className="w-full flex items-center justify-between mb-8">
-        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-500 flex items-center gap-2">
-          <Activity size={16} /> Real-time Execution Flow
+    <div className="bg-[#161a25] border border-[#1e222d] rounded p-2 flex flex-col items-center justify-between h-full min-h-[120px]">
+      <div className="w-full flex items-center justify-between mb-2">
+        <h3 className="text-[8px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-1.5">
+          <Activity size={12} /> Execution Flow
         </h3>
-        <div className={`px-2 py-1 rounded text-[10px] font-bold border ${
+        <div className={`px-1.5 py-0.5 rounded text-[7px] font-black border ${
           simRunning ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
         }`}>
-          {simRunning ? 'LIVESTREAMING' : 'IDLE'}
+          {simRunning ? 'LIVE' : 'IDLE'}
         </div>
       </div>
 
       <div className="flex items-center justify-center w-full relative">
         <StageItem 
-          icon={<Database size={24} />} 
-          label="Ingestion" 
+          icon={<Database size={16} />} 
+          label="Data" 
           active={activeStage >= 0} 
-          subLabel={liveTrace?.ingestion ? `$${liveTrace.ingestion.price.toFixed(2)}` : "MARKET TICK"}
+          subLabel={liveTrace?.ingestion ? `$${liveTrace.ingestion.price.toFixed(2)}` : "TICK"}
         />
         <Connector active={activeStage >= 1} />
         <StageItem 
-          icon={<Zap size={24} />} 
+          icon={<Zap size={16} />} 
           label="Alpha" 
           active={activeStage >= 1} 
-          subLabel={liveTrace?.alpha ? `RSI: ${liveTrace.alpha.indicators.rsi.toFixed(1)}` : "ATOMIC TRIO"}
+          subLabel={liveTrace?.alpha ? `RSI: ${liveTrace.alpha.indicators.rsi.toFixed(0)}` : "TRIO"}
           highlight={lastSignal?.action !== 'HOLD'}
         />
         <Connector active={activeStage >= 2} />
         <StageItem 
-          icon={<ShieldAlert size={24} />} 
+          icon={<ShieldAlert size={16} />} 
           label="Risk" 
           active={activeStage >= 2} 
-          subLabel={liveTrace?.risk ? `SL: ${liveTrace.risk.initial_stop_loss.toFixed(2)}` : "PORTFOLIO GUARD"}
+          subLabel={liveTrace?.risk ? `SL: ${liveTrace.risk.initial_stop_loss.toFixed(0)}` : "GUARD"}
           type={lastSignal?.action === 'HOLD' ? 'warning' : 'success'}
         />
         <Connector active={activeStage >= 3} />
         <StageItem 
-          icon={<ShoppingCart size={24} />} 
-          label="Execution" 
+          icon={<ShoppingCart size={16} />} 
+          label="Exec" 
           active={activeStage >= 3} 
-          subLabel={liveTrace?.execution ? `SLIP: ${liveTrace.execution.slippage_bps.toFixed(2)}bp` : "ORDER ROUTER"}
+          subLabel={liveTrace?.execution ? `S: ${liveTrace.execution.slippage_bps.toFixed(1)}` : "ROUTE"}
           highlight={lastSignal?.action === 'BUY' || lastSignal?.action === 'SELL'}
         />
       </div>
 
-      <div className="w-full mt-8 grid grid-cols-2 gap-4">
-        <div className="bg-black/20 p-3 rounded border border-[#1e222d]">
-          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Last Pipeline Pulse</p>
-          <p className="text-xs font-mono text-blue-300">{lastTickTimestamp || 'NONE'}</p>
+      <div className="w-full mt-2 grid grid-cols-2 gap-2">
+        <div className="bg-black/20 p-1.5 rounded border border-[#1e222d]">
+          <p className="text-[7px] font-black text-slate-500 uppercase">Pulse</p>
+          <p className="text-[8px] font-mono text-blue-300 truncate">{lastTickTimestamp || 'NONE'}</p>
         </div>
-        <div className="bg-black/20 p-3 rounded border border-[#1e222d]">
-          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Signal Strategy</p>
-          <p className="text-xs font-mono text-emerald-300">{lastSignal?.action || 'HOLDING'}</p>
+        <div className="bg-black/20 p-1.5 rounded border border-[#1e222d]">
+          <p className="text-[7px] font-black text-slate-500 uppercase">Signal</p>
+          <p className="text-[8px] font-mono text-emerald-300">{lastSignal?.action || 'HOLD'}</p>
         </div>
       </div>
     </div>
@@ -99,8 +99,8 @@ function StageItem({ icon, label, active, subLabel, highlight, type = 'success' 
   type?: 'success' | 'warning' | 'error' 
 }) {
   return (
-    <div className={`flex flex-col items-center gap-3 transition-all duration-500 relative ${active ? 'scale-110 opacity-100' : 'opacity-40 scale-100'}`}>
-      <div className={`p-4 rounded-xl border-2 shadow-2xl transition-all duration-300 ${
+    <div className={`flex flex-col items-center gap-1.5 transition-all duration-500 relative ${active ? 'scale-110 opacity-100' : 'opacity-40 scale-100'}`}>
+      <div className={`p-2 rounded border shadow-2xl transition-all duration-300 ${
         highlight 
           ? 'bg-blue-500 border-blue-400 text-white shadow-blue-500/50' 
           : active 
@@ -110,10 +110,10 @@ function StageItem({ icon, label, active, subLabel, highlight, type = 'success' 
         {icon}
       </div>
       <div className="text-center">
-        <div className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-white' : 'text-slate-600'}`}>
+        <div className={`text-[8px] font-black uppercase tracking-widest ${active ? 'text-white' : 'text-slate-600'}`}>
           {label}
         </div>
-        <div className={`text-[8px] font-bold uppercase mt-0.5 whitespace-nowrap ${
+        <div className={`text-[7px] font-bold uppercase mt-0.5 whitespace-nowrap ${
           active ? (type === 'success' ? 'text-emerald-400' : 'text-amber-400') : 'text-slate-700'
         }`}>
           {subLabel}

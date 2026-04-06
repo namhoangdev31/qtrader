@@ -33,6 +33,7 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "statsmodels>=0.14.6",
+    "redis>=5.0.0",
 ]
 
 [project.optional-dependencies]

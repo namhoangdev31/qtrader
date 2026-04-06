@@ -80,14 +80,14 @@ export const LogicMatrix: React.FC<LogicMatrixProps> = ({ moduleTraces = {} }) =
         return (
           <div 
             key={key} 
-            className={`bg-[#1c212d] border rounded-lg p-6 flex flex-col gap-5 shadow-xl transition-all duration-300 min-h-[350px] max-h-[750px] overflow-hidden
+            className={`bg-[#1c212d] border rounded p-1.5 flex flex-col gap-1.5 shadow-xl transition-all duration-300 min-h-[250px] max-h-[600px] overflow-hidden
               ${isAnomaly ? 'border-rose-500/50 shadow-rose-900/20 animate-pulse-slow' : 'border-[#2a2f3e] hover:border-blue-500/50'}
             `}
           >
-            <div className="flex items-center justify-between border-b border-[#2a2f3e] pb-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between border-b border-[#2a2f3e] pb-1">
+              <div className="flex items-center gap-1">
                 {getIcon(key)}
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-300">
                   {key}
                 </h4>
               </div>
@@ -108,16 +108,16 @@ export const LogicMatrix: React.FC<LogicMatrixProps> = ({ moduleTraces = {} }) =
               </div>
             </div>
             
-              <div className="grid grid-cols-1 gap-3 mt-1 border-t border-slate-700/30 pt-4 overflow-y-auto min-h-[250px] max-h-[650px]">
+              <div className="grid grid-cols-1 gap-1.5 mt-0.5 border-t border-slate-700/30 pt-1.5 overflow-y-auto min-h-[150px] max-h-[500px]">
                 {Object.entries(trace)
                   .filter(([k]) => !['status', 'name', 'reason', 'reasoning', 'latency_ms', 'budget_ms', 'is_anomaly'].includes(k))
                   .length > 0 ? (
                     Object.entries(trace)
                       .filter(([k]) => !['status', 'name', 'reason', 'reasoning', 'latency_ms', 'budget_ms', 'is_anomaly'].includes(k))
                       .map(([k, v]) => (
-                        <div key={k} className="flex flex-col gap-2 p-3 rounded bg-black/40 border border-slate-800/50">
-                          <span className="text-[11px] text-slate-500 font-black uppercase tracking-[0.2em]">{k.replace('_', ' ')}</span>
-                          <div className="text-blue-400 font-mono text-sm break-all leading-relaxed font-bold">
+                        <div key={k} className="flex flex-col gap-0.5 p-1 rounded bg-black/40 border border-slate-800/50">
+                          <span className="text-[8px] text-slate-500 font-black uppercase tracking-[0.2em]">{k.replace('_', ' ')}</span>
+                          <div className="text-blue-400 font-mono text-[9px] break-all leading-tight font-bold">
                             {renderTraceValue(v)}
                           </div>
                         </div>

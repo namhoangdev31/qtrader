@@ -28,6 +28,7 @@ import numpy as np
 from loguru import logger
 
 from qtrader.analytics.pnl_attribution import PnLAttributionEngine
+from qtrader.core.config import settings
 from qtrader.core.event_bus import EventBus
 from qtrader.core.events import (
     EventType,
@@ -60,6 +61,8 @@ from qtrader.ml.embedding_worker import embedding_manager
 # to allow AI-driven Dynamic Control.
 
 
+# Constants migrated to config_manager (Dynamic Control)
+
 @dataclass
 class TradingSystemConfig:
     """Complete configuration for the Trading System."""
@@ -79,8 +82,9 @@ class TradingSystemConfig:
     chronos_model_id: str = "amazon/chronos-2"
     tabpfn_model_id: str = "Prior-Labs/tabpfn_2_5"
     phi2_model_id: str = "microsoft/phi-2"
-    ml_weight: float = 0.6
-    traditional_weight: float = 0.4
+    # ML weights (Migrated to dynamic control)
+    ml_weight: float | None = None
+    traditional_weight: float | None = None
 
     # Reconciliation
     recon_interval_s: float = 60.0
@@ -88,8 +92,8 @@ class TradingSystemConfig:
     # Heartbeat
     heartbeat_interval_s: float = 10.0
 
-    # Signal processing interval (seconds between signal checks)
-    signal_interval_s: float = 1.0
+    # Signal processing interval
+    signal_interval_s: float | None = None
 
     # Alerting
     slack_webhook_url: str | None = None
@@ -118,7 +122,10 @@ class TradingSystem:
     ) -> None:
         self.config = config or TradingSystemConfig()
         self.state_store = StateStore()
-        self.event_bus = EventBus()
+        
+        # Redis URL for distributed EventBus synchronization
+        redis_url = f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}" if settings.redis_host else None
+        self.event_bus = EventBus(redis_url=redis_url)
 
         # === 1. ML Alpha Engine (Atomic Trio) ===
         if ml_pipeline is not None:
@@ -329,7 +336,7 @@ class TradingSystem:
                     f"Market context for {symbol} at {datetime.now().isoformat()}. "
                     f"Current price is {price:.2f}. "
                     f"Volatility is {config_manager.get('VOLATILITY_MULTIPLIER', 1.0):.2f}x. "
-                    f"System is searching for {self.config.simulate_mode} regime templates."
+                    f"System is searching for {self.config.simulate} regime templates."
                 )
                 
                 # 3. Enqueue for Async Vectorization
@@ -408,8 +415,8 @@ class TradingSystem:
                 await asyncio.gather(*tasks)
 
                 # Rate limiting: wait between signal checks to reduce whipsaw
-                if self.config.signal_interval_s > 0:
-                    await asyncio.sleep(self.config.signal_interval_s)
+                interval = config_manager.get("SIGNAL_INTERVAL_S", 1.0)
+                await asyncio.sleep(interval)
 
                 # 2. Periodic Reconciliation
                 await self._periodic_reconciliation()
@@ -497,7 +504,7 @@ class TradingSystem:
             return None
 
         current_hour = datetime.utcnow().hour
-        if current_hour in LOW_LIQUIDITY_HOURS:
+        if current_hour in config_manager.get("LOW_LIQUIDITY_HOURS", []):
             logger.debug(f"[TIME_FILTER] {symbol} skipped: low liquidity hour {current_hour} UTC")
             return None
 
@@ -519,13 +526,14 @@ class TradingSystem:
             spread_pct = (ask - bid) / current_price if current_price > 0 else 0
             
             volume = market_data.get("volume", 0)
-            if volume < MIN_VOLUME_THRESHOLD:
+            min_vol = config_manager.get("MIN_VOLUME_THRESHOLD", 0.0)
+            if volume < min_vol:
                 logger.info(
-                    f"[VOLUME_FILTER] {symbol} skipped: volume {volume:.4f} < {MIN_VOLUME_THRESHOLD}"
+                    f"[VOLUME_FILTER] {symbol} skipped: volume {volume:.4f} < {min_vol}"
                 )
                 return None
 
-            if abs(current_qty) > EPSILON_QTY:
+            if abs(current_qty) > config_manager.get("EPSILON_QTY", 0.0001):
                 # 1. Hard Stops (Always active)
                 exit_signal = self._check_stop_loss_take_profit(symbol, current_qty, current_price)
                 if exit_signal:
@@ -536,17 +544,18 @@ class TradingSystem:
                     self._last_exit_at[symbol] = time.time()
                     return None
 
-            # 2. Dynamic Exits (ML-based) - Signal Hysteresis
+                # 2. Dynamic Exits (ML-based) - Signal Hysteresis
                 hold_time = time.time() - self._position_opened_at.get(symbol, 0)
-                if hold_time < MIN_HOLD_TIME_S:
+                if hold_time < config_manager.get("MIN_HOLD_TIME_S", 60.0):
                     # Skip dynamic checks if trade is too young
                     return None
 
                 # Update Confidence EMA for exit
                 raw_confidence = float(ml_result.get("confidence", 0.0))
                 last_ema = self._confidence_ema.get(symbol, raw_confidence)
-                self._confidence_ema[symbol] = (EMA_ALPHA * raw_confidence) + (
-                    (1 - EMA_ALPHA) * last_ema
+                ema_alpha = config_manager.get("EMA_ALPHA", 0.3)
+                self._confidence_ema[symbol] = (ema_alpha * raw_confidence) + (
+                    (1 - ema_alpha) * last_ema
                 )
 
                 # Check for ML reversal signal using EMA smoothed confidence
@@ -570,15 +579,16 @@ class TradingSystem:
             # 3. New Entry Pipeline
             # Position Cooldown check
             since_last_exit = time.time() - self._last_exit_at.get(symbol, 0)
-            if since_last_exit < POSITION_COOLDOWN_S:
+            if since_last_exit < config_manager.get("POSITION_COOLDOWN_S", 300.0):
                 logger.debug(f"[COOLDOWN] {symbol} (Exit {since_last_exit:.1f}s ago) - Waiting for cooldown")
                 return None
 
             # Update Confidence EMA for entry
             raw_confidence = float(ml_result.get("confidence", 0.0))
             last_ema = self._confidence_ema.get(symbol, raw_confidence)
-            self._confidence_ema[symbol] = (EMA_ALPHA * raw_confidence) + (
-                (1 - EMA_ALPHA) * last_ema
+            ema_alpha = config_manager.get("EMA_ALPHA", 0.3)
+            self._confidence_ema[symbol] = (ema_alpha * raw_confidence) + (
+                (1 - ema_alpha) * last_ema
             )
             
             # Use smoothed confidence for entry signal
@@ -592,9 +602,10 @@ class TradingSystem:
                 predicted_move_pct = abs((forecast_mean[-1] - forecast_mean[0]) / forecast_mean[0])
 
             # Spread Gateway: Entry only if Alpha > 2.5 * Spread
-            if predicted_move_pct < (spread_pct * MIN_REWARD_TO_SPREAD_RATIO):
+            min_reward_ratio = config_manager.get("MIN_REWARD_TO_SPREAD_RATIO", 2.5)
+            if predicted_move_pct < (spread_pct * min_reward_ratio):
                 logger.info(
-                    f"[SPREAD_FILTER] {symbol} rejected: move {predicted_move_pct:.4%} < {MIN_REWARD_TO_SPREAD_RATIO}x spread ({spread_pct:.4%})"
+                    f"[SPREAD_FILTER] {symbol} rejected: move {predicted_move_pct:.4%} < {min_reward_ratio}x spread ({spread_pct:.4%})"
                 )
                 return None
 
@@ -613,6 +624,7 @@ class TradingSystem:
             direction = signal["side"]
 
             # Require consecutive signals before entry
+            min_consecutive = config_manager.get("MIN_CONSECUTIVE_SIGNALS", 2)
             if symbol in self._last_signal_direction:
                 if direction == self._last_signal_direction[symbol]:
                     self._signal_streak[symbol] = self._signal_streak.get(symbol, 0) + 1
@@ -621,9 +633,9 @@ class TradingSystem:
                     self._last_signal_direction[symbol] = direction
 
                 # Require MIN_CONSECUTIVE_SIGNALS before acting
-                if self._signal_streak.get(symbol, 0) < MIN_CONSECUTIVE_SIGNALS:
+                if self._signal_streak.get(symbol, 0) < min_consecutive:
                     logger.info(
-                        f"[STREAK_FILTER] {symbol} waiting: {self._signal_streak.get(symbol, 0)}/{MIN_CONSECUTIVE_SIGNALS}"
+                        f"[STREAK_FILTER] {symbol} waiting: {self._signal_streak.get(symbol, 0)}/{min_consecutive}"
                     )
                     return None
 
@@ -636,7 +648,7 @@ class TradingSystem:
                 self._last_signal_direction[symbol] = direction
                 self._signal_streak[symbol] = 0
                 logger.debug(
-                    f"[STREAK_INIT] {symbol} waiting for {MIN_CONSECUTIVE_SIGNALS} consecutive signals"
+                    f"[STREAK_INIT] {symbol} waiting for {min_consecutive} consecutive signals"
                 )
                 return None
 
@@ -698,7 +710,7 @@ class TradingSystem:
         from qtrader.core.latency_enforcer import latency_enforcer
         
         latencies = latency_enforcer.get_current_measurements()
-        recon_audit = self.reconciliation_engine.get_last_audit() if hasattr(self, "reconciliation_engine") else {}
+        recon_audit = self.recon.get_last_audit() if hasattr(self, "recon") else {}
 
         return {
             "AlphaEngine": {
@@ -762,7 +774,9 @@ class TradingSystem:
             bid = float(quote.get("bid", quote["price"]))
             ask = float(quote.get("ask", quote["price"]))
         else:
-            base_price = MID_PRICE_BTC if "BTC" in symbol else 3000.0 if "ETH" in symbol else 100.0
+            base_btc = config_manager.get("REFERENCE_PRICE_BTC", 65000.0)
+            base_eth = config_manager.get("REFERENCE_PRICE_ETH", 3500.0)
+            base_price = base_btc if "BTC" in symbol else base_eth if "ETH" in symbol else 100.0
             price = base_price
             bid = base_price * 0.9998
             ask = base_price * 1.0002
@@ -795,8 +809,12 @@ class TradingSystem:
             "low": low,
             "close": price
         })
-        if len(self._market_data[symbol]) > MAX_MD_POINTS:
-            self._market_data[symbol] = self._market_data[symbol][-MD_PRUNE_TARGET:]
+        
+        max_points = config_manager.get("MAX_MD_POINTS", 5000)
+        prune_target = config_manager.get("MD_PRUNE_TARGET", 1000)
+        
+        if len(self._market_data[symbol]) > max_points:
+            self._market_data[symbol] = self._market_data[symbol][-prune_target:]
 
         # Simple volume proxy
         volume = 0.0
@@ -821,7 +839,8 @@ class TradingSystem:
     ) -> dict[str, Any] | None:
         """Run ML prediction pipeline."""
         historical = market_data.get("historical_prices", [])
-        if len(historical) < MIN_HISTORY_FOR_ALPHA:
+        min_hist = config_manager.get("MIN_HISTORY_FOR_ALPHA", 20)
+        if len(historical) < min_hist:
             return None
 
         result = await self.ml_pipeline.run(

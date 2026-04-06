@@ -6,8 +6,8 @@ set -e
 /bin/ollama serve &
 
 # Wait for Ollama to be ready
-echo "[OLLAMA] Waiting for server startup..."
-while ! curl -s http://localhost:11434/api/tags > /dev/null; do
+echo "[OLLAMA] Waiting for server startup (using 'ollama list' check)..."
+while ! ollama list > /dev/null 2>&1; do
     sleep 2
 done
 

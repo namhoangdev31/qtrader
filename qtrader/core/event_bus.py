@@ -9,6 +9,11 @@ from qtrader.core.backpressure_controller import BackpressureController
 from qtrader.core.events import BaseEvent, EventType
 from qtrader.core.partition_manager import PartitionManager
 
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -31,6 +36,7 @@ class EventBus:
         *,
         handler_timeout: float = 5.0,
         max_retries: int = 3,
+        redis_url: str | None = None,
     ) -> None:
         """
         Initialize the distributed event bus.
@@ -40,6 +46,7 @@ class EventBus:
             event_store: Optional persistent storage for incoming events.
             handler_timeout: Timeout in seconds for each handler execution.
             max_retries: Number of redilvery attempts for failed handlers.
+            redis_url: Optional Redis URL for cross-container event bridging.
         """
         self._subscribers: dict[EventType, list[Callable]] = {et: [] for et in EventType}
         self._partition_manager = PartitionManager(num_partitions=num_partitions)
@@ -54,6 +61,12 @@ class EventBus:
         self._worker_tasks: list[asyncio.Task] = []
         self._handler_timeout = handler_timeout
         self._max_retries = max_retries
+
+        # Redis Bridging
+        self._redis_url = redis_url
+        self._redis: redis.Redis | None = None
+        self._redis_listener_task: asyncio.Task | None = None
+        self._redis_channel = "qtrader:events"
 
         # Metrics
         self._events_processed_count = 0
@@ -71,6 +84,15 @@ class EventBus:
             task = asyncio.create_task(self._partition_worker(i))
             self._worker_tasks.append(task)
 
+        # 2. Redis Bridging (Distributed sync)
+        if redis and self._redis_url:
+            try:
+                self._redis = redis.from_url(self._redis_url, decode_responses=True)
+                self._redis_listener_task = asyncio.create_task(self._redis_listener())
+                logger.info(f"[EVENT_BUS] Redis bridge active on {self._redis_channel}")
+            except Exception as e:
+                logger.error(f"[EVENT_BUS] Failed to start Redis bridge: {e}")
+
         logger.info(f"EventBus started with {len(self._worker_tasks)} partitions")
 
     async def stop(self) -> None:
@@ -86,6 +108,15 @@ class EventBus:
         if self._worker_tasks:
             await asyncio.gather(*self._worker_tasks, return_exceptions=True)
         self._worker_tasks = []
+
+        if self._redis_listener_task:
+            self._redis_listener_task.cancel()
+            self._redis_listener_task = None
+
+        if self._redis:
+            await self._redis.close()
+            self._redis = None
+
         logger.info("EventBus stopped")
 
     async def publish(self, event: BaseEvent) -> bool:
@@ -121,6 +152,13 @@ class EventBus:
         # 3. Route to partition
         try:
             await self._queues[p_index].put(event)
+            
+            # 4. Global Broadcast (Bridge to other containers)
+            if self._redis and not event.is_remote:
+                # We use model_dump_json to serialize the Pydantic model
+                # The receiver will parse it back into a BaseEvent
+                asyncio.create_task(self._redis.publish(self._redis_channel, event.model_dump_json()))
+                
             logger.debug(f"[EVENT_BUS] Published {event.event_type} to partition {p_index}")
             return True
         except asyncio.QueueFull:
@@ -162,6 +200,34 @@ class EventBus:
                 break
             except Exception as e:
                 logger.error(f"Partition worker {index} encountered error: {e}")
+
+    async def _redis_listener(self) -> None:
+        """Background task to listen for events from other containers."""
+        if not self._redis:
+            return
+
+        pubsub = self._redis.pubsub()
+        await pubsub.subscribe(self._redis_channel)
+
+        while self._running:
+            try:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message and message["type"] == "message":
+                    data_json = message["data"]
+                    # Re-hydrate the event
+                    from qtrader.core.events import BaseEvent
+                    event = BaseEvent.model_validate_json(data_json)
+                    
+                    # Mark as remote to prevent circular loops
+                    event = event.model_copy(update={"is_remote": True})
+                    
+                    # Publish locally
+                    await self.publish(event)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[EVENT_BUS] Redis bridge listener error: {e}")
+                await asyncio.sleep(2)
 
     async def _safe_deliver(self, handler: Callable, event: BaseEvent) -> None:
         """Execute a single handler with timeout and retry logic."""

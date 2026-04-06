@@ -167,10 +167,12 @@ async def start_session(
     writer = TradeDBWriter()
     active = await writer.get_active_session()
     if active:
+        # If a session is already active (e.g. started by Orchestrator), join it
         return {
-            "status": "error",
-            "message": "A session is already active",
+            "status": "started",
+            "message": "Connected to active session",
             "session_id": active["session_id"],
+            "mode": active.get("mode", "UNKNOWN")
         }
 
     # ACTIVATE the entire trading system manually

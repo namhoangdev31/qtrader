@@ -67,12 +67,15 @@ class OllamaDecisionAdapter:
         tabpfn_risk: dict[str, Any] | None = None,
         market_context: dict[str, Any] | None = None,
         system_state: dict[str, Any] | None = None,
+        rag_context: list[dict[str, Any]] | None = None,
     ) -> TradingDecision:
         """Make a decision using Ollama LLM."""
         start_time = time.time()
         self._decision_count += 1
 
-        prompt = self._build_prompt(chronos_forecast, tabpfn_risk, market_context, system_state)
+        prompt = self._build_prompt(
+            chronos_forecast, tabpfn_risk, market_context, system_state, rag_context
+        )
 
         try:
             response_text = await self._generate(prompt)

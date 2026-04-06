@@ -209,6 +209,13 @@ class LatencyEnforcer:
             } for m in self._measurements
         }
 
+    def get_pipeline_data(self, trace_id: str) -> PipelineLatencyReport | None:
+        """Retrieve the most recent report for a specific trace ID."""
+        for report in reversed(self._reports):
+            if report.trace_id == trace_id:
+                return report
+        return None
+
 
 # Global singleton
 latency_enforcer = LatencyEnforcer()

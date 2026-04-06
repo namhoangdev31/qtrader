@@ -176,8 +176,23 @@ export function useTradingSystem() {
 
   // Cleanup on unmount
   useEffect(() => {
+    const syncActiveSession = async () => {
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/v1/sessions/active`);
+        const data = await res.json();
+        if (data.active && data.session) {
+          setActiveSession(data.session);
+          connectAll();
+          addLog(`Auto-synchronized with Active Session: ${data.session.session_id}`, 'success');
+        }
+      } catch (e) {
+        // Silent fail on background sync
+      }
+    };
+
+    syncActiveSession();
     return () => disconnectAll();
-  }, [disconnectAll]);
+  }, [connectAll, disconnectAll, getBaseUrl, addLog]);
 
   return {
     portfolio,

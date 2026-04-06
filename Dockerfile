@@ -107,6 +107,9 @@ COPY --from=core_builder /usr/local/bin /usr/local/bin
 COPY qtrader/ /app/qtrader/
 COPY live_trader.py /app/
 
+# Ensure data directory exists for DuckDB and persistent storage
+RUN mkdir -p /app/data
+
 EXPOSE 8000
 CMD ["python", "live_trader.py"]
 
@@ -134,8 +137,8 @@ COPY --from=ml_builder /usr/local/bin /usr/local/bin
 COPY qtrader/ /app/qtrader/
 COPY live_trader.py /app/
 
-# Create cache directory for models
-RUN mkdir -p /app/.cache/huggingface
+# Create cache directory for models and persistent data storage
+RUN mkdir -p /app/.cache/huggingface /app/data
 
 EXPOSE 8001
 CMD ["python", "-m", "qtrader.ml.atomic_trio"]

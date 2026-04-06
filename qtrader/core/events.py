@@ -688,6 +688,9 @@ class BaseEvent(BaseModel):
     offset: int | None = Field(
         default=None, description="Monotonically increasing sequence ID per partition"
     )
+    is_remote: bool = Field(
+        default=False, description="Flag for distributed event bus to prevent loops"
+    )
 
     @property
     def type(self) -> EventType:
