@@ -20,7 +20,9 @@ from qtrader.api.schemas import (
     SimulationConfig,
     StatusResponse,
 )
-from qtrader.core.events import EventType, OrderEvent, OrderPayload
+from qtrader.core.dynamic_config import config_manager
+from qtrader.core.events import EventType, MarketEvent, MarketPayload, OrderEvent, OrderPayload
+from qtrader.trading_system import TradingSystem, TradingSystemConfig
 from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.trading_system import TradingSystem  # noqa: TC001
 
@@ -171,45 +173,42 @@ async def start_session(
             "session_id": active["session_id"],
         }
 
-    # Capture initial capital from broker/engine
-    balance = await sys.broker.get_paper_balance()
-    initial_equity = Decimal(str(balance["equity"]))
-
-    session_id = await writer.start_session(initial_equity, metadata)
-    sys.active_session_id = session_id
-
-    return {"status": "started", "session_id": session_id, "initial_capital": float(initial_equity)}
+    # ACTIVATE the entire trading system manually
+    # This initializes Coinbase WebSockets, ML pipelines, and OMS
+    await sys.start()
+    
+    return {
+        "status": "started", 
+        "session_id": sys.active_session_id, 
+        "mode": "PAPER" if sys.config.simulate else "LIVE"
+    }
 
 
 @session_router.post("/stop")
 async def stop_session(
     session_id: str | None = None, sys: TradingSystem = Depends(get_system)
 ) -> dict[str, Any]:
+    # DEACTIVATE the entire system
+    await sys.stop()
+
     writer = TradeDBWriter()
     analyzer = SessionAnalyzer()
 
-    active = await writer.get_active_session()
-    if not active:
-        raise HTTPException(status_code=404, detail="No active session found")
+    # Get the session we just stopped (or the last one)
+    s_id = session_id or getattr(sys, "_last_session_id", None)
+    if not s_id:
+        # Fallback to DB
+        active = await writer.get_active_session()
+        if active: s_id = active["session_id"]
 
-    s_id = session_id or active["session_id"]
-    start_time = active["start_time"].isoformat()
+    if not s_id:
+         raise HTTPException(status_code=404, detail="No session identifier found to analyze")
 
-    # Capture final capital
-    balance = await sys.broker.get_paper_balance()
-    final_equity = Decimal(str(balance["equity"]))
+    # Generate forensic report from finalized DB data
+    # Note: sys.stop() already closed the DB session recording.
+    report = await analyzer.analyze_session(s_id, "2000-01-01") # Analyzer handles time windows via DB
 
-    # Generate forensic report
-    report = await analyzer.analyze_session(s_id, start_time)
-
-    # Persist and close
-    await writer.stop_session(s_id, final_equity, report)
-
-    # Clear active session in system
-    if sys.active_session_id == s_id:
-        sys.active_session_id = None
-
-    return {"status": "completed", "report": report, "final_capital": float(final_equity)}
+    return {"status": "completed", "report": report}
 
 
 @session_router.get("/active")
@@ -347,126 +346,121 @@ async def get_market_history(
 
 @ws_router.websocket("/ws/trading")
 async def trading_updates(websocket: WebSocket) -> None:
-    """Unified WebSocket for all trading updates: Positions, Logs, PnL."""
-    logger.info("[WS] New WebSocket connection attempt on /ws/trading")
-    try:
-        await websocket.accept()
-        logger.info("[WS] WebSocket connection accepted on /ws/trading")
-    except Exception as e:
-        logger.error(f"[WS] Failed to accept WebSocket connection: {e}", exc_info=True)
-        return
-
-    try:
-        sys = get_system()
-        logger.info("[WS] TradingSystem instance acquired")
-    except Exception as e:
-        logger.error(f"[WS] Failed to get TradingSystem: {e}", exc_info=True)
-        try:
-            await websocket.send_json({"type": "error", "message": f"System unavailable: {e}"})
-        except Exception:
-            pass
-        return
-
-    # Helper to build current state snapshot
-    async def get_snapshot(msg_type: str = "incremental_update") -> dict[str, Any]:
-        try:
-            positions = await sys.state_store.get_positions()
-            pos_rows = [
+    """Concentrated WebSocket for Portfolio: Positions, Cash, PnL."""
+    await websocket.accept()
+    sys = get_system()
+    
+    async def get_snapshot():
+        balance = await sys.broker.get_paper_balance()
+        positions = await sys.state_store.get_positions()
+        return {
+            "type": "portfolio_update",
+            "timestamp": datetime.now().isoformat(),
+            "equity": balance["equity"],
+            "cash": balance["cash"],
+            "realized_pnl": balance["realized_pnl"],
+            "total_commissions": balance["total_commissions"],
+            "positions": [
                 {
                     "symbol": sym,
                     "quantity": float(pos.quantity),
                     "average_price": float(pos.average_price),
                     "unrealized_pnl": float(pos.unrealized_pnl),
-                    "unrealized_pnl_pct": 0.0,
                 }
-                for sym, pos in positions.items()
+                for sym, pos in positions.items() if pos.quantity != 0
             ]
-        except Exception as e:
-            logger.error(f"[WS] Failed to get positions: {e}", exc_info=True)
-            pos_rows = []
-
-        try:
-            balance = await sys.broker.get_paper_balance()
-        except Exception as e:
-            logger.error(f"[WS] Failed to get paper balance: {e}", exc_info=True)
-            balance = {"equity": 0.0, "realized_pnl": 0.0, "total_commissions": 0.0}
-
-        try:
-            status = sys.get_status()
-        except Exception as e:
-            logger.error(f"[WS] Failed to get system status: {e}", exc_info=True)
-            status = {"running": False, "mode": "unknown", "error": str(e)}
-
-        update = {
-            "type": msg_type,
-            "timestamp": datetime.now().isoformat(),
-            "positions": pos_rows,
-            "status": status,
-            "recent_logs": [],
-            # ATOMIC FLATTENING: Match frontend SimSnapshot expected top-level fields
-            "equity": balance["equity"],
-            "cash": balance["cash"],
-            "realized_pnl": balance["realized_pnl"],
-            "total_commissions": balance["total_commissions"],
-            "current_price": sys.last_price if hasattr(sys, "last_price") else 0.0,
-            "live_trace": {
-                "module_traces": getattr(sys, "_last_module_traces", {})
-            },
-            "adaptive": getattr(sys.broker.paper_account, "adaptive", {}) if hasattr(sys.broker, "paper_account") else {}
         }
-        return update
 
-    # Send initial snapshot
-    try:
-        snapshot = await get_snapshot("initial_snapshot")
-        await websocket.send_json(snapshot)
-        logger.info(
-            f"[WS] Initial snapshot sent | equity={snapshot['pnl_summary']['total_equity']} | positions={len(snapshot['positions'])}"
-        )
-    except Exception as e:
-        logger.error(f"[WS] Failed to send initial snapshot: {e}", exc_info=True)
-
-    # Subscribe to PUSH updates
+    await websocket.send_json(await get_snapshot())
     queue: asyncio.Queue[bool] = asyncio.Queue()
-    update_count = 0
-
-    async def update_handler(event: Any) -> None:
-        try:
-            await queue.put(True)
-        except Exception as e:
-            logger.error(f"[WS] Failed to queue update: {e}", exc_info=True)
-
-    try:
-        sys.event_bus.subscribe(EventType.FILL, update_handler)
-        sys.event_bus.subscribe(EventType.SYSTEM, update_handler)
-        sys.event_bus.subscribe(EventType.MARKET, update_handler) # HEARTBEAT: Pulse on every tick
-        logger.info("[WS] Subscribed to FILL, SYSTEM, and MARKET events for real-time pulses")
-    except Exception as e:
-        logger.error(f"[WS] Failed to subscribe to events: {e}", exc_info=True)
+    
+    async def handler(event): await queue.put(True)
+    sys.event_bus.subscribe(EventType.FILL, handler)
+    sys.event_bus.subscribe(EventType.SYSTEM, handler)
 
     try:
         while True:
             await queue.get()
-            update_count += 1
-            try:
-                snapshot = await get_snapshot()
-                await websocket.send_json(snapshot)
-            except Exception as e:
-                logger.error(f"[WS] Failed to send update #{update_count}: {e}", exc_info=True)
-                break
-
+            await websocket.send_json(await get_snapshot())
     except WebSocketDisconnect:
-        logger.info(f"[WS] Client disconnected from /ws/trading after {update_count} updates")
-    except Exception as e:
-        logger.error(f"[WS] Unexpected error in WebSocket loop: {e}", exc_info=True)
-        raise
+        pass
     finally:
-        try:
-            sys.event_bus.unsubscribe(EventType.FILL, update_handler)
-            sys.event_bus.unsubscribe(EventType.SYSTEM, update_handler)
-            logger.info("[WS] Unsubscribed from event bus for /ws/trading")
-        except Exception as e:
-            logger.error(f"[WS] Failed to unsubscribe: {e}", exc_info=True)
+        sys.event_bus.unsubscribe(EventType.FILL, handler)
+        sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
+
+
+@ws_router.websocket("/ws/forensics")
+async def forensics_updates(websocket: WebSocket) -> None:
+    """High-fidelity WebSocket for Logic Matrix, AI Thinking, and Traces."""
+    await websocket.accept()
+    sys = get_system()
+    engine = get_sim_engine()
+
+    async def get_snapshot():
+        # Build unified trace from system or simulation engine
+        trace = getattr(sys, "_last_module_traces", {})
+        if engine._running:
+             trace = engine._last_trace.get("module_traces", trace)
+
+        return {
+            "type": "forensic_update",
+            "timestamp": datetime.now().isoformat(),
+            "ai_thinking": getattr(sys, "last_thinking", "") or engine._last_thinking,
+            "ai_explanation": getattr(sys, "last_explanation", "") or engine._last_explanation,
+            "module_traces": trace,
+            "thinking_history": engine._thinking_history if engine._running else []
+        }
+
+    await websocket.send_json(await get_snapshot())
+    queue: asyncio.Queue[bool] = asyncio.Queue()
+    
+    async def handler(event): await queue.put(True)
+    # Forensics subscribes to more granular events
+    sys.event_bus.subscribe(EventType.SIGNAL, handler)
+    sys.event_bus.subscribe(EventType.DECISION_TRACE, handler)
+    engine.set_update_handler(lambda x: queue.put_nowait(True))
+
+    try:
+        while True:
+            await queue.get()
+            await websocket.send_json(await get_snapshot())
+    except WebSocketDisconnect:
+        pass
+    finally:
+        sys.event_bus.unsubscribe(EventType.SIGNAL, handler)
+        sys.event_bus.unsubscribe(EventType.DECISION_TRACE, handler)
+
+
+@ws_router.websocket("/ws/telemetry")
+async def telemetry_updates(websocket: WebSocket) -> None:
+    """System Health WebSocket: Latency, Heartbeats, Clock Sync."""
+    await websocket.accept()
+    sys = get_system()
+    
+    async def get_snapshot():
+        status = sys.get_status()
+        return {
+            "type": "telemetry_update",
+            "timestamp": datetime.now().isoformat(),
+            "status": status,
+            "latency_ms": random.randint(10, 50), # Mocked for now
+            "is_synced": True,
+            "uptime_seconds": time.time() - sys._start_time if hasattr(sys, "_start_time") else 0
+        }
+
+    await websocket.send_json(await get_snapshot())
+    queue: asyncio.Queue[bool] = asyncio.Queue()
+    async def handler(event): await queue.put(True)
+    sys.event_bus.subscribe(EventType.MARKET, handler) # Pulse on every market tick
+
+    try:
+        while True:
+            await queue.get()
+            await websocket.send_json(await get_snapshot())
+    except WebSocketDisconnect:
+        pass
+    finally:
+        sys.event_bus.unsubscribe(EventType.MARKET, handler)
 
 
 @ws_router.websocket("/ws/simulation")

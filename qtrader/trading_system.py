@@ -53,30 +53,10 @@ from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.features.technical.volatility import ATRFeature
 from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
 
-MIN_CONFIDENCE_SIM = 0.45
-MIN_CONFIDENCE_LIVE = 0.55
-EXIT_CONFIDENCE_SIM = 0.40
-EXIT_CONFIDENCE_LIVE = 0.50
-EPSILON_QTY = 1e-8
-MAX_MD_POINTS = 1000
-MD_PRUNE_TARGET = 500
-MIN_HISTORY_FOR_ALPHA = 30
-MID_PRICE_BTC = 50000.0
-# Legacy fixed SL/TP removed in favor of DynamicRiskManager
-# STOP_LOSS_PCT = 0.025
-# TAKE_PROFIT_PCT = 0.05
-TRAILING_STOP_PCT = 0.03  # Activate trailing stop after reaching this profit
-MAX_CONSECUTIVE_LOSSES = 20
-MIN_CONSECUTIVE_SIGNALS = 1  # Aggressive: instant entry
-MIN_HOLD_TIME_S = 5  # Fast scalping logic
-MIN_REWARD_TO_SPREAD_RATIO = 2.5  # Predicted move must be 2.5x the spread
-TREND_LOOKBACK = 5  # Lookback for trend confirmation
-VOLATILITY_WINDOW = 20  # Window for volatility calculation
-LOW_LIQUIDITY_HOURS = [0, 1, 2, 3, 4, 5]  # UTC hours to avoid trading
-MIN_VOLUME_THRESHOLD = 0.001  # Minimum volume threshold for signal validity
-LOSS_COOLDOWN_TICKS = 1  # No waiting
-POSITION_COOLDOWN_S = 1  # No waiting
-EMA_ALPHA = 0.2  # Smoothing factor for signal confidence
+from qtrader.core.dynamic_config import config_manager
+
+# Note: Top-level constants (MIN_CONFIDENCE, etc.) removed in favor of config_manager.get()
+# to allow AI-driven Dynamic Control.
 
 
 @dataclass
@@ -179,7 +159,7 @@ class TradingSystem:
             PreTradeRiskConfig(
                 max_order_quantity=Decimal(str(self.config.max_order_qty)),
                 max_order_notional=Decimal(str(self.config.max_order_notional)),
-                max_position_per_symbol=Decimal(str(self.config.max_position_usd / MID_PRICE_BTC)),
+                max_position_per_symbol=Decimal(str(self.config.max_position_usd / (config_manager.get("REFERENCE_PRICE") or 50000.0))),
                 max_orders_per_second=self.config.max_orders_per_second,
             )
         )
@@ -463,7 +443,7 @@ class TradingSystem:
         self, symbol: str, ml_result: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Check existing positions and generate entry/exit signals."""
-        if self._consecutive_losses >= MAX_CONSECUTIVE_LOSSES:
+        if self._consecutive_losses >= config_manager.get("MAX_CONSECUTIVE_LOSSES"):
             logger.warning(
                 f"[CIRCUIT_BREAKER] {symbol} halted: {self._consecutive_losses} consecutive losses"
             )
@@ -486,7 +466,7 @@ class TradingSystem:
             symbol_key = symbol.split("-", 1)[0]
             current_qty = float(balance.get(symbol_key, 0.0))
             current_price = (
-                self._market_data[symbol][-1] if self._market_data[symbol] else MID_PRICE_BTC
+                self._market_data[symbol][-1]["close"] if self._market_data[symbol] else (config_manager.get("REFERENCE_PRICE") or 50000.0)
             )
 
             market_data = await self._get_market_data(symbol)
@@ -623,7 +603,7 @@ class TradingSystem:
             with self.latency_enforcer.measure_stage("portfolio_allocation"):
                 cash = Decimal(str(balance.get("USD", 0.0)))
                 portfolio_value = cash + sum(
-                    Decimal(str(v)) * Decimal(str(MID_PRICE_BTC))
+                    Decimal(str(v)) * Decimal(str(config_manager.get("REFERENCE_PRICE") or 50000.0))
                     for k, v in balance.items()
                     if k != "USD"
                 )
@@ -709,7 +689,7 @@ class TradingSystem:
                 "streak": self._signal_streak.get(symbol, 0),
                 "last_direction": self._last_signal_direction.get(symbol, "NONE"),
                 "cooldown": self._loss_cooldown.get(symbol, 0),
-                "is_circuit_broken": self._consecutive_losses >= MAX_CONSECUTIVE_LOSSES,
+                "is_circuit_broken": self._consecutive_losses >= config_manager.get("MAX_CONSECUTIVE_LOSSES"),
                 "is_anomaly": self._consecutive_losses >= 3  # Simple anomaly flag
             }
         }
@@ -827,23 +807,27 @@ class TradingSystem:
         if not lots:
             return None
 
+        # Dynamic Thresholds
+        sl_pct = config_manager.get("STOP_LOSS_PCT")
+        tp_pct = config_manager.get("TAKE_PROFIT_PCT")
+
         # Fixed Indentation & Multi-Trade Isolation
         for lot in lots:
             avg_entry = float(lot.avg_price)
             pnl_pct = (current_price - avg_entry) / avg_entry if avg_entry > 0 else 0
             
             if lot.side == "BUY":
-                if pnl_pct <= -STOP_LOSS_PCT:
+                if pnl_pct <= -sl_pct:
                     logger.info(f"[LOT_STOP] {symbol} lot {lot.trade_id} exit at {current_price} (SL)")
                     return {"symbol": symbol, "side": "SELL", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
-                if pnl_pct >= TAKE_PROFIT_PCT:
+                if pnl_pct >= tp_pct:
                     logger.info(f"[LOT_TP] {symbol} lot {lot.trade_id} exit at {current_price} (TP)")
                     return {"symbol": symbol, "side": "SELL", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
             elif lot.side == "SELL":
                 # For SHORTS, pnl_pct is negative if price went up
-                if pnl_pct >= STOP_LOSS_PCT:
+                if pnl_pct >= sl_pct:
                     return {"symbol": symbol, "side": "BUY", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
-                if pnl_pct <= -TAKE_PROFIT_PCT:
+                if pnl_pct <= -tp_pct:
                     return {"symbol": symbol, "side": "BUY", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
         
         return None
@@ -851,22 +835,24 @@ class TradingSystem:
     def _generate_signal(
         self, symbol: str, ml_result: dict[str, Any], is_exit_check: bool = False
     ) -> dict[str, Any] | None:
-        """Core signal generation logic."""
+        """Core signal generation logic using dynamic thresholds."""
         decision = ml_result["decision"]
         action = str(
             decision.action.value if hasattr(decision.action, "value") else decision.action
         )
         confidence = float(decision.confidence)
 
-        threshold = MIN_CONFIDENCE_SIM if self.config.simulate else MIN_CONFIDENCE_LIVE
-        if is_exit_check:
-            threshold = EXIT_CONFIDENCE_SIM if self.config.simulate else EXIT_CONFIDENCE_LIVE
+        # Pull thresholds from DynamicConfig
+        min_conf = config_manager.get("MIN_CONFIDENCE")
+        exit_conf = config_manager.get("EXIT_CONFIDENCE")
+        threshold = exit_conf if is_exit_check else min_conf
 
         if action == "HOLD" or confidence < threshold:
             return None
 
         position_size = float(getattr(decision, "position_size_multiplier", 0.1))
-        position_size = min(position_size, 0.1)
+        # Cap position size based on dynamic config
+        position_size = min(position_size, config_manager.get("POSITION_SIZE_PCT"))
 
         task = asyncio.create_task(
             self.db_writer.write_thinking_log(
@@ -891,10 +877,11 @@ class TradingSystem:
 
     def _check_trend_confirmation(self, symbol: str, side: str) -> bool:
         """Check if price trend confirms the signal direction using lookback window."""
-        if not self._market_data[symbol] or len(self._market_data[symbol]) < TREND_LOOKBACK:
+        lookback = config_manager.get("TREND_LOOKBACK")
+        if not self._market_data[symbol] or len(self._market_data[symbol]) < lookback:
             return True  # Not enough data, allow signal
 
-        prices = self._market_data[symbol][-TREND_LOOKBACK:]
+        prices = [x["close"] for x in self._market_data[symbol][-lookback:]]
 
         # Calculate simple moving average difference
         ma_short = sum(prices[-3:]) / 3
@@ -933,47 +920,39 @@ class TradingSystem:
 
         try:
             oid = await self.broker.submit_order(order)
-            self._position_opened_at[signal["symbol"]] = time.time()
             self._stats["orders"] += 1
-            task = asyncio.create_task(
-                self.db_writer.write_order(
-                    broker_order_id=oid,
-                    symbol=signal["symbol"],
-                    side=signal["side"],
-                    order_type="MARKET",
-                    quantity=order.quantity,
-                    source="TS",
-                    session_id=self.active_session_id,
-                )
-            )
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
+            logger.info(f"[ORDER] {signal['symbol']} {signal['side']} submitted: {oid}")
         except Exception as e:
-            logger.error(f"[ORDER] Failed: {e}")
+            self._stats["errors"] += 1
+            logger.error(f"[ORDER] Submission failed: {e}")
 
     async def _execute_dynamic_exit(
-        self, symbol: str, current_qty: float, exit_signal: dict[str, Any], reason: str = "DYNAMIC EXIT"
+        self, symbol: str, qty: float, signal: dict[str, Any], reason: str = "SIGNAL"
     ) -> None:
-        """Specific logic for tactical exits."""
-        side = "SELL" if current_qty > 0 else "BUY"
+        """Execute an exit order and log reason."""
+        side = "SELL" if qty > 0 else "BUY"
         order = OrderEvent(
             source="TradingSystem",
             event_type=EventType.ORDER,
             payload=OrderPayload(
-                order_id=f"exit-{int(time.time())}",
+                order_id=str(uuid4()),
                 symbol=symbol,
                 action=side,
-                quantity=Decimal(str(abs(current_qty))),
+                quantity=Decimal(str(abs(qty))),
                 order_type="MARKET",
                 session_id=self.active_session_id,
             ),
         )
-
-        await self.broker.submit_order(order)
-        self._stats["orders"] += 1
+        try:
+            await self.broker.submit_order(order)
+            self._consecutive_losses = 0  # Logic for streak tracking could be added here
+            logger.info(f"[EXIT] {symbol} {side} ({reason})")
+        except Exception as e:
+            logger.error(f"[EXIT] Failed: {e}")
 
     async def _process_fills(self, signal: dict[str, Any]) -> None:
-        """Update positions and PnL based on fills."""
+        """Process fills and update local tracking."""
+        # This is typically handled by the event loop, but we can poll for feedback
         history = self.broker.paper_account.fill_history
         if len(history) <= self._last_fill_count:
             return

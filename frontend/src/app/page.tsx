@@ -9,7 +9,7 @@ import { PnLStats } from '@/components/PnLStats';
 import { SimControlPanel } from '@/components/SimControlPanel';
 import { SessionReportModal } from '@/components/SessionReportModal';
 import { SessionHistoryModal } from '@/components/SessionHistoryModal';
-import { useSimulation } from '@/hooks/useSimulation';
+import { useTradingSystem } from '@/hooks/useTradingSystem';
 import { 
   Play, 
   Square, 
@@ -27,28 +27,24 @@ import Link from 'next/link';
 
 export default function Dashboard() {
   const {
-    simSnapshot,
-    simRunning,
+    portfolio,
+    forensics,
+    telemetry,
     logs,
     activeSession,
-    sessionHistory,
-    addLog,
-    handleSimStart,
-    handleSimStop,
+    handleStartSession,
+    handleStopSession,
     handleSimReset,
     handleSimConfig,
     fetchSessionHistory,
-    getBaseUrl,
-    getWsUrl
-  } = useSimulation();
+    addLog,
+    getBaseUrl
+  } = useTradingSystem();
 
-  const [positions, setPositions] = useState<any[]>([]);
-  const [systemStatus, setSystemStatus] = useState({ running: false, mode: 'OFFLINE' });
-  const [pnlSummary, setPnlSummary] = useState({ total_equity: 100000, realized_pnl: 0, total_commissions: 0 });
-  
   const [showSessionReport, setShowSessionReport] = useState(false);
   const [sessionReport, setSessionReport] = useState<any>(null);
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]); // Add this local state
   const [activeTab, setActiveTab] = useState<'chart' | 'trades'>('chart');
 
   const submitOrder = async (side: 'BUY' | 'SELL', qty: number) => {
@@ -75,72 +71,31 @@ export default function Dashboard() {
     }
   };
 
-  // Trading WebSocket (legacy/non-sim)
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let retryTimeout: NodeJS.Timeout | null = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 50;
-    const BASE_RETRY_MS = 2000;
+  const handleStart = async () => {
+     await handleStartSession('paper');
+  };
 
-    const connect = () => {
-      if (retryCount >= MAX_RETRIES) return;
-
-      const wsUrl = `${getWsUrl()}/ws/trading`;
-      ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        retryCount = 0;
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.status) {
-            setSystemStatus({ running: msg.status.running, mode: msg.status.mode });
-          }
-          if (msg.positions) {
-            setPositions(msg.positions);
-          }
-          if (msg.pnl_summary) {
-            setPnlSummary(msg.pnl_summary);
-          }
-        } catch {
-          // ignore
-        }
-      };
-
-      ws.onclose = () => {
-        retryCount++;
-        retryTimeout = setTimeout(connect, BASE_RETRY_MS);
-      };
-
-      ws.onerror = () => {};
-    };
-
-    connect();
-
-    return () => {
-      if (retryTimeout) clearTimeout(retryTimeout);
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-      }
-    };
-  }, [getWsUrl]);
+  const handleStop = async () => {
+    const report = await handleStopSession();
+    if (report) {
+      setSessionReport(report);
+      setShowSessionReport(true);
+    }
+  };
 
   const handleViewHistory = async () => {
-    await fetchSessionHistory();
+    const history = await fetchSessionHistory();
+    if (history) setSessionHistory(history);
     setShowSessionHistory(true);
   };
 
   const handleSelectHistoricalSession = (session: any) => {
-    setSessionReport(session.summary);
+    setSessionReport(session.report || session.summary);
     setShowSessionReport(true);
   };
 
-  const totalSessionPnl = simSnapshot.equity - 1000;
-  const isSessionActive = activeSession || simRunning;
+  const totalSessionPnl = portfolio.realized_pnl;
+  const isSessionActive = activeSession || (telemetry?.status.running);
 
   return (
     <main className="min-h-screen p-4 lg:p-8 max-w-[1800px] mx-auto space-y-6">
@@ -185,14 +140,14 @@ export default function Dashboard() {
           
           {isSessionActive ? (
             <button 
-              onClick={handleSimStop}
+              onClick={handleStop}
               className="bg-rose-500 hover:bg-rose-400 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-lg shadow-rose-900/20 active:scale-95 transition-all"
             >
               <Square size={14} fill="currentColor" /> STOP TRADING
             </button>
           ) : (
             <button 
-              onClick={handleSimStart}
+              onClick={handleStart}
               className="bg-[#2962ff] hover:bg-[#1e50e0] text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
             >
               <Play size={14} fill="currentColor" /> START TRADING
@@ -209,10 +164,10 @@ export default function Dashboard() {
 
       {/* STATS STRIP */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Equity" value={`$${simSnapshot.equity.toFixed(2)}`} accent={totalSessionPnl >= 0 ? "blue" : "rose"} />
+        <StatCard label="Total Equity" value={`$${portfolio.equity.toFixed(2)}`} accent={totalSessionPnl >= 0 ? "blue" : "rose"} />
         <StatCard label="Session PnL" value={`${totalSessionPnl >= 0 ? '+' : ''}$${totalSessionPnl.toFixed(2)}`} accent={totalSessionPnl >= 0 ? "blue" : "rose"} />
-        <StatCard label="Win Rate" value={`${simSnapshot.adaptive.win_rate.toFixed(1)}%`} accent="slate" />
-        <StatCard label="Total Trades" value={`${simSnapshot.adaptive.total_trades}`} accent="slate" />
+        <StatCard label="Win Rate" value={`${forensics?.module_traces?.Strategy?.win_rate * 100 || 0}%`} accent="slate" />
+        <StatCard label="Latency" value={`${telemetry?.latency_ms || 0}ms`} accent="slate" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -238,7 +193,7 @@ export default function Dashboard() {
                   : 'text-slate-400 hover:text-slate-300 hover:bg-[#1e222d]'
               }`}
             >
-              Trade History ({simSnapshot.trade_history.length})
+              Trade History
             </button>
           </div>
 
@@ -247,7 +202,7 @@ export default function Dashboard() {
               <div className="relative">
                 <TradingChart />
               </div>
-              <SimPositionsTable positions={simSnapshot.open_positions} />
+              <SimPositionsTable positions={portfolio.positions} />
               
                {/* PREMIUM AI THINKING STREAM (CHAT STYLE) */}
                <div className="bg-[#161a25] border border-[#2962ff]/30 rounded-xl shadow-2xl relative overflow-hidden group flex flex-col h-[600px]">
@@ -270,7 +225,7 @@ export default function Dashboard() {
 
                  {/* Message Stream */}
                  <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide bg-[radial-gradient(circle_at_top_right,rgba(41,98,255,0.05),transparent)]">
-                   {simSnapshot.thinking_history?.slice().reverse().map((th: any, i: number) => (
+                   {forensics?.thinking_history?.slice().reverse().map((th: any, i: number) => (
                      <div key={i} className="flex gap-4 group/msg animate-in fade-in slide-in-from-bottom-4 duration-500">
                        {/* AI Avatar Column */}
                        <div className="flex-shrink-0 mt-1">
@@ -325,7 +280,7 @@ export default function Dashboard() {
                      </div>
                    ))}
 
-                   {(!simSnapshot.thinking_history || simSnapshot.thinking_history.length === 0) && (
+                   {(!forensics?.thinking_history || forensics.thinking_history.length === 0) && (
                      <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-30">
                        <Zap size={40} className="text-blue-500 animate-pulse" />
                        <p className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Awaiting Signal Sequence</p>
@@ -335,7 +290,7 @@ export default function Dashboard() {
                </div>
             </>
           ) : (
-            <TradeHistory trades={simSnapshot.trade_history} />
+            <TradeHistory trades={[]} />
           )}
         </div>
 
@@ -362,22 +317,22 @@ export default function Dashboard() {
           )}
 
           <SimControlPanel
-            slPct={simSnapshot.adaptive.stop_loss_pct}
-            tpPct={simSnapshot.adaptive.take_profit_pct}
+            slPct={portfolio.equity > 0 ? 2.0 : 2.0} // Fallback or adaptive
+            tpPct={3.0}
             onConfigChange={handleSimConfig}
           />
 
           <PnLStats
-            equity={simSnapshot.equity}
-            cash={simSnapshot.cash}
-            realizedPnl={simSnapshot.realized_pnl}
-            totalGrossPnl={simSnapshot.total_gross_pnl}
-            positionValue={simSnapshot.position_value}
-            totalCommissions={simSnapshot.total_commissions}
-            currentPrice={simSnapshot.current_price}
-            peakEquity={simSnapshot.peak_equity}
-            maxDrawdown={simSnapshot.max_drawdown}
-            adaptive={simSnapshot.adaptive}
+            equity={portfolio.equity}
+            cash={portfolio.cash}
+            realizedPnl={portfolio.realized_pnl}
+            totalGrossPnl={portfolio.realized_pnl} // Simplified
+            positionValue={portfolio.equity - portfolio.cash}
+            totalCommissions={portfolio.total_commissions}
+            currentPrice={0}
+            peakEquity={portfolio.equity}
+            maxDrawdown={0}
+            adaptive={forensics?.module_traces?.RiskGuard || {}}
           />
 
           <OrderPanel onOrder={submitOrder} />

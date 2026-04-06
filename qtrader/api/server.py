@@ -31,8 +31,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     bg_task = None
     sim_task = None
     if not ui_only:
-        logger.info("FULL_MODE: Starting complete trading pipeline")
-        bg_task = asyncio.create_task(system.start())
+        # DO NOT auto-start the system. Wait for manual trigger via API.
+        logger.info("FULL_MODE: Waiting for manual session activation")
+        # Initialize EventBus and storage but don't start the loop yet
+        await system.state_store.sync_from_remote()
+        await system.event_bus.start()
     else:
         await system.state_store.sync_from_remote()
         await system.event_bus.start()
@@ -43,11 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bg_task = asyncio.create_task(_ui_heartbeat(system))
         logger.info("UI_ONLY_MODE: Heartbeat loop started")
 
-    if sim_mode:
-        from qtrader.api.router import start_simulation
-
-        sim_task = asyncio.create_task(start_simulation(system))
-        logger.info("SIMULATION_MODE: Auto-started continuous trading simulation")
+    # SIM_MODE auto-start removed. Process is now manual.
     yield
     await system.stop()
     if bg_task:

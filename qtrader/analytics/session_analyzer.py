@@ -12,6 +12,8 @@ import polars as pl
 
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.core.db import DBClient
+from qtrader.ml.vector_store import EliteExemplar, memory_store
+from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
 
 logger = logging.getLogger("qtrader.analytics.session")
 
@@ -71,13 +73,72 @@ class SessionAnalyzer:
                 "sharpe_ratio": perf_metrics.get("sharpe_ratio", 0.0),
                 "max_drawdown": perf_metrics.get("max_drawdown", 0.0),
             },
+            "tuning_parameters": self._generate_tuning_parameters(trade_stats, ai_forensic),
             "highlights": self._generate_highlights(trade_stats, ai_forensic),
             "recommendations": self._generate_tactical_recommendations(trade_stats, ai_forensic),
             "botched_calls": ai_forensic["botched_calls"],
             "timestamp": start_time
         }
 
+        # 6. Persistence: Save Elite Exemplar (RAG)
+        if report["metrics"]["win_rate"] >= 0.55 and report["metrics"].get("sharpe_ratio", 0.0) >= 2.0:
+            logger.info(f"[ELITE_SESSION] Session {session_id} marked as ELITE. Saving to Memory Store.")
+            try:
+                # Get expert notes for this session (Forensic Audit)
+                expert_note = await self._fetch_expert_notes(session_id)
+                
+                # Create Vectorized Exemplar
+                # We use phi3:mini to embed the expert notes for RAG
+                phi3 = OllamaDecisionAdapter()
+                note_embedding = await phi3.embed(expert_note)
+                
+                exemplar = EliteExemplar(
+                    session_id=session_id,
+                    timestamp=start_time,
+                    market_vector=[0.0, 0.0, 0.5, 0.5], # Replace with aggregated session features
+                    semantic_embedding=note_embedding,
+                    parameters=report["tuning_parameters"],
+                    performance_score=report["metrics"]["win_rate"] * report["metrics"].get("sharpe_ratio", 1.0),
+                    expert_notes=expert_note
+                )
+                memory_store.save_exemplar(exemplar)
+            except Exception as e:
+                logger.error(f"[ELITE_SAVE] Failed to save exemplar: {e}")
+
         return report
+    
+    async def _fetch_expert_notes(self, session_id: str) -> str:
+        """Fetch all human annotations for this session."""
+        conn = await DBClient().get_connection()
+        try:
+            # Table: forensic_notes (uuid, session_id, note_text, timestamp)
+            rows = await conn.fetch("SELECT note_text FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp ASC", session_id)
+            return " | ".join([r["note_text"] for r in rows if r["note_text"]])
+        except Exception:
+            return "No specific expert notes found."
+        finally:
+            await conn.close()
+
+    def _generate_tuning_parameters(self, stats: dict[str, Any], forensic: dict[str, Any]) -> dict[str, Any]:
+        """Generates specific parameter adjustments for the next session."""
+        params = {
+            "suggested_sl_pct": 2.0,
+            "suggested_tp_pct": 3.0,
+            "max_position_size": 0.2,
+            "confidence_threshold": 0.80
+        }
+
+        if stats["win_rate"] < 0.45:
+            params["confidence_threshold"] = 0.85
+            params["suggested_sl_pct"] -= 0.5
+        
+        if stats["commission_impact_pct"] > 1.2:
+            params["suggested_tp_pct"] += 1.0
+            
+        if forensic["thinking_error_count"] > 2:
+            params["max_position_size"] = 0.1 # De-risk on logic failures
+
+        return params
 
     async def _fetch_fills(self, session_id: str) -> list[dict[str, Any]]:
         query = """

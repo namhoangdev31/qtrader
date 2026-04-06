@@ -40,6 +40,7 @@ from qtrader.ml.chronos_adapter import ChronosForecastAdapter
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
 from qtrader.ml.ollama_risk_adapter import OllamaRiskAdapter
 from qtrader.ml.types import DecisionAction, TradingDecision
+from qtrader.ml.vector_store import memory_store
 
 logger = logging.getLogger("qtrader.ml.atomic_trio")
 
@@ -205,17 +206,40 @@ class AtomicTrioPipeline:
             except Exception as e:
                 logger.warning(f"[ATOMIC_TRIO] Risk ML stage failed: {e}")
 
-        # Stage 3: Decision Engine (Phi-2 or Ollama)
+        # Stage 3: Decision Engine (Phi-2 or Ollama) with RAG
         phi2_latency = 0.0
         if self._phi2 is not None:
             try:
                 t0 = time.time()
+                
+                # RAG RETRIEVAL: Search for Elite Exemplars
+                # Construct market vector: [price_change, vol, risk_score, confidence_ema]
+                # (Simplified for now, can be expanded)
+                m_vector = [
+                    float(market_context.get("price_change", 0.0)) if market_context else 0.0,
+                    float(market_context.get("volatility", 0.0)) if market_context else 0.0,
+                    float(tabpfn_risk.get("risk_score", 0.5)) if tabpfn_risk else 0.5,
+                    float(self._run_count % 100) / 100.0 # Placeholder for time-of-day/seasonality
+                ]
+                
+                rag_context = memory_store.retrieve_similar(m_vector, top_k=3)
+                
                 decision = await self._phi2.decide(
                     chronos_forecast=chronos_forecast,
                     tabpfn_risk=tabpfn_risk,
                     market_context=market_context,
                     system_state=system_state,
+                    rag_context=rag_context
                 )
+                
+                # Apply Dynamic Config Overrides directly (Direct Write Authority)
+                if hasattr(decision, "metadata") and "config_overrides" in decision.metadata:
+                    from qtrader.core.dynamic_config import config_manager
+                    overrides = decision.metadata["config_overrides"]
+                    for k, v in overrides.items():
+                        config_manager.set_override(k, v)
+                        logger.info(f"[AI_CONTROL] Applied Dynamic Override: {k}={v}")
+
                 phi2_latency = (time.time() - t0) * 1000
             except Exception as e:
                 logger.error(f"[ATOMIC_TRIO] Phi-2 decision failed: {e}")

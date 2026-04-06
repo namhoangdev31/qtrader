@@ -41,6 +41,7 @@ class OllamaDecisionAdapter:
         self.timeout_seconds = timeout_seconds
         self._is_loaded = False
         self._decision_count: int = 0
+        self._embed_count: int = 0
 
     async def _check_ready(self) -> bool:
         """Check if Ollama is ready and has the model."""
@@ -125,18 +126,36 @@ class OllamaDecisionAdapter:
         tabpfn_risk: dict[str, Any] | None,
         market_context: dict[str, Any] | None,
         system_state: dict[str, Any] | None,
+        rag_context: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Construct a structured prompt for Ollama."""
+        """Construct a structured prompt for Ollama with optional RAG context."""
         # Use the same format as Phi2 for consistency
         instruct = (
             "System: Act as an institutional quantitative trading engine. "
             "Analyze inputs and provide a trading decision in strict JSON format.\n"
+        )
+        
+        if rag_context:
+            instruct += (
+                "RAG INSTITUTIONAL MEMORY:\n"
+                "In similar past market regimes, the following 'Elite Exemplars' were successful:\n"
+            )
+            for i, match in enumerate(rag_context, 1):
+                instruct += (
+                    f"Match {i} (Similarity: {match['similarity']:.2f}):\n"
+                    f"  Successful Parameters: {json.dumps(match['parameters'])}\n"
+                    f"  Expert Forensic Note: {match['notes']}\n"
+                )
+            instruct += "\nUse this historical 'Institutional Memory' to inform your current overrides.\n"
+
+        instruct += (
             "JSON Template: {"
             '"action": "BUY/SELL/HOLD/HEDGE", "confidence": float, '
             '"reasoning": string, "risk_adjustment": float, '
             '"position_size_multiplier": float, "stop_loss_pct": float, '
             '"take_profit_pct": float, "time_horizon": "short/medium/long", '
-            '"explanation": string'
+            '"explanation": string,'
+            '"config_overrides": {"MIN_CONFIDENCE": float, "STOP_LOSS_PCT": float, "TAKE_PROFIT_PCT": float}'
             "}\n\n"
         )
 
@@ -190,16 +209,39 @@ class OllamaDecisionAdapter:
                 "model": self.model_id,
                 "backend": "ollama",
                 "raw_response": (response if len(response) < MAX_RAW_RESPONSE_LEN else "truncated"),
+                "config_overrides": data.get("config_overrides", {})
             },
         )
+
+    async def embed(self, text: str) -> list[float]:
+        """Generate text embeddings using phi3:mini (/api/embed)."""
+        self._embed_count += 1
+        payload = {
+            "model": self.model_id,
+            "input": text,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/api/embed", json=payload, timeout=self.timeout_seconds
+            ) as resp:
+                if resp.status != HTTP_OK:
+                    text = await resp.text()
+                    logger.error(f"[OLLAMA_EMBED] API returned {resp.status}: {text}")
+                    return []
+
+                data = await resp.json()
+                # Ollama v0.1.34+ returns 'embeddings' list
+                return data.get("embeddings", [[]])[0]
 
     def get_model_info(self) -> dict[str, Any]:
         """Status for /info endpoint."""
         return {
-            "model_type": "Ollama",
+            "model_type": "Ollama (RAG-Enabled)",
             "model_id": self.model_id,
             "is_loaded": self._is_loaded,
             "endpoint": self.base_url,
             "estimated_memory_mb": 0,  # Memory offloaded to Ollama process
             "decision_count": self._decision_count,
+            "embed_count": self._embed_count,
         }

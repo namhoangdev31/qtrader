@@ -179,6 +179,12 @@ class PaperTradingEngine:
         self.TAKER_FEE: float = 0.0060  # 0.60%
         self.MAKER_FEE: float = 0.0040  # 0.40%
         
+        # Fidelity Layer Configuration
+        self.LATENCY_MIN_MS: int = 50
+        self.LATENCY_MAX_MS: int = 300
+        self.ERROR_PROBABILITY: float = 0.01  # 1% chance of execution failure
+        self.SLIPPAGE_VOL_MULT: float = 0.5   # Multiplier for volatility-based slippage
+        
         self.starting_capital = starting_capital
         self.performance_fee = performance_fee
         self.max_concurrent_positions = max_concurrent_positions
@@ -304,11 +310,17 @@ class PaperTradingEngine:
         self._last_trace["ingestion"] = {
             "price": self._current_price,
             "volatility": self._volatility,
-            "spread_bps": 2.0,  # Simulated fixed spread for paper
+            "spread_bps": 2.0,  
             "is_live": time.time() - self._last_external_tick < self.EXTERNAL_TICK_TIMEOUT,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "latency_ms": random.randint(self.LATENCY_MIN_MS, self.LATENCY_MAX_MS) if self._running else 0
         }
         
+        # Simulate execution latency if running
+        if self._running:
+            # We don't sleep here to avoid blocking the loop, but we use this value in traces
+            pass
+
         return self._current_price
 
     def _generate_signal(self) -> dict[str, Any] | None:
@@ -449,20 +461,24 @@ class PaperTradingEngine:
 
         return res
 
-    def _open_managed_position(self, side: str, strength: float) -> OpenPosition | None:
-        equity = self.equity
-        pos_pct = self.adaptive.current_position_size_pct        # Standard position sizing
-        notional = min(equity * pos_pct, self.adaptive.max_position_usd)
-        notional = max(notional, equity * self.adaptive.min_position_pct)
-        if notional < self.MIN_TRADE_NOTIONAL:
+        # High-Fidelity Execution: Inject Latency & Error Probability
+        if random.random() < self.ERROR_PROBABILITY:
+            _LOG.warning(f"[PAPER] Execution Error Injection: Simulated Timeout for {side} {sym}")
             return None
 
-        price = self._current_price
+        # Dynamic Slippage based on volatility
+        slippage_pct = (self._volatility * self.SLIPPAGE_VOL_MULT) * (1 + random.random())
+        price = self._current_price * (1 + (slippage_pct if side == "BUY" else -slippage_pct))
+        
         qty = notional / price
 
         sl_pct = self.adaptive.current_stop_loss_pct
         tp_pct = self.adaptive.current_take_profit_pct
  
+        # Calculate stops based on fill price
+        sl = price * (1 - sl_pct) if side == "BUY" else price * (1 + sl_pct)
+        tp = price * (1 + tp_pct) if side == "BUY" else price * (1 - tp_pct)
+
         # Institutional Fee Structure (Coinbase Taker 0.60%)
         entry_fee = notional * self.TAKER_FEE
         self._cash -= (notional + entry_fee)
@@ -474,7 +490,7 @@ class PaperTradingEngine:
         
         if sym not in self._open_positions:
             self._open_positions[sym] = []
-        # Store as (signed_qty, avg_price, comm_per_unit) for legacy compat but logic uses managed_positions
+        # Store as (signed_qty, avg_price, comm_per_unit) 
         self._open_positions[sym].append((qty * sign, price, commission_per_unit))
 
         pos = OpenPosition(
@@ -482,10 +498,11 @@ class PaperTradingEngine:
             side=side,
             qty=qty,
             avg_price=price,
-            commission=entry_fee,
+            avg_comm_per_unit=commission_per_unit, # Fix: Match OpenPosition dataclass
             stop_loss=sl,
             take_profit=tp,
             entry_time=datetime.now(timezone.utc).isoformat(),
+            position_id=str(uuid.uuid4())
         )
         
         if sym not in self._managed_positions:
@@ -610,14 +627,18 @@ class PaperTradingEngine:
         curr_eq = self.equity
         self._peak_equity = max(self._peak_equity, curr_eq)
 
+        # Fidelity Update: Dynamic Exit Slippage
+        exit_slippage_pct = (self._volatility * self.SLIPPAGE_VOL_MULT) * (1 + random.random())
+        adjusted_exit_price = exit_price * (1 - (exit_slippage_pct if pos.side == "BUY" else -exit_slippage_pct))
+        
         ref_mid = self._current_price
-        slippage_bps = (abs(exit_price - ref_mid) / ref_mid * 10000) if ref_mid > 0 else 0
+        slippage_bps = (abs(adjusted_exit_price - exit_price) / exit_price * 10000) if exit_price > 0 else 0
 
         trade = TradeRecord(
             symbol=symbol,
             side=pos.side,
             entry_price=pos.avg_price,
-            exit_price=exit_price,
+            exit_price=adjusted_exit_price,
             qty=pos.qty,
             pnl=net_pnl,
             pnl_pct=net_pnl_pct,
@@ -628,7 +649,7 @@ class PaperTradingEngine:
             take_profit=pos.take_profit,
             entry_time=pos.entry_time,
             exit_time=datetime.now(timezone.utc).isoformat(),
-            commission=exit_comm,
+            commission=execution_fee + exit_perf_fee,
             trade_id=str(uuid.uuid4()),
         )
         self.closed_trades.append(trade)

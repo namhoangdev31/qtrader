@@ -1,6 +1,17 @@
 import React from 'react';
-import { SimSnapshot } from '@/hooks/useSimulation';
 import { TrendingUp, TrendingDown, DollarSign, Percent, Activity, Shield } from 'lucide-react';
+
+interface SimSnapshot {
+  equity: number;
+  cash: number;
+  realized_pnl: number;
+  total_commissions: number;
+  position_value: number;
+  current_price: number;
+  open_positions: any[];
+  trade_history: any[];
+  adaptive: any;
+}
 
 interface ExpertStatsProps {
   snapshot: SimSnapshot;
