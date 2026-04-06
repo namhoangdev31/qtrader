@@ -182,7 +182,7 @@ def test_multiple_trades_same_symbol() -> None:
     engine = TCAEngine()
 
     # First trade
-    trade1 = engine.analyze_trade(
+    engine.analyze_trade(
         decision_price=100.0,
         arrival_price=100.5,
         fill_price=101.0,
@@ -195,7 +195,7 @@ def test_multiple_trades_same_symbol() -> None:
     )
 
     # Second trade
-    trade2 = engine.analyze_trade(
+    engine.analyze_trade(
         decision_price=101.0,
         arrival_price=101.2,
         fill_price=101.5,

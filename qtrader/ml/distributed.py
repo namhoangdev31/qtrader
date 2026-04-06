@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
+
 try:
     import ray
     from ray import tune
+
     _HAS_RAY = True
 except ImportError:
     _HAS_RAY = False
@@ -30,7 +32,10 @@ class RayCompute:
 
     def __init__(self) -> None:
         if not _HAS_RAY:
-            raise ImportError("Ray is not installed. Please install 'qtrader[ray]' or use the 'production-ml' Docker image.")
+            raise ImportError(
+                "Ray is not installed. Please install 'qtrader[ray]' "
+                "or use the 'production-ml' Docker image."
+            )
         if not ray.is_initialized():
             ray.init(
                 address=Config.RAY_ADDRESS,
@@ -44,7 +49,8 @@ class RayCompute:
         """Run a function in parallel over a list of arguments."""
         remote_func = ray.remote(func)
         futures = [remote_func.remote(*args) for args in tasks_args]
-        return ray.get(futures)
+        result: list[Any] = ray.get(futures)
+        return result
 
     def shutdown(self) -> None:
         """Shutdown the underlying Ray runtime."""
@@ -80,7 +86,7 @@ class RayHyperparamTuner:
         self.ray_address = ray_address
         self._evaluator = ModelEvaluator()
 
-    def tune(
+    def tune(  # noqa: PLR0913
         self,
         model_cls: type,
         param_space: dict[str, Any],
@@ -90,8 +96,10 @@ class RayHyperparamTuner:
         feature_cols: list[str] | None = None,
     ) -> dict[str, Any]:
         if not _HAS_RAY:
-            raise ImportError("Ray is not installed. RayTune cannot be used without the 'ray[tune]' dependency.")
-        
+            raise ImportError(
+                "Ray is not installed. RayTune cannot be used without the 'ray[tune]' dependency."
+            )
+
         if target_col not in df.columns:
             raise ValueError(f"Target column '{target_col}' not found in DataFrame.")
 
@@ -147,7 +155,6 @@ class RayHyperparamTuner:
 
 
 if __name__ == "__main__":
-    import polars as pl  # type: ignore[reimported]
     from sklearn.linear_model import LinearRegression
 
     _df = pl.DataFrame(
@@ -168,5 +175,5 @@ if __name__ == "__main__":
         target_col="forward_return",
         feature_cols=["x"],
     )
-    assert isinstance(_best, dict)
-
+    if not isinstance(_best, dict):
+        raise TypeError("Tuner failed to return a valid configuration dictionary")

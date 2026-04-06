@@ -56,9 +56,7 @@ class RotationHysteresis:
             self.pending_count = 1
 
         if self.pending_count >= self.persistence_bars:
-            log.info(
-                "STABILITY | Regime shift confirmed after %s bars.", self.pending_count
-            )
+            log.info("STABILITY | Regime shift confirmed after %s bars.", self.pending_count)
             self.current_regime = new_regime
             self.last_rotation_time = now
             return True
@@ -136,12 +134,14 @@ class RegimeStabilityScore:
 
 if __name__ == "__main__":
     _h = RotationHysteresis(persistence_bars=2, cooldown_sec=0)
-    assert not _h.validate_shift(1)
-    assert _h.validate_shift(1)
+    # First shift attempt should not confirm (persistence check)
+    if _h.validate_shift(1):
+        raise ValueError("Hysteresis failed: shift confirmed too early")
+    # Second shift attempt should confirm
+    if not _h.validate_shift(1):
+        raise ValueError("Hysteresis failed: shift not confirmed after persistence")
 
-    _probs = pl.DataFrame(
-        {"regime_0_prob": [0.9, 0.9], "regime_1_prob": [0.1, 0.1]}
-    )
+    _probs = pl.DataFrame({"regime_0_prob": [0.9, 0.9], "regime_1_prob": [0.1, 0.1]})
     _score = RegimeStabilityScore().stability_score_from_probs(_probs, window=2)
-    assert 0.0 <= _score <= 1.0
-
+    if not (0.0 <= _score <= 1.0):
+        raise ValueError(f"Stability score out of bounds: {_score}")

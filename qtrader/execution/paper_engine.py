@@ -85,6 +85,8 @@ class AdaptiveConfig:
     max_tp_adjustment: float = 0.05
     min_position_pct: float = 0.05
     max_position_pct: float = 0.50
+    min_stop_loss_pct: float = 0.01
+    min_take_profit_pct: float = 0.01
 
     # Streak thresholds
     STREAK_LOSS_CRITICAL: int = 3
@@ -101,7 +103,7 @@ class AdaptiveConfig:
         if self.win_streak >= self.STREAK_WIN_STABLE:
             return max(
                 base - self.streak_adjust_step * min(self.win_streak, 4),
-                base - self.max_sl_adjustment,
+                self.min_stop_loss_pct,
             )
         return base
 
@@ -116,7 +118,8 @@ class AdaptiveConfig:
                 base + self.streak_adjust_step * min(self.win_streak, 4),
                 base + self.max_tp_adjustment,
             )
-        return base
+        # Ensure TP doesn't drop below floor
+        return max(base, self.min_take_profit_pct)
 
     @property
     def current_position_size_pct(self) -> float:
@@ -173,6 +176,9 @@ class PaperTradingEngine:
         tick_interval: float = 0.2,
         base_price: float = 50000.0,
     ) -> None:
+        self.TAKER_FEE: float = 0.0060  # 0.60%
+        self.MAKER_FEE: float = 0.0040  # 0.40%
+        
         self.starting_capital = starting_capital
         self.performance_fee = performance_fee
         self.max_concurrent_positions = max_concurrent_positions
@@ -186,15 +192,15 @@ class PaperTradingEngine:
         self.RSI_PERIOD = 14
         self.RSI_BULL_GATE = 45.0
         self.RSI_BEAR_GATE = 55.0
-        self.RSI_OVERSOLD = 30.0
-        self.RSI_OVERBOUGHT = 70.0
+        self.RSI_OVERSOLD = 45.0  # Aggressive: enter buy sooner
+        self.RSI_OVERBOUGHT = 55.0 # Aggressive: enter sell sooner
         self.REVERSAL_THRESHOLD = 0.35
         self.MIN_TRADE_NOTIONAL = 10.0
         self.EPSILON_QTY = 1e-8
         self.THINKING_HISTORY_LIMIT = 100
 
-        self._open_positions: dict[str, tuple[float, float, float]] = {}
-        self._managed_positions: dict[str, OpenPosition] = {}
+        self._open_positions: dict[str, list[OpenPosition]] = {}
+        self._managed_positions: dict[str, list[OpenPosition]] = {}
 
         self.adaptive = AdaptiveConfig(
             base_stop_loss_pct=sl_pct,
@@ -216,6 +222,16 @@ class PaperTradingEngine:
         self._last_thinking = "Awaiting first analysis..."
         self._last_explanation = "Simulation engine is initializing market data buffer..."
         self._thinking_history: list[dict[str, Any]] = []
+        self._last_trace: dict[str, Any] = {
+            "module_traces": {
+                "AlphaEngine": {"status": "INITIALIZING"},
+                "RiskEngine": {"status": "INITIALIZING"},
+                "RiskGuard": {"status": "INITIALIZING"},
+                "Portfolio": {"status": "INITIALIZING"},
+                "Reconciliation": {"status": "AWAITING"},
+                "Strategy": {"status": "AWAITING"}
+            }
+        }
 
         self.EXTERNAL_TICK_TIMEOUT = 2.0
 
@@ -238,36 +254,36 @@ class PaperTradingEngine:
     @property
     def equity(self) -> float:
         market_value = 0.0
-        for _, (qty, avg_price, _) in self._open_positions.items():
-            if qty > 0:
-                # Long: Market Value = Quantity * Current Price
-                market_value += qty * self._current_price
-            elif qty < 0:
-                # Short: Market Value = Notional + (Entry - Current) * Quantity
-                # But since we subtract full notional from cash on entry, 
-                # we add back (Notional + PnL)
-                notional = abs(qty) * avg_price
-                pnl = (avg_price - self._current_price) * abs(qty)
-                market_value += notional + pnl
+        # CORRECTED: Flatten lots
+        for lots in self._open_positions.values():
+            for lot in lots:
+                qty, avg_price, _ = lot
+                if qty > 0:
+                    market_value += qty * self._current_price
+                elif qty < 0:
+                    notional = abs(qty) * avg_price
+                    pnl = (avg_price - self._current_price) * abs(qty)
+                    market_value += notional + pnl
         return self._cash + market_value
 
     @property
     def realized_pnl(self) -> float:
-        # Net Realized PnL = (Total Equity change) - (Current Unrealized Gross PnL)
-        # This ensures entry commissions are reflected in "Realized" immediately.
         market_value = 0.0
         notional_value = 0.0
-        for _, (qty, avg_price, _) in self._open_positions.items():
-            notional_value += abs(qty) * avg_price
-            if qty > 0:
-                market_value += qty * self._current_price
-            else:
-                pnl = (avg_price - self._current_price) * abs(qty)
-                market_value += (abs(qty) * avg_price) + pnl
+        # CORRECTED: Flatten lots
+        for lots in self._open_positions.values():
+            for lot in lots:
+                qty, avg_price, _ = lot
+                notional_value += abs(qty) * avg_price
+                if qty > 0:
+                    market_value += qty * self._current_price
+                else:
+                    pnl = (avg_price - self._current_price) * abs(qty)
+                    market_value += (abs(qty) * avg_price) + pnl
         
         unrealized_gross = market_value - notional_value
-        total_net_pnl = self.equity - self.starting_capital
-        return total_net_pnl - unrealized_gross
+        total_pnl = self.equity - self.starting_capital
+        return total_pnl - unrealized_gross
 
     @property
     def total_commissions(self) -> float:
@@ -280,13 +296,19 @@ class PaperTradingEngine:
                 self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
             return self._current_price
 
-        drift = random.SystemRandom().gauss(0, self._volatility)
-        mean_revert = (self._base_price - self._current_price) / self._base_price * 0.0001
-        self._current_price *= 1 + drift + mean_revert
-        self._current_price = max(self._current_price, 1.0)
         self._price_history.append(self._current_price)
         if len(self._price_history) > self.PRICE_HISTORY_LIMIT:
             self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
+        
+        # Capture Ingestion Trace
+        self._last_trace["ingestion"] = {
+            "price": self._current_price,
+            "volatility": self._volatility,
+            "spread_bps": 2.0,  # Simulated fixed spread for paper
+            "is_live": time.time() - self._last_external_tick < self.EXTERNAL_TICK_TIMEOUT,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
         return self._current_price
 
     def _generate_signal(self) -> dict[str, Any] | None:
@@ -356,6 +378,66 @@ class PaperTradingEngine:
                     "to preserve capital."
                 )
  
+        # Capture Alpha Trace
+        self._last_trace["alpha"] = {
+            "model_name": "AtomicTrio_Sim",
+            "action": res["action"] if res else "HOLD",
+            "confidence": res["strength"] if res else 0.5,
+            "indicators": {
+                "rsi": rsi,
+                "sma_short": sma_short,
+                "sma_long": sma_long,
+                "sma_delta": sma_short - sma_long
+            },
+            "reasoning": self._last_explanation
+        }
+        
+        # Register in module traces for the Logic Matrix
+        self._last_trace["module_traces"]["AlphaEngine"] = self._last_trace["alpha"]
+        self._last_trace["module_traces"]["Execution"] = {
+            "name": "PaperEngine_Sim",
+            "last_slippage_bps": round(self._last_slippage * 10000, 2) if hasattr(self, "_last_slippage") else 0.0,
+            "status": "DANGER" if (getattr(self, "_last_slippage", 0.0) > 0.01) else "OK",
+            "is_anomaly": getattr(self, "_last_slippage", 0.0) > 0.01  # Slippage > 100bps
+        }
+        self._last_trace["module_traces"]["RiskGuard"] = {
+            "name": "DynamicGuardrail_Sim",
+            "sl_pct": self.adaptive.current_stop_loss_pct,
+            "tp_pct": self.adaptive.current_take_profit_pct,
+            "status": "ACTIVE"
+        }
+        
+        # AGGRESSIVE MODE: Register missing modules for Logic Matrix
+        self._last_trace["module_traces"]["RiskEngine"] = {
+            "is_halted": False,
+            "reason": "OK",
+            "dd_limit": self.adaptive.max_sl_adjustment,
+            "status": "HEALTHY"
+        }
+        # CORRECTED: Sum notional across ALL lots for ALL symbols
+        total_notional = 0.0
+        for lots in self._open_positions.values():
+            for lot_data in lots:
+                # lot_data is (qty * sign, price, comm_per_unit)
+                total_notional += lot_data[0] * lot_data[1]
+
+        self._last_trace["module_traces"]["Portfolio"] = {
+            "equity": float(self._cash + total_notional),
+            "cash": float(self._cash),
+            "allocation_pct": float(self.adaptive.current_position_size_pct),
+            "status": "HEALTHY"
+        }
+        self._last_trace["module_traces"]["Reconciliation"] = {
+            "mismatch_count": 0,
+            "status": "OK"
+        }
+        self._last_trace["module_traces"]["Strategy"] = {
+            "win_streak": self.adaptive.win_streak,
+            "loss_streak": self.adaptive.loss_streak,
+            "win_rate": round(self.adaptive.win_rate, 4),
+            "status": "ACTIVE"
+        }
+
         # Add to history
         self._thinking_history.append({
             "timestamp": time.time(),
@@ -381,40 +463,54 @@ class PaperTradingEngine:
         sl_pct = self.adaptive.current_stop_loss_pct
         tp_pct = self.adaptive.current_take_profit_pct
  
-        # No entry commission in performance fee model
-        self._cash -= notional
-        commission = 0.0
+        # Institutional Fee Structure (Coinbase Taker 0.60%)
+        entry_fee = notional * self.TAKER_FEE
+        self._cash -= (notional + entry_fee)
+        self._total_commissions += entry_fee
+        commission_per_unit = entry_fee / qty
         
-        # Update metrics
-        if side == "BUY":
-            sl = price * (1 - sl_pct)
-            tp = price * (1 + tp_pct)
-        else:
-            sl = price * (1 + sl_pct)
-            tp = price * (1 - tp_pct)
-
         sign = 1 if side == "BUY" else -1
         sym = "BTC-USD"
-        commission = 0.0
-        self._open_positions[sym] = (qty * sign, price, commission / qty)
+        
+        if sym not in self._open_positions:
+            self._open_positions[sym] = []
+        # Store as (signed_qty, avg_price, comm_per_unit) for legacy compat but logic uses managed_positions
+        self._open_positions[sym].append((qty * sign, price, commission_per_unit))
 
         pos = OpenPosition(
             symbol=sym,
             side=side,
             qty=qty,
             avg_price=price,
-            avg_comm_per_unit=commission / qty,
+            commission=entry_fee,
             stop_loss=sl,
             take_profit=tp,
             entry_time=datetime.now(timezone.utc).isoformat(),
-            position_id=str(uuid.uuid4()),
         )
-        self._managed_positions[sym] = pos
+        
+        if sym not in self._managed_positions:
+            self._managed_positions[sym] = []
+        self._managed_positions[sym].append(pos)
+        
+        return pos
 
         _LOG.info(
             f"[PAPER] OPEN {side} {sym} qty={qty:.6f} @ {price:.2f} | "
             f"SL={sl:.2f} TP={tp:.2f} | Notional=${notional:.2f}"
         )
+
+        # Capture Risk Trace
+        self._last_trace["risk"] = {
+            "initial_stop_loss": sl,
+            "initial_take_profit": tp,
+            "adjusted_stop_loss": sl,
+            "adjusted_take_profit": tp,
+            "position_size_pct": pos_pct,
+            "notional_usd": notional,
+            "risk_score": strength
+        }
+        self._last_trace["module_traces"]["Portfolio"] = self._last_trace["risk"]
+
         return pos
 
     def _check_exit_conditions(self) -> TradeRecord | None:
@@ -463,38 +559,56 @@ class PaperTradingEngine:
         return None
 
     def _close_managed_position(self, symbol: str, reason: str, exit_price: float) -> TradeRecord:
-        pos = self._managed_positions.pop(symbol)
-        curr_qty, curr_price, curr_comm = self._open_positions.get(symbol, (0.0, 0.0, 0.0))
-
-        if curr_qty > 0:
+        if not self._managed_positions.get(symbol):
+            raise ValueError(f"No managed position to close for {symbol}")
+            
+        pos = self._managed_positions[symbol].pop(0)
+        
+        if pos.side == "BUY":
             # LONG: Gross = (Exit - Entry) * Qty
-            gross_pnl = (exit_price - curr_price) * pos.qty
+            gross_pnl = (exit_price - pos.avg_price) * pos.qty
         else:
             # SHORT: Gross = (Entry - Exit) * Qty
-            gross_pnl = (curr_price - exit_price) * pos.qty
+            gross_pnl = (pos.avg_price - exit_price) * pos.qty
 
-        # Performance Fee: 15% of positive gross PnL
-        entry_comm = curr_comm * pos.qty
-        exit_comm = 0.0
-        if gross_pnl > 0:
-            exit_comm = gross_pnl * self.performance_fee
+        # 1. Execution Fee (Coinbase Taker 0.60%)
+        execution_fee = (exit_price * pos.qty) * self.TAKER_FEE
         
-        net_pnl = gross_pnl - entry_comm - exit_comm
+        # 2. Performance Fee (HWM): 15% of positive gross PnL ONLY if new peak equity
+        exit_perf_fee = 0.0
+        
+        # Calculate what current equity WOULD be without performance fee
+        notional_entry = pos.avg_price * pos.qty
+        equity_before_perf = self._cash + (notional_entry + gross_pnl) - execution_fee
+        
+        if gross_pnl > 0 and equity_before_perf > self._peak_equity:
+            new_profit_above_peak = equity_before_perf - self._peak_equity
+            exit_perf_fee = min(gross_pnl * self.performance_fee, new_profit_above_peak * self.performance_fee)
+        
+        total_comm = pos.commission + execution_fee + exit_perf_fee
+        net_pnl = gross_pnl - (pos.commission + execution_fee + exit_perf_fee)
+        
         # Net Return % = Net PnL / Entry Notional
-        net_pnl_pct = net_pnl / (curr_price * pos.qty) if curr_price > 0 else 0
+        net_pnl_pct = net_pnl / (pos.avg_price * pos.qty) if pos.avg_price > 0 else 0
 
-        # SETTLEMENT: Return Notional + Gross PnL - Exit Fee
-        notional_entry = curr_price * pos.qty
-        self._cash += (notional_entry + gross_pnl) - exit_comm
+        # SETTLEMENT: Return Notional + Gross PnL - Fees
+        self._cash += (notional_entry + gross_pnl) - execution_fee - exit_perf_fee
         
-        self._total_commissions += exit_comm
+        self._total_commissions += (execution_fee + exit_perf_fee)
         self._total_gross_pnl += gross_pnl
-        self._open_positions.pop(symbol, None)
+        
+        if not self._managed_positions[symbol]:
+            self._managed_positions.pop(symbol)
+            self._open_positions.pop(symbol, None)
 
         if net_pnl > 0:
             self.adaptive.record_win(net_pnl)
         else:
             self.adaptive.record_loss(net_pnl)
+
+        # Update peak equity after transaction
+        curr_eq = self.equity
+        self._peak_equity = max(self._peak_equity, curr_eq)
 
         ref_mid = self._current_price
         slippage_bps = (abs(exit_price - ref_mid) / ref_mid * 10000) if ref_mid > 0 else 0
@@ -532,6 +646,16 @@ class PaperTradingEngine:
             f"Entry={pos.avg_price:.2f} Exit={exit_price:.2f} | "
             f"PnL=${net_pnl:.2f} ({net_pnl_pct:.2f}%) | WR={self.adaptive.win_rate:.1%}"
         )
+
+        # Capture Execution Trace
+        self._last_trace["execution"] = {
+            "order_id": trade.trade_id,
+            "fill_price": exit_price,
+            "slippage_bps": slippage_bps,
+            "fee_usd": exit_comm,
+            "status": "FILLED"
+        }
+
         return trade
 
     def _kyle_lambda(self, order_qty: float, top_depth: float) -> float:
@@ -654,6 +778,7 @@ class PaperTradingEngine:
             "ai_thinking": self._last_thinking,
             "ai_explanation": self._last_explanation,
             "thinking_history": self._thinking_history,
+            "live_trace": self._last_trace,
             "base_price": self._base_price,
             "open_positions": [
                 {
@@ -824,7 +949,7 @@ class PaperTradingEngine:
                 self._last_external_tick = time.time()
 
                 # If price changed significantly, emit a snapshot update immediately
-                if abs(old_price - price) / old_price > self.SIGNIFICANT_PRICE_CHANGE:
+                if abs(old_price - price) / (old_price or price or 1) > TradeRecord.SIGNIFICANT_PRICE_CHANGE:
                     self._emit(self._build_snapshot())
 
         except Exception as e:

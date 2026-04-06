@@ -6,7 +6,6 @@ Instantiates and manages the singleton TradingSystem.
 from __future__ import annotations
 
 import logging
-
 import os
 from functools import lru_cache
 
@@ -17,7 +16,7 @@ logger = logging.getLogger("qtrader.api.dependencies")
 # Singleton instance of the Trading System for the API
 _SYS_INSTANCE: TradingSystem | None = None
 
-@lru_cache()
+@lru_cache
 def get_system() -> TradingSystem:
     """Dependency to inject the active TradingSystem instance."""
     # Use environment for symbols

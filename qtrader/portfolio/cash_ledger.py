@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from qtrader.core.event_store import BaseEventStore
 from qtrader.core.events import LedgerEntryEvent
-from qtrader.portfolio.ledger_entry_model import TransactionRecord
+
+if TYPE_CHECKING:
+    from qtrader.core.event_store import BaseEventStore
+    from qtrader.portfolio.ledger_entry_model import TransactionRecord
 
 logger = logging.getLogger(__name__)
 

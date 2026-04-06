@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from qtrader.core.events import LedgerEntryPayload
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from qtrader.core.events import LedgerEntryPayload
 
 logger = logging.getLogger(__name__)
 

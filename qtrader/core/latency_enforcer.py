@@ -16,9 +16,12 @@ from __future__ import annotations
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 class LatencyViolation(Exception):
@@ -194,6 +197,16 @@ class LatencyEnforcer:
             "recent_sla_compliance_pct": round(compliant_count / len(recent) * 100, 1)
             if recent
             else 100.0,
+        }
+
+    def get_current_measurements(self) -> dict[str, dict[str, float]]:
+        """Return the most recent stage measurements."""
+        return {
+            m.stage: {
+                "duration_ms": m.duration_ms,
+                "budget_ms": m.budget_ms,
+                "breached": m.breached
+            } for m in self._measurements
         }
 
 

@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     import polars as pl
 
+from typing import ClassVar
+
 __all__ = ["Feature", "FeaturePipeline"]
 
 
@@ -90,10 +92,10 @@ class BaseFeature:
     ``version``, ``required_cols``, and ``min_periods``.
     """
 
-    name: str = "base_feature"
-    version: str = "1.0"
-    required_cols: list[str] = []
-    min_periods: int = 1
+    name: ClassVar[str] = "base_feature"
+    version: ClassVar[str] = "1.0"
+    required_cols: ClassVar[list[str]] = []
+    min_periods: ClassVar[int] = 1
 
     def validate_inputs(self, df: pl.DataFrame) -> None:
         """Validate required columns and minimum row count.

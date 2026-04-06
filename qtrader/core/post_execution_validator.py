@@ -4,13 +4,15 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from qtrader.core.event_store import BaseEventStore
 from qtrader.core.events import EventType
-from qtrader.core.state_store import StateStore
+
+if TYPE_CHECKING:
+    from qtrader.core.event_store import BaseEventStore
+    from qtrader.core.state_store import StateStore
 
 
 class PostExecutionValidator:

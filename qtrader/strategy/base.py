@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
 
-from decimal import Decimal
 from qtrader.core.types import FillEvent, OrderEvent, SignalEvent
 
 __all__ = ["BaseStrategy", "Strategy"]

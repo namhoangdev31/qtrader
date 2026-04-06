@@ -4,19 +4,23 @@ Covers: MLflowManager (model registry, promotion, rollback, stale-model preventi
 FactorEngine (batch compute, multi-symbol, compute_latest).
 Focus: Garbage-in/garbage-out prevention, model staleness, correctness of promotion gates.
 """
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import polars as pl
 import pytest
+
+from qtrader.features.base import BaseFeature
+from qtrader.features.engine import FactorEngine
+from qtrader.ml.mlflow_manager import MLflowManager
 
 # ===========================================================================
 # MLflowManager
 # ===========================================================================
 
 @pytest.fixture
-def manager_disabled():
+def manager_disabled() -> MLflowManager:
     """MLflowManager with mlflow disabled — must not crash any public API."""
-    from qtrader.ml.mlflow_manager import MLflowManager
     return MLflowManager(enable_mlflow=False)
 
 
@@ -26,9 +30,8 @@ def mock_client():
 
 
 @pytest.fixture
-def manager_mocked(mock_client):
+def manager_mocked(mock_client: MagicMock) -> MLflowManager:
     """MLflowManager with real mlflow disabled but _client injected as mock."""
-    from qtrader.ml.mlflow_manager import MLflowManager
     with patch("qtrader.ml.mlflow_manager.MLFLOW_AVAILABLE", False):
         mgr = MLflowManager(enable_mlflow=False)
     # Manually inject mocked client and re-enable for targeted tests
@@ -201,27 +204,26 @@ from qtrader.features.base import BaseFeature
 
 
 class DoubleFeature(BaseFeature):
-    name = "double_close"
-    version = "1.0"
-    required_cols = ["close"]
-    min_periods = 1
+    name: ClassVar[str] = "double_close"
+    version: ClassVar[str] = "1.0"
+    required_cols: ClassVar[list[str]] = ["close"]
+    min_periods: ClassVar[int] = 1
 
     def compute(self, df: pl.DataFrame) -> pl.Series:
         return (df["close"] * 2).rename(self.name)
 
 
 class SumFeature(BaseFeature):
-    name = "hl_sum"
-    version = "1.0"
-    required_cols = ["high", "low"]
-    min_periods = 1
+    name: ClassVar[str] = "hl_sum"
+    version: ClassVar[str] = "1.0"
+    required_cols: ClassVar[list[str]] = ["high", "low"]
+    min_periods: ClassVar[int] = 1
 
     def compute(self, df: pl.DataFrame) -> pl.Series:
         return (df["high"] + df["low"]).rename(self.name)
 
 
-def make_engine():
-    from qtrader.features.engine import FactorEngine
+def make_engine() -> tuple[FactorEngine, MagicMock]:
     store = MagicMock()
     return FactorEngine(store=store), store
 

@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from qtrader.alerts.alert_engine import alert_engine
 from qtrader.core.container import container
-from qtrader.core.exceptions import ConstraintViolation
+
+if TYPE_CHECKING:
+    from qtrader.core.exceptions import ConstraintViolation
 
 
 class ViolationHandler:
@@ -17,7 +19,7 @@ class ViolationHandler:
     Ensures all violations are logged, alerted, and trigger system-wide security halts.
     """
 
-    def __init__(self, log_path: str = "qtrader/logs/violation_log.json"):
+    def __init__(self, log_path: str = "qtrader/logs/violation_log.json") -> None:
         self.logger = container.get("logger")
         self.failfast = container.get("failfast")
         self.log_path = log_path

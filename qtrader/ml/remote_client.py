@@ -12,11 +12,14 @@ import time
 from typing import Any
 
 import aiohttp
-import numpy as np
 
 from qtrader.ml.atomic_trio import PipelineResult
 
 logger = logging.getLogger("qtrader.ml.remote_client")
+
+HTTP_OK = 200
+DEFAULT_TIMEOUT = 5.0
+PREDICT_TIMEOUT = 30.0
 
 
 class RemoteAtomicTrioPipeline:
@@ -32,17 +35,21 @@ class RemoteAtomicTrioPipeline:
         """Fetch model info from remote service."""
         if self._model_info:
             return
-        
+
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(f"{self.base_url}/info", timeout=5.0) as resp:
-                    if resp.status == 200:
+                async with session.get(f"{self.base_url}/info", timeout=DEFAULT_TIMEOUT) as resp:
+                    if resp.status == HTTP_OK:
                         self._model_info = await resp.json()
-                        logger.info(f"[REMOTE_ML] Connected to {self.base_url} | Info: {self._model_info.get('run_count', 0)} runs")
+                        logger.info(
+                            "[REMOTE_ML] Connected to %s | Info: %s runs",
+                            self.base_url,
+                            self._model_info.get("run_count", 0),
+                        )
                     else:
-                        logger.warning(f"[REMOTE_ML] Failed to get info: {resp.status}")
+                        logger.warning("[REMOTE_ML] Info failed: %s", resp.status)
             except Exception as e:
-                logger.error(f"[REMOTE_ML] Connection error: {e}")
+                logger.error("[REMOTE_ML] Connection error: %s", e)
 
     async def run(
         self,
@@ -66,14 +73,17 @@ class RemoteAtomicTrioPipeline:
 
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.post(f"{self.base_url}/predict", json=payload, timeout=30.0) as resp:
-                    if resp.status == 200:
+                async with session.post(
+                    f"{self.base_url}/predict", json=payload, timeout=PREDICT_TIMEOUT
+                ) as resp:
+                    if resp.status == HTTP_OK:
                         data = await resp.json()
                         latency = (time.time() - start_t) * 1000
-                        
+
                         # Reconstruct result (we trust the types for now)
-                        # data['decision'] is a dict, but we can't easily turn it back to DecisionAction enum here without imports
-                        # For now, we return it as a dict which PipelineResult to_dict handles
+                        # data['decision'] is a dict, but we can't easily turn it back
+                        # to DecisionAction enum here without imports
+                        # For now, we return it as a dict which PipelineResult handles.
                         result = PipelineResult(
                             decision=data.get("decision", "HOLD"),
                             chronos_forecast=data.get("chronos_forecast"),
@@ -93,9 +103,9 @@ class RemoteAtomicTrioPipeline:
         # Fallback to empty result on error
         latency = (time.time() - start_t) * 1000
         return PipelineResult(
-            decision={"action": "HOLD", "reasoning": "Remote connection failed"}, 
+            decision={"action": "HOLD", "reasoning": "Remote connection failed"},
             pipeline_latency_ms=latency,
-            model_info={"error": "Remote connection failed"}
+            model_info={"error": "Remote connection failed"},
         )
 
     def get_pipeline_info(self) -> dict[str, Any]:

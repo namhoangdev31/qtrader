@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from qtrader.core.events import (
+    BaseEvent,
     EventType,
     FillEvent,
     OrderEvent,
     SignalEvent,
-    BaseEvent,
 )
 
 if TYPE_CHECKING:
@@ -97,6 +97,57 @@ class LoggerProtocol(Protocol):
 class ConfigProtocol(Protocol):
     def __getattr__(self, name: str) -> Any: ...
     def __setattr__(self, name: str, value: Any) -> None: ...
+
+
+@dataclass
+class IngestionTrace:
+    """Forensic trace for the ingestion stage."""
+    price: float
+    volatility: float
+    spread_bps: float
+    is_live: bool
+    timestamp: str
+
+@dataclass
+class AlphaTrace:
+    """Forensic trace for the alpha stage."""
+    model_name: str
+    action: str
+    confidence: float
+    indicators: dict[str, float]  # e.g., {"rsi": 65.2, "sma_delta": 1.5}
+    forecast: list[float] | None = None
+    reasoning: str | None = None
+
+@dataclass
+class RiskTrace:
+    """Forensic trace for the risk stage."""
+    initial_stop_loss: float
+    initial_take_profit: float
+    adjusted_stop_loss: float
+    adjusted_take_profit: float
+    position_size_pct: float
+    notional_usd: float
+    risk_score: float
+
+@dataclass
+class ExecutionTrace:
+    """Forensic trace for the execution stage."""
+    order_id: str
+    fill_price: float
+    slippage_bps: float
+    fee_usd: float
+    status: str
+
+@dataclass
+class PipelineTrace:
+    """Complete forensic trace of a single pipeline pulse."""
+    trace_id: str
+    timestamp: str
+    ingestion: IngestionTrace | None = None
+    alpha: AlphaTrace | None = None
+    risk: RiskTrace | None = None
+    execution: ExecutionTrace | None = None
+    module_traces: dict[str, Any] | None = None  # Registry for all core components
 
 
 class EventBusProtocol(Protocol):

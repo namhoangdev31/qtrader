@@ -4,7 +4,8 @@ import hmac
 import logging
 import time
 import urllib.parse
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import aiohttp
 
@@ -13,7 +14,7 @@ from qtrader.core.events import FillEvent, OrderEvent
 from qtrader.execution.brokers.base import BrokerAdapter
 from qtrader.execution.http import RetryConfig, request_json
 from qtrader.risk.kill_switch import GlobalKillSwitch
-from qtrader.security.order_signing import OrderSigner, SignedOrder
+from qtrader.security.order_signing import OrderSigner
 
 
 class BinanceBrokerAdapter(BrokerAdapter):

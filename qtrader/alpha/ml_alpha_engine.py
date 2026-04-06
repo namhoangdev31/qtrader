@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import time
-from decimal import Decimal
 from typing import Any
 
 from qtrader.alpha.base import BaseAlpha
@@ -40,7 +39,7 @@ class MLAlphaEngine(BaseAlpha):
         symbol = market_data.symbol
         
         # Lấy giá hiện tại
-        price = float(market_data.metadata.get("price", 0))
+        float(market_data.metadata.get("price", 0))
         historical_prices = market_data.metadata.get("historical_prices", [])
         
         # Logic RSI giả lập nhanh

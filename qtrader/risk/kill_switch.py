@@ -355,3 +355,17 @@ class GlobalKillSwitch:
         )
 
         self._actions_executed.append(f"CRITICAL_FAILURE_TRIGGER: {error_type}")
+
+    def get_trace(self) -> dict[str, Any]:
+        """
+        Produce a forensic trace of the kill-switch state for the transparency pulse.
+        """
+        return {
+            "is_halted": self._is_system_halted,
+            "reason": self._kill_reason,
+            "timestamp": self._kill_timestamp,
+            "dd_limit": self._dd_limit,
+            "loss_limit": self._loss_limit,
+            "actions_count": len(self._actions_executed),
+            "status": "DANGER" if self._is_system_halted else "HEALTHY"
+        }

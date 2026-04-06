@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from qtrader.core.decimal_adapter import d, math_authority
 from qtrader.core.events import (
-    EventType,
     FillEvent,
     OrderEvent,
     SystemEvent,
@@ -218,8 +217,11 @@ class UnifiedOMS:
         events = self.event_store.replay_order(order_id)
         total = Decimal("0")
         for ev in events:
-            if ev.get("type") == "ORDER_FILLED":
-                total += Decimal(str(ev.get("quantity", 0)))
+            payload = ev.get("payload", ev)
+            action = payload.get("action", ev.get("type", ""))
+            if action == "ORDER_FILLED":
+                qty_str = payload.get("metadata", {}).get("quantity", "0")
+                total += Decimal(str(qty_str))
         return total
 
     async def replay_state(self, order_id: str) -> str:

@@ -31,11 +31,31 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from qtrader.ml.chronos_adapter import ChronosForecastAdapter
+from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
+from qtrader.ml.ollama_risk_adapter import OllamaRiskAdapter
+from qtrader.ml.types import DecisionAction, TradingDecision
+
 logger = logging.getLogger("qtrader.ml.atomic_trio")
+
+
+@dataclass(slots=True, frozen=True)
+class PipelineConfig:
+    """Configuration for the Atomic Trio pipeline."""
+
+    chronos_model_id: str = "amazon/chronos-2"
+    chronos_backend: str = "auto"
+    tabpfn_model_id: str = "xgboost"
+    tabpfn_device: str = "cpu"
+    tabpfn_n_estimators: int = 4
+    phi2_model_id: str = "mlx-community/phi-2"
+    phi2_backend: str = "auto"
+    phi2_use_rule_based_fallback: bool = True
 
 
 @dataclass(slots=True)
@@ -86,62 +106,54 @@ class AtomicTrioPipeline:
 
     def __init__(
         self,
-        chronos_model_id: str = "amazon/chronos-2",
-        chronos_backend: str = "auto",
-        tabpfn_model_id: str = "xgboost",
-        tabpfn_device: str = "cpu",
-        tabpfn_n_estimators: int = 4,
-        phi2_model_id: str = "mlx-community/phi-2",
-        phi2_backend: str = "auto",
-        phi2_use_rule_based_fallback: bool = True,
+        config: PipelineConfig | None = None,
     ) -> None:
-        self.chronos_model_id = chronos_model_id
-        self.chronos_backend = chronos_backend
-        self.tabpfn_model_id = tabpfn_model_id
-        self.tabpfn_device = tabpfn_device
-        self.tabpfn_n_estimators = tabpfn_n_estimators
-        self.phi2_model_id = phi2_model_id
-        self.phi2_backend = phi2_backend
-        self.phi2_use_rule_based_fallback = phi2_use_rule_based_fallback
+        cfg = config or PipelineConfig()
+        self.config = cfg
 
         # Lazy-loaded components
-        self._chronos: Any = None
-        self._tabpfn: Any = None
-        self._phi2: Any = None
+        self._chronos: ChronosForecastAdapter | None = None
+        self._tabpfn: OllamaRiskAdapter | None = None
+        self._phi2: OllamaDecisionAdapter | None = None
         self._is_initialized = False
         self._run_count: int = 0
+        self._last_result: PipelineResult | None = None
 
     def _initialize(self) -> None:
         """Lazy initialize all three models."""
         if self._is_initialized:
             return
 
-        from qtrader.ml.chronos_adapter import ChronosForecastAdapter
-        from qtrader.ml.phi2_controller import Phi2DecisionController
-        from qtrader.ml.xgboost_adapter import XGBoostRiskAdapter
-
         logger.info("[ATOMIC_TRIO] Initializing pipeline...")
 
         self._chronos = ChronosForecastAdapter(
-            model_id=self.chronos_model_id,
-            device=self.chronos_backend,
+            model_id=self.config.chronos_model_id,
+            device=self.config.chronos_backend,
         )
 
-        self._tabpfn = XGBoostRiskAdapter(
-            model_id="xgboost_risk_v1",
-            device=self.tabpfn_device,
-        )
+        ollama_url = os.getenv("OLLAMA_URL")
+        if not ollama_url:
+            raise RuntimeError(
+                "[ATOMIC_TRIO] OLLAMA_URL not set. Unified Ollama backend is mandatory. "
+                "Ensure 'qt-ollama' service is running."
+            )
 
-        self._phi2 = Phi2DecisionController(
-            model_id=self.phi2_model_id,
-            backend=self.phi2_backend,
-            use_rule_based_fallback=self.phi2_use_rule_based_fallback,
+        logger.info(f"[ATOMIC_TRIO] Using Unified Ollama Backend at {ollama_url}")
+        # Stage 2: Ollama Risk
+        self._tabpfn = OllamaRiskAdapter(
+            model_id=os.getenv("OLLAMA_RISK_MODEL", "qwen2:1.5b"),
+            base_url=ollama_url,
+        )
+        # Stage 3: Ollama Decision
+        self._phi2 = OllamaDecisionAdapter(
+            model_id=os.getenv("OLLAMA_MODEL", "phi3:mini"),
+            base_url=ollama_url,
         )
 
         self._is_initialized = True
         logger.info("[ATOMIC_TRIO] Pipeline initialized")
 
-    def run(
+    async def run(
         self,
         historical_prices: list[float] | None = None,
         market_features: dict[str, float] | None = None,
@@ -168,7 +180,7 @@ class AtomicTrioPipeline:
         # Stage 1: Chronos-2 Forecast
         chronos_forecast = None
         chronos_latency = 0.0
-        if historical_prices and len(historical_prices) > 0:
+        if historical_prices and len(historical_prices) > 0 and self._chronos is not None:
             try:
                 t0 = time.time()
                 forecast_result = self._chronos.predict(
@@ -180,44 +192,57 @@ class AtomicTrioPipeline:
             except Exception as e:
                 logger.warning(f"[ATOMIC_TRIO] Chronos-2 failed: {e}")
 
-        # Stage 2: TabPFN Risk Classification
+        # Stage 2: Ollama Risk Classification
         tabpfn_risk = None
         tabpfn_latency = 0.0
-        if market_features:
+        if market_features and self._tabpfn is not None:
             try:
                 t0 = time.time()
-                risk_result = self._tabpfn.classify(features=market_features)
+                # Unified async call across all adapters
+                risk_result = await self._tabpfn.classify(features=market_features)
                 tabpfn_risk = risk_result.to_dict()
                 tabpfn_latency = (time.time() - t0) * 1000
             except Exception as e:
-                logger.warning(f"[ATOMIC_TRIO] XGBoost ML failed: {e}")
+                logger.warning(f"[ATOMIC_TRIO] Risk ML stage failed: {e}")
 
-        # Stage 3: Phi-2 Decision
+        # Stage 3: Decision Engine (Phi-2 or Ollama)
         phi2_latency = 0.0
-        try:
-            t0 = time.time()
-            decision = self._phi2.decide(
-                chronos_forecast=chronos_forecast,
-                tabpfn_risk=tabpfn_risk,
-                market_context=market_context,
-                system_state=system_state,
-            )
-            phi2_latency = (time.time() - t0) * 1000
-        except Exception as e:
-            logger.error(f"[ATOMIC_TRIO] Phi-2 decision failed: {e}")
-            # Create a safe HOLD decision
-            from qtrader.ml.phi2_controller import DecisionAction, TradingDecision
-
+        if self._phi2 is not None:
+            try:
+                t0 = time.time()
+                decision = await self._phi2.decide(
+                    chronos_forecast=chronos_forecast,
+                    tabpfn_risk=tabpfn_risk,
+                    market_context=market_context,
+                    system_state=system_state,
+                )
+                phi2_latency = (time.time() - t0) * 1000
+            except Exception as e:
+                logger.error(f"[ATOMIC_TRIO] Phi-2 decision failed: {e}")
+                # Create a safe HOLD decision
+                decision = TradingDecision(
+                    action=DecisionAction.HOLD,
+                    confidence=0.0,
+                    reasoning=f"Inference critical failure: {e}",
+                    risk_adjustment=1.0,
+                    position_size_multiplier=0.0,
+                    stop_loss_pct=2.0,
+                    take_profit_pct=5.0,
+                    time_horizon="short",
+                    explanation="Safe default due to ML error",
+                    inference_time_ms=0.0,
+                )
+        else:
             decision = TradingDecision(
                 action=DecisionAction.HOLD,
                 confidence=0.0,
-                reasoning=f"Pipeline error: {e}",
+                reasoning="Decision engine not initialized",
                 risk_adjustment=1.0,
                 position_size_multiplier=0.0,
-                stop_loss_pct=1.0,
-                take_profit_pct=2.0,
+                stop_loss_pct=2.0,
+                take_profit_pct=5.0,
                 time_horizon="short",
-                explanation="Decision defaulted to HOLD due to pipeline error",
+                explanation="Safe default due to missing engine",
                 inference_time_ms=0.0,
             )
 
@@ -232,11 +257,21 @@ class AtomicTrioPipeline:
             tabpfn_latency_ms=tabpfn_latency,
             phi2_latency_ms=phi2_latency,
             model_info={
-                "chronos": self._chronos.get_model_info(),
-                "tabpfn": self._tabpfn.get_model_info(),
-                "phi2": self._phi2.get_model_info(),
+                "chronos": self._chronos.get_model_info() if self._chronos else {},
+                "tabpfn": self._tabpfn.get_model_info() if self._tabpfn else {},
+                "phi2": self._phi2.get_model_info() if self._phi2 else {},
             },
         )
+        self._last_result = result
+        return result
+
+    def get_trace(self) -> dict[str, Any]:
+        """Produce forensic trace of ML pipeline."""
+        if not self._last_result:
+            return {}
+        res = self._last_result.to_dict()
+        res["run_count"] = self._run_count
+        return res
 
         logger.info(
             f"[ATOMIC_TRIO] Pipeline complete | "
@@ -254,14 +289,22 @@ class AtomicTrioPipeline:
             self._initialize()
 
         return {
-            "chronos": self._chronos.get_model_info(),
-            "tabpfn": self._tabpfn.get_model_info(),
-            "phi2": self._phi2.get_model_info(),
+            "chronos": self._chronos.get_model_info() if self._chronos else {},
+            "tabpfn": self._tabpfn.get_model_info() if self._tabpfn else {},
+            "phi2": self._phi2.get_model_info() if self._phi2 else {},
             "run_count": self._run_count,
             "estimated_total_memory_mb": (
-                self._chronos.get_model_info().get("estimated_memory_mb", 0)
-                + self._tabpfn.get_model_info().get("estimated_memory_mb", 0)
-                + self._phi2.get_model_info().get("estimated_memory_mb", 0)
+                (
+                    self._chronos.get_model_info().get("estimated_memory_mb", 0)
+                    if self._chronos
+                    else 0
+                )
+                + (
+                    self._tabpfn.get_model_info().get("estimated_memory_mb", 0)
+                    if self._tabpfn
+                    else 0
+                )
+                + (self._phi2.get_model_info().get("estimated_memory_mb", 0) if self._phi2 else 0)
             ),
         }
 
@@ -269,6 +312,7 @@ class AtomicTrioPipeline:
 if __name__ == "__main__":
     # Internal service for ML Engine
     import os
+
     import uvicorn
     from fastapi import FastAPI
     from pydantic import BaseModel
@@ -276,11 +320,12 @@ if __name__ == "__main__":
     app = FastAPI(title="QTrader ML Engine — Atomic Trio Service")
 
     # Shared pipeline instance
-    pipeline = AtomicTrioPipeline(
+    config = PipelineConfig(
         chronos_model_id=os.getenv("CHRONOS_MODEL_ID", "amazon/chronos-2"),
         tabpfn_model_id=os.getenv("TABPFN_MODEL_ID", "Prior-Labs/tabpfn_2_5"),
         phi2_model_id=os.getenv("PHI2_MODEL_ID", "mlx-community/phi-2"),
     )
+    pipeline = AtomicTrioPipeline(config=config)
 
     class PredictionRequest(BaseModel):
         historical_prices: list[float] | None = None
@@ -299,7 +344,7 @@ if __name__ == "__main__":
 
     @app.post("/predict")
     async def predict(req: PredictionRequest) -> dict[str, Any]:
-        result = pipeline.run(
+        result = await pipeline.run(
             historical_prices=req.historical_prices,
             market_features=req.market_features,
             market_context=req.market_context,
@@ -309,4 +354,5 @@ if __name__ == "__main__":
         return result.to_dict()
 
     # Start Uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # S104: Binding to all interfaces for Docker accessibility
+    uvicorn.run(app, host="0.0.0.0", port=8001)  # noqa: S104

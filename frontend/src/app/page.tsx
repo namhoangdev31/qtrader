@@ -3,22 +3,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TradingChart } from '@/components/TradingChart';
 import { OrderPanel } from '@/components/OrderPanel';
-import { PositionsTable } from '@/components/PositionsTable';
+import { SimPositionsTable } from '@/components/SimPositionsTable';
 import { TradeHistory } from '@/components/TradeHistory';
 import { PnLStats } from '@/components/PnLStats';
 import { SimControlPanel } from '@/components/SimControlPanel';
-import { SimPositionsTable } from '@/components/SimPositionsTable';
 import { SessionReportModal } from '@/components/SessionReportModal';
 import { SessionHistoryModal } from '@/components/SessionHistoryModal';
+import { useSimulation } from '@/hooks/useSimulation';
 import { 
   Play, 
   Square, 
-  RotateCcw, 
-  Settings, 
   Zap, 
-  TrendingUp, 
   History, 
-  BarChart3, 
   Activity, 
   MessageSquare,
   Bot,
@@ -27,98 +23,33 @@ import {
   Globe,
   Award
 } from 'lucide-react';
-
-interface SimSnapshot {
-  equity: number;
-  cash: number;
-  realized_pnl: number;
-  total_commissions: number;
-  total_gross_pnl: number;
-  current_price: number;
-  open_positions: any[];
-  trade_history: any[];
-  ai_thinking?: string;
-  ai_explanation?: string;
-  thinking_history?: any[];
-  adaptive: {
-    stop_loss_pct: number;
-    take_profit_pct: number;
-    position_size_pct: number;
-    win_rate: number;
-    total_wins: number;
-    total_losses: number;
-    win_streak: number;
-    loss_streak: number;
-    expected_value: number;
-    max_drawdown_pct: number;
-    total_trades: number;
-  };
-  peak_equity: number;
-  max_drawdown: number;
-  position_value: number;
-}
-
-const defaultSimSnapshot: SimSnapshot = {
-  equity: 1000,
-  cash: 1000,
-  realized_pnl: 0,
-  total_commissions: 0,
-  total_gross_pnl: 0,
-  current_price: 50000,
-  open_positions: [],
-  trade_history: [],
-  ai_thinking: "Awaiting first analysis...",
-  ai_explanation: "Simulation engine is initializing market data buffer...",
-  thinking_history: [],
-  adaptive: {
-    stop_loss_pct: 2.0,
-    take_profit_pct: 3.0,
-    position_size_pct: 10.0,
-    win_rate: 0,
-    total_wins: 0,
-    total_losses: 0,
-    win_streak: 0,
-    loss_streak: 0,
-    expected_value: 0,
-    max_drawdown_pct: 0,
-    total_trades: 0,
-  },
-  peak_equity: 1000,
-  max_drawdown: 0,
-  position_value: 0,
-};
+import Link from 'next/link';
 
 export default function Dashboard() {
+  const {
+    simSnapshot,
+    simRunning,
+    logs,
+    activeSession,
+    sessionHistory,
+    addLog,
+    handleSimStart,
+    handleSimStop,
+    handleSimReset,
+    handleSimConfig,
+    fetchSessionHistory,
+    getBaseUrl,
+    getWsUrl
+  } = useSimulation();
+
   const [positions, setPositions] = useState<any[]>([]);
   const [systemStatus, setSystemStatus] = useState({ running: false, mode: 'OFFLINE' });
-  const [logs, setLogs] = useState<{ time: string; msg: string; type: string }[]>([]);
   const [pnlSummary, setPnlSummary] = useState({ total_equity: 100000, realized_pnl: 0, total_commissions: 0 });
   
-  const [simSnapshot, setSimSnapshot] = useState<SimSnapshot>(defaultSimSnapshot);
-  const [activeSession, setActiveSession] = useState<any>(null);
   const [showSessionReport, setShowSessionReport] = useState(false);
   const [sessionReport, setSessionReport] = useState<any>(null);
   const [showSessionHistory, setShowSessionHistory] = useState(false);
-  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
-  const [simRunning, setSimRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<'chart' | 'trades'>('chart');
-
-  const addLog = useCallback((msg: string, type: string = 'info') => {
-    const time = new Date().toLocaleTimeString();
-    setLogs(prev => [{ time, msg, type }, ...prev].slice(0, 50));
-  }, []);
-
-  const getBaseUrl = () => {
-    return (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-      ? 'http://localhost:8000'
-      : 'http://api_dashboard:8000';
-  };
-
-  const getWsUrl = () => {
-    return (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-      ? 'ws://localhost:8000'
-      : 'ws://api_dashboard:8000';
-  };
 
   const submitOrder = async (side: 'BUY' | 'SELL', qty: number) => {
     addLog(`Submitting ${side} order for ${qty} BTC...`, 'system');
@@ -144,63 +75,7 @@ export default function Dashboard() {
     }
   };
 
-  // Simulation WebSocket
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let retryTimeout: NodeJS.Timeout | null = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 50;
-    const BASE_RETRY_MS = 2000;
-
-    const connect = () => {
-      if (retryCount >= MAX_RETRIES) {
-        addLog('Max Simulation WS retries reached.', 'error');
-        return;
-      }
-
-      const wsUrl = `${getWsUrl()}/ws/simulation`;
-      ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        retryCount = 0;
-        addLog('Simulation WebSocket connected.', 'success');
-        setSimRunning(true);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'simulation_update' || msg.equity !== undefined) {
-            setSimSnapshot(prev => ({ ...prev, ...msg }));
-          }
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      ws.onclose = () => {
-        setSimRunning(false);
-        retryCount++;
-        retryTimeout = setTimeout(connect, BASE_RETRY_MS);
-      };
-
-      ws.onerror = () => {
-        addLog('Simulation WS connection error.', 'error');
-      };
-    };
-
-    connect();
-
-    return () => {
-      if (retryTimeout) clearTimeout(retryTimeout);
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-      }
-    };
-  }, [addLog]);
-
-  // Trading WebSocket (legacy)
+  // Trading WebSocket (legacy/non-sim)
   useEffect(() => {
     let ws: WebSocket | null = null;
     let retryTimeout: NodeJS.Timeout | null = null;
@@ -252,126 +127,17 @@ export default function Dashboard() {
         ws.close();
       }
     };
-  }, [addLog]);
-
-  const handleSimStart = async () => {
-    try {
-      await fetch(`${getBaseUrl()}/api/v1/sim/start`, { method: 'POST' });
-      addLog('Simulation started', 'success');
-      if (!activeSession) {
-        startTradingSession();
-      }
-    } catch (e: any) {
-      addLog(`Failed to start simulation: ${e.message}`, 'error');
-    }
-  };
-
-  const handleSimStop = async () => {
-    try {
-      await fetch(`${getBaseUrl()}/api/v1/sim/stop`, { method: 'POST' });
-      addLog('Trading stopped', 'system');
-      setSimRunning(false);
-      
-      // AUTO-STOP TRADING SESSION & SHOW REPORT
-      if (activeSession) {
-        await stopTradingSession();
-      }
-      
-      // AUTO-RESET SIMULATION FOR NEW SESSION
-      await handleSimReset();
-
-    } catch (e: any) {
-      addLog(`Failed to stop trading: ${e.message}`, 'error');
-    }
-  };
-
-  const handleSimReset = async () => {
-    try {
-      await fetch(`${getBaseUrl()}/api/v1/sim/reset`, { method: 'POST' });
-      addLog('Simulation reset', 'system');
-      setSimSnapshot(defaultSimSnapshot);
-    } catch (e: any) {
-      addLog(`Failed to reset simulation: ${e.message}`, 'error');
-    }
-  };
-
-  const handleSimConfig = async (sl: number, tp: number) => {
-    try {
-      await fetch(`${getBaseUrl()}/api/v1/sim/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          initial_balance: 1000,
-          sl_pct: sl / 100,
-          tp_pct: tp / 100,
-          tick_interval: 1.0,
-          base_price: 50000,
-        }),
-      });
-      addLog(`Config updated: SL=${sl}% TP=${tp}%`, 'success');
-    } catch (e: any) {
-      addLog(`Failed to update config: ${e.message}`, 'error');
-    }
-  };
-
-  const startTradingSession = async () => {
-    try {
-      const res = await fetch(`${getBaseUrl()}/api/v1/sessions/start`, { method: 'POST' });
-      const data = await res.json();
-      if (data.status === 'started') {
-        setActiveSession({ session_id: data.session_id, status: 'ACTIVE', start_time: new Date().toISOString() });
-        addLog(`Trading Session Started: ${data.session_id}`, 'success');
-      }
-    } catch (e: any) {
-      addLog(`Failed to start session: ${e.message}`, 'error');
-    }
-  };
-
-  const stopTradingSession = async () => {
-    try {
-      const res = await fetch(`${getBaseUrl()}/api/v1/sessions/stop`, { method: 'POST' });
-      const data = await res.json();
-      if (data.status === 'completed') {
-        setActiveSession(null);
-        setSessionReport(data.report);
-        setShowSessionReport(true);
-        addLog(`Trading Session Completed. Analysis ready.`, 'success');
-      }
-    } catch (e: any) {
-      addLog(`Failed to stop session: ${e.message}`, 'error');
-    }
-  };
+  }, [getWsUrl]);
 
   const handleViewHistory = async () => {
-    try {
-      const res = await fetch(`${getBaseUrl()}/api/v1/sessions/history?limit=20`);
-      const data = await res.json();
-      setSessionHistory(data);
-      setShowSessionHistory(true);
-    } catch (e: any) {
-      addLog(`Failed to fetch session history: ${e.message}`, 'error');
-    }
+    await fetchSessionHistory();
+    setShowSessionHistory(true);
   };
 
   const handleSelectHistoricalSession = (session: any) => {
     setSessionReport(session.summary);
     setShowSessionReport(true);
   };
-
-  useEffect(() => {
-    const checkActiveSession = async () => {
-      try {
-        const res = await fetch(`${getBaseUrl()}/api/v1/sessions/active`);
-        const data = await res.json();
-        if (data.active) {
-          setActiveSession(data.session);
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    checkActiveSession();
-  }, [getBaseUrl]);
 
   const totalSessionPnl = simSnapshot.equity - 1000;
   const isSessionActive = activeSession || simRunning;
@@ -403,6 +169,13 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/expert"
+            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest flex items-center gap-2 border border-blue-500/30 transition-all"
+          >
+            <LayoutDashboard size={14} /> Expert View
+          </Link>
+
           <button 
             onClick={handleViewHistory}
             className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest flex items-center gap-2 border border-[#1e222d] transition-all"
@@ -497,7 +270,7 @@ export default function Dashboard() {
 
                  {/* Message Stream */}
                  <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide bg-[radial-gradient(circle_at_top_right,rgba(41,98,255,0.05),transparent)]">
-                   {simSnapshot.thinking_history?.slice().reverse().map((th, i) => (
+                   {simSnapshot.thinking_history?.slice().reverse().map((th: any, i: number) => (
                      <div key={i} className="flex gap-4 group/msg animate-in fade-in slide-in-from-bottom-4 duration-500">
                        {/* AI Avatar Column */}
                        <div className="flex-shrink-0 mt-1">
@@ -617,7 +390,7 @@ export default function Dashboard() {
               <span className="text-xs font-bold uppercase">Activity Log</span>
             </div>
             <div className="flex-1 overflow-y-auto space-y-2 pr-2 text-[11px] font-mono scrollbar-hide">
-              {logs.map((log, i) => (
+              {logs.map((log: { time: string, type: string, msg: string }, i: number) => (
                 <div key={i} className="flex gap-2 leading-relaxed animate-in fade-in slide-in-from-left-2 duration-300">
                   <span className="text-slate-500 whitespace-nowrap">[{log.time}]</span>
                   <span className={

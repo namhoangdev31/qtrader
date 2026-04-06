@@ -1,7 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from qtrader.execution.paper_engine import PaperTradingEngine
+
 
 @pytest.fixture
 def engine():

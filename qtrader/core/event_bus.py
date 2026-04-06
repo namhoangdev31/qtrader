@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from qtrader.core.backpressure_controller import BackpressureController
-from qtrader.core.event_store import BaseEventStore
 from qtrader.core.events import BaseEvent, EventType
 from qtrader.core.partition_manager import PartitionManager
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from qtrader.core.event_store import BaseEventStore
 
 logger = logging.getLogger(__name__)
 

@@ -10,14 +10,17 @@ Memory-safe implementation:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from qtrader.core.state_replication import StateReplicator
+if TYPE_CHECKING:
+    from qtrader.core.state_replication import StateReplicator
+
 from qtrader.core.config import settings
 
 try:
@@ -153,9 +156,9 @@ class StateStore:
         self._max_active_orders = max_active_orders
         self._max_positions = max_positions
         self._replicator = replicator
-        
+
         # Redis support for shared state
-        self._redis: redis.Redis | None = None
+        self._redis: Any = None
         self._use_redis = False
         if redis and settings.redis_host:
             try:
@@ -164,10 +167,13 @@ class StateStore:
                     port=settings.redis_port,
                     password=settings.redis_password,
                     db=settings.redis_db,
-                    decode_responses=True
+                    decode_responses=True,
                 )
                 self._use_redis = True
-                self._logger.info(f"STATE_STORE | Connected to Redis at {settings.redis_host}:{settings.redis_port}")
+                self._logger.info(
+                    f"STATE_STORE | Connected to Redis at "
+                    f"{settings.redis_host}:{settings.redis_port}"
+                )
             except Exception as e:
                 self._logger.error(f"STATE_STORE | Failed to connect to Redis: {e}")
 
@@ -175,39 +181,37 @@ class StateStore:
         """Sync local state from Redis if available."""
         if not self._use_redis or not self._redis:
             return
-            
+
         try:
             # Sync Positions
             pos_data = await self._redis.hgetall(f"{settings.redis_prefix}:positions")
             if pos_data:
                 async with self._lock:
                     for sym, data_json in pos_data.items():
-                        import json
                         d = json.loads(data_json)
                         self._state.positions[sym] = Position(
                             symbol=sym,
                             quantity=Decimal(d["quantity"]),
                             average_price=Decimal(d["average_price"]),
-                            timestamp=datetime.fromisoformat(d["timestamp"])
+                            timestamp=datetime.fromisoformat(d["timestamp"]),
                         )
-            
+
             # Sync Portfolio Value
             val = await self._redis.get(f"{settings.redis_prefix}:portfolio_value")
             if val:
                 async with self._lock:
                     self._state.portfolio_value = Decimal(val)
-                    
+
             self._logger.info("STATE_STORE | Synced state from Redis")
         except Exception as e:
             self._logger.error(f"STATE_STORE | Remote sync failed: {e}")
 
     async def _update_redis_position(self, symbol: str, position: Position) -> None:
         if self._use_redis and self._redis:
-            import json
             data = {
                 "quantity": str(position.quantity),
                 "average_price": str(position.average_price),
-                "timestamp": position.timestamp.isoformat()
+                "timestamp": position.timestamp.isoformat(),
             }
             await self._redis.hset(f"{settings.redis_prefix}:positions", symbol, json.dumps(data))
 
@@ -238,11 +242,48 @@ class StateStore:
             self._state.positions[position.symbol] = position.copy()
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
-            
+
             # Persist to Redis
             await self._update_redis_position(position.symbol, position)
 
         # Publish state snapshot for replication (Standash §5.2)
+        self._publish_if_primary()
+
+    async def update_position(
+        self, symbol: str, quantity_delta: Decimal, avg_price: Decimal
+    ) -> None:
+        """Incrementally update a position by quantity delta.
+
+        Args:
+            symbol: Trading symbol.
+            quantity_delta: Change in position quantity (positive=buy, negative=sell).
+            avg_price: Average price for the new quantity.
+        """
+        async with self._lock:
+            existing = self._state.positions.get(symbol)
+            if existing:
+                new_qty = existing.quantity + quantity_delta
+                if new_qty == 0:
+                    self._state.positions.pop(symbol, None)
+                else:
+                    total_cost = existing.average_price * abs(existing.quantity) + avg_price * abs(
+                        quantity_delta
+                    )
+                    existing.quantity = new_qty
+                    existing.average_price = (
+                        total_cost / abs(new_qty) if new_qty != 0 else Decimal("0")
+                    )
+                    existing.timestamp = datetime.now(timezone.utc)
+            elif quantity_delta != 0:
+                self._state.positions[symbol] = Position(
+                    symbol=symbol,
+                    quantity=quantity_delta,
+                    average_price=avg_price,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            self._state.version += 1
+            self._state.timestamp = datetime.now(timezone.utc)
+
         self._publish_if_primary()
 
     def _publish_if_primary(self) -> None:
@@ -261,7 +302,7 @@ class StateStore:
             self._state.portfolio_value = value
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
-            
+
             # Persist to Redis
             await self._update_redis_portfolio_value(value)
         self._publish_if_primary()

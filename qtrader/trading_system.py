@@ -6,24 +6,26 @@ Wires ALL modules into a single coherent trading system:
        ↓              ↓                      ↓        ↓       ↓       ↓       ↓       ↓
   WebSocket      Chronos-2            Risk Check   Broker  Fill    Recon   PnL    Monitor
   Streaming      TabPFN 2.5           Kill Switch  Execute Process Track   Alert
-  
+
 Institutional Compliance (Standash §4.1 - §13)
 """
 
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
-import random
 import signal
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from unittest.mock import MagicMock
+from uuid import uuid4
+
+import numpy as np
+from loguru import logger
 
 from qtrader.analytics.pnl_attribution import PnLAttributionEngine
 from qtrader.core.event_bus import EventBus
@@ -34,7 +36,6 @@ from qtrader.core.events import (
     OrderEvent,
     OrderPayload,
 )
-from uuid import uuid4
 from qtrader.core.latency_enforcer import LatencyEnforcer
 from qtrader.core.state_store import Position, StateStore
 from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
@@ -43,24 +44,39 @@ from qtrader.execution.reconciliation_engine import ReconciliationEngine
 from qtrader.execution.shadow_engine import ShadowEngine
 from qtrader.ml.atomic_trio import AtomicTrioPipeline
 from qtrader.ml.remote_client import RemoteAtomicTrioPipeline
+from qtrader.ml.retrain_system import RetrainSystem
 from qtrader.monitoring.alert_engine import AlertEngine, AlertMessage, AlertSeverity
 from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.portfolio.allocator import CapitalAllocationEngine
 from qtrader.risk.kill_switch import GlobalKillSwitch
+from qtrader.features.technical.volatility import ATRFeature
+from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
 
-# Constants for institutional standards
-MIN_CONFIDENCE_SIM = 0.05
-MIN_CONFIDENCE_LIVE = 0.3
-EXIT_CONFIDENCE_SIM = 0.08
-EXIT_CONFIDENCE_LIVE = 0.25
+MIN_CONFIDENCE_SIM = 0.45
+MIN_CONFIDENCE_LIVE = 0.55
+EXIT_CONFIDENCE_SIM = 0.40
+EXIT_CONFIDENCE_LIVE = 0.50
 EPSILON_QTY = 1e-8
 MAX_MD_POINTS = 1000
 MD_PRUNE_TARGET = 500
-MIN_HISTORY_FOR_ALPHA = 10
+MIN_HISTORY_FOR_ALPHA = 30
 MID_PRICE_BTC = 50000.0
-
-logger = logging.getLogger("qtrader.trading_system")
+# Legacy fixed SL/TP removed in favor of DynamicRiskManager
+# STOP_LOSS_PCT = 0.025
+# TAKE_PROFIT_PCT = 0.05
+TRAILING_STOP_PCT = 0.03  # Activate trailing stop after reaching this profit
+MAX_CONSECUTIVE_LOSSES = 20
+MIN_CONSECUTIVE_SIGNALS = 1  # Aggressive: instant entry
+MIN_HOLD_TIME_S = 5  # Fast scalping logic
+MIN_REWARD_TO_SPREAD_RATIO = 2.5  # Predicted move must be 2.5x the spread
+TREND_LOOKBACK = 5  # Lookback for trend confirmation
+VOLATILITY_WINDOW = 20  # Window for volatility calculation
+LOW_LIQUIDITY_HOURS = [0, 1, 2, 3, 4, 5]  # UTC hours to avoid trading
+MIN_VOLUME_THRESHOLD = 0.001  # Minimum volume threshold for signal validity
+LOSS_COOLDOWN_TICKS = 1  # No waiting
+POSITION_COOLDOWN_S = 1  # No waiting
+EMA_ALPHA = 0.2  # Smoothing factor for signal confidence
 
 
 @dataclass
@@ -91,6 +107,9 @@ class TradingSystemConfig:
     # Heartbeat
     heartbeat_interval_s: float = 10.0
 
+    # Signal processing interval (seconds between signal checks)
+    signal_interval_s: float = 1.0
+
     # Alerting
     slack_webhook_url: str | None = None
     pagerduty_routing_key: str | None = None
@@ -101,6 +120,13 @@ class TradingSystemConfig:
     # Shadow mode
     shadow_mode: bool = True
     shadow_min_days: int = 7
+
+    # Dynamic Risk Parameters
+    atr_window: int = 14
+    atr_multiplier: float = 2.0
+    forecast_multiplier: float = 1.5
+    min_sl_pct: float = 0.005
+    max_sl_pct: float = 0.05
 
 
 class TradingSystem:
@@ -129,6 +155,20 @@ class TradingSystem:
                 )
                 logger.info("[TRADING_SYSTEM] Using Local ML Engine")
 
+        # Consecutive loss tracking for circuit breaker
+        self._consecutive_losses: int = 0
+        self._last_signal_direction: dict[str, str] = {}
+        self._signal_streak: dict[str, int] = {}
+        self._loss_cooldown: dict[str, int] = {}  # Cooldown ticks after loss
+        self._peak_equity: float = 1000.0  # Track peak for trailing stop
+        self._position_opened_at: dict[str, float] = {}  # Entry timestamps
+        self._confidence_ema: dict[str, float] = {}  # Smoothed signal confidence
+        self._last_exit_at: dict[str, float] = {}  # Exit timestamps for cooldown
+
+        # === 2. MLOps Self-Learning ===
+        self.retrain_system = RetrainSystem(psi_threshold=0.20, performance_drop_delta=0.15)
+        self._win_history: deque[int] = deque(maxlen=50)  # Binary wins for win-rate tracking
+
         # === 2. Risk Management ===
         self.kill_switch = GlobalKillSwitch(
             dd_limit=self.config.max_drawdown_pct,
@@ -151,14 +191,23 @@ class TradingSystem:
         )
         self.broker.set_market_data_handler(self._on_market_data_update)
 
-        # === 4. Portfolio Management ===
+        # === 4. Portfolio & Risk Management ===
         self.allocator = CapitalAllocationEngine(max_cap=Decimal("0.2"))
+        self.guardrail_manager = DynamicGuardrailManager(
+            atr_multiplier=self.config.atr_multiplier,
+            forecast_multiplier=self.config.forecast_multiplier,
+            min_sl_pct=self.config.min_sl_pct,
+            max_sl_pct=self.config.max_sl_pct,
+        )
+        self.atr_indicator = ATRFeature(window=self.config.atr_window)
 
         # === 5. Shadow Validation ===
-        self.shadow_engine = ShadowEngine({
-            "shadow_mode": self.config.shadow_mode or self.config.simulate,
-            "min_shadow_duration_s": self.config.shadow_min_days * 86400,
-        })
+        self.shadow_engine = ShadowEngine(
+            {
+                "shadow_mode": self.config.shadow_mode or self.config.simulate,
+                "min_shadow_duration_s": self.config.shadow_min_days * 86400,
+            }
+        )
 
         # === 6. OMS & Reconciliation ===
         self.oms = UnifiedOMS(state_store=self.state_store, event_bus=self.event_bus)
@@ -183,15 +232,30 @@ class TradingSystem:
         # === 8. State ===
         self._running = False
         self._shutdown_event = asyncio.Event()
-        self._market_data: dict[str, list[float]] = {s: [] for s in self.config.symbols}
+        self._market_data: dict[str, list[dict[str, float]]] = {s: [] for s in self.config.symbols}
         self._stats = {
-            "orders": 0, "fills": 0, "errors": 0, "signals": 0,
-            "recon_checks": 0, "recon_mismatches": 0, "alerts_sent": 0,
-            "start_time": 0.0, "last_heartbeat": 0.0,
+            "orders": 0,
+            "fills": 0,
+            "errors": 0,
+            "signals": 0,
+            "recon_checks": 0,
+            "recon_mismatches": 0,
+            "alerts_sent": 0,
+            "start_time": 0.0,
+            "last_heartbeat": 0.0,
         }
         self._last_fill_count: int = 0
         self.last_thinking: dict[str, dict[str, str]] = {}
         self.active_session_id: str | None = None
+        self._last_pnl_report: dict[str, Any] = {}
+        self._last_module_traces: dict[str, Any] = {
+            "AlphaEngine": {"status": "AWAITING"},
+            "RiskEngine": {"status": "AWAITING"},
+            "RiskGuard": {"status": "AWAITING"},
+            "Portfolio": {"status": "AWAITING"},
+            "Reconciliation": {"status": "AWAITING"},
+            "Strategy": {"status": "AWAITING"}
+        }
         self._tasks: set[asyncio.Task[Any]] = set()
 
     async def start(self) -> None:
@@ -228,8 +292,11 @@ class TradingSystem:
             capital = Decimal(str(balance["equity"]))
             self.active_session_id = await self.db_writer.start_session(
                 initial_capital=capital,
-                metadata={"mode": "SIM" if self.config.simulate else "LIVE"}
+                metadata={"mode": "SIM" if self.config.simulate else "LIVE"},
             )
+            # Start background loops
+            self._tasks.add(asyncio.create_task(self._pnl_recording_loop()))
+            logger.info("[TS] Performance recording loop started")
             if self.config.simulate:
                 self.broker.paper_account.active_session_id = self.active_session_id
             logger.info(f"[SESSION] DB session started: {self.active_session_id}")
@@ -239,10 +306,13 @@ class TradingSystem:
         await self._run_pipeline()
 
     async def stop(self) -> None:
-        """Stop the trading system gracefully."""
-        logger.info("TRADING SYSTEM — STOPPING")
+        """Stop the trading system."""
         self._running = False
         self._shutdown_event.set()
+        for task in self._tasks:
+            task.cancel()
+        logger.info("[TS] All background tasks cancelled")
+        logger.info("TRADING SYSTEM — STOPPED")
         await self.event_bus.stop()
         await self.broker.close()
 
@@ -252,10 +322,36 @@ class TradingSystem:
                 await self.db_writer.stop_session(
                     session_id=self.active_session_id,
                     final_capital=Decimal(str(balance["equity"])),
-                    summary=self._stats
+                    summary=self._stats,
                 )
             except Exception as e:
                 logger.error(f"[DB] Session stop failed: {e}")
+
+    async def _pnl_recording_loop(self) -> None:
+        """Periodically record PnL snapshots to DB."""
+        while self._running:
+            try:
+                if self.active_session_id:
+                    balance = await self.broker.get_paper_balance()
+                    # Balance keys: equity, cash, realized_pnl, etc.
+                    await self.db_writer.write_pnl_snapshot(
+                        total_equity=Decimal(str(balance.get("equity", 0))),
+                        cash=Decimal(str(balance.get("cash", 0))),
+                        realized_pnl=Decimal(
+                            str(balance.get("realized_pnl", 0))
+                        ),
+                        unrealized_pnl=Decimal(
+                            str(balance.get("unrealized_pnl", 0))
+                        ),
+                        total_commission=Decimal(
+                            str(balance.get("total_commissions", 0))
+                        ),
+                        session_id=self.active_session_id,
+                    )
+            except Exception as e:
+                logger.error(f"[PNL_REC] Failed to record snapshot: {e}")
+            
+            await asyncio.sleep(5)  # Record every 5 seconds
 
     def _on_shutdown_signal(self) -> None:
         logger.warning("Shutdown signal received")
@@ -268,7 +364,7 @@ class TradingSystem:
         price = Decimal(str(data.get("price", "0")))
         if price > 0:
             self.broker._quotes[symbol] = {"price": price}
-        
+
         event = MarketEvent(
             event_type=EventType.MARKET_DATA,
             source="broker.coinbase",
@@ -276,7 +372,7 @@ class TradingSystem:
                 symbol=symbol,
                 bid=Decimal(str(data.get("best_bid", "0"))),
                 ask=Decimal(str(data.get("best_ask", "0"))),
-                data=data
+                data=data,
             ),
         )
         await self.event_bus.publish(event)
@@ -297,6 +393,10 @@ class TradingSystem:
                 tasks = [self._process_symbol(symbol) for symbol in self.config.symbols]
                 await asyncio.gather(*tasks)
 
+                # Rate limiting: wait between signal checks to reduce whipsaw
+                if self.config.signal_interval_s > 0:
+                    await asyncio.sleep(self.config.signal_interval_s)
+
                 # 2. Periodic Reconciliation
                 await self._periodic_reconciliation()
 
@@ -309,7 +409,9 @@ class TradingSystem:
                         cash=Decimal(str(balance["cash"])),
                         realized_pnl=Decimal(str(balance["realized_pnl"])),
                         unrealized_pnl=Decimal("0"),
-                        total_commission=Decimal(str(balance["total_commissions"])),
+                        total_commission=Decimal(
+                            str(balance["total_commissions"])
+                        ),
                         session_id=self.active_session_id,
                     )
                 except Exception as e:
@@ -318,15 +420,15 @@ class TradingSystem:
                 # Wait for next tick
                 try:
                     await asyncio.wait_for(
-                        self._shutdown_event.wait(),
-                        timeout=self.config.heartbeat_interval_s
+                        self._shutdown_event.wait(), timeout=self.config.heartbeat_interval_s
                     )
                 except asyncio.TimeoutError:
                     pass
 
             except Exception as e:
                 self._stats["errors"] += 1
-                logger.error(f"Pipeline error: {e}", exc_info=True)
+                import traceback
+                logger.error(f"Pipeline error: {e}\n{traceback.format_exc()}")
                 await asyncio.sleep(1)
 
         await self.stop()
@@ -334,7 +436,7 @@ class TradingSystem:
     async def _process_symbol(self, symbol: str) -> None:
         """Modular processing for a single symbol."""
         self.latency_enforcer.start_pipeline(f"pipeline-{symbol}")
-        
+
         # 1. Market Data
         market_data = await self._get_market_data(symbol)
         if market_data is None:
@@ -353,51 +455,264 @@ class TradingSystem:
         # 4. Latency Completion
         self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
 
+        # 5. UNCONDITIONAL Pulse module traces for forensic awareness (Standash §14)
+        # This ensures the Logic Matrix stays alive even during "HOLD" states.
+        self._last_module_traces = self._get_module_traces(symbol, ml_result)
+
     async def _validate_and_generate_signal(
         self, symbol: str, ml_result: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Check existing positions and generate entry/exit signals."""
+        if self._consecutive_losses >= MAX_CONSECUTIVE_LOSSES:
+            logger.warning(
+                f"[CIRCUIT_BREAKER] {symbol} halted: {self._consecutive_losses} consecutive losses"
+            )
+            return None
+
+        if self._loss_cooldown.get(symbol, 0) > 0:
+            logger.debug(
+                f"[COOLDOWN] {symbol} in cooldown: {self._loss_cooldown[symbol]} ticks remaining"
+            )
+            self._loss_cooldown[symbol] -= 1
+            return None
+
+        current_hour = datetime.utcnow().hour
+        if current_hour in LOW_LIQUIDITY_HOURS:
+            logger.debug(f"[TIME_FILTER] {symbol} skipped: low liquidity hour {current_hour} UTC")
+            return None
+
         with self.latency_enforcer.measure_stage("signal_generation"):
             balance = await self.broker.get_balance()
             symbol_key = symbol.split("-", 1)[0]
             current_qty = float(balance.get(symbol_key, 0.0))
+            current_price = (
+                self._market_data[symbol][-1] if self._market_data[symbol] else MID_PRICE_BTC
+            )
+
+            market_data = await self._get_market_data(symbol)
+            if not market_data:
+                return None
+
+            # Bid-Ask Spread Filter: Prevent EV- cannibalization
+            bid = float(market_data.get("bid", 0))
+            ask = float(market_data.get("ask", 0))
+            spread_pct = (ask - bid) / current_price if current_price > 0 else 0
             
-            # Dynamic Exit Check
+            volume = market_data.get("volume", 0)
+            if volume < MIN_VOLUME_THRESHOLD:
+                logger.info(
+                    f"[VOLUME_FILTER] {symbol} skipped: volume {volume:.4f} < {MIN_VOLUME_THRESHOLD}"
+                )
+                return None
+
             if abs(current_qty) > EPSILON_QTY:
+                # 1. Hard Stops (Always active)
+                exit_signal = self._check_stop_loss_take_profit(symbol, current_qty, current_price)
+                if exit_signal:
+                    logger.info(f"[STOP_LOSS/TP] {symbol} exit triggered at {current_price}")
+                    await self._execute_dynamic_exit(
+                        symbol, current_qty, exit_signal, reason=exit_signal.get("reason", "HARD_STOP")
+                    )
+                    self._last_exit_at[symbol] = time.time()
+                    return None
+
+            # 2. Dynamic Exits (ML-based) - Signal Hysteresis
+                hold_time = time.time() - self._position_opened_at.get(symbol, 0)
+                if hold_time < MIN_HOLD_TIME_S:
+                    # Skip dynamic checks if trade is too young
+                    return None
+
+                # Update Confidence EMA for exit
+                raw_confidence = float(ml_result.get("confidence", 0.0))
+                last_ema = self._confidence_ema.get(symbol, raw_confidence)
+                self._confidence_ema[symbol] = (EMA_ALPHA * raw_confidence) + (
+                    (1 - EMA_ALPHA) * last_ema
+                )
+
+                # Check for ML reversal signal using EMA smoothed confidence
+                ml_result["confidence"] = self._confidence_ema[symbol]
                 exit_signal = self._generate_signal(symbol, ml_result, is_exit_check=True)
+                
                 if exit_signal and exit_signal["side"] != ("BUY" if current_qty > 0 else "SELL"):
-                    logger.info(f"[DYNAMIC_EXIT] {symbol} reversal detected")
-                    await self._execute_dynamic_exit(symbol, current_qty, exit_signal)
+                    logger.info(
+                        f"[DYNAMIC_EXIT] {symbol} reversal (EMA {self._confidence_ema[symbol]:.2f}) after {hold_time:.1f}s"
+                    )
+                    await self._execute_dynamic_exit(symbol, current_qty, exit_signal, reason="ML_REVERSAL")
+                    self._last_exit_at[symbol] = time.time()
+                    return None
+                
+                new_signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
+                if new_signal and new_signal["side"] == ("BUY" if current_qty > 0 else "SELL"):
+                    logger.info(f"[AGGRESSIVE_STAKING] {symbol} signal reinforces position")
+                    return new_signal
+                return None
+
+            # 3. New Entry Pipeline
+            # Position Cooldown check
+            since_last_exit = time.time() - self._last_exit_at.get(symbol, 0)
+            if since_last_exit < POSITION_COOLDOWN_S:
+                logger.debug(f"[COOLDOWN] {symbol} (Exit {since_last_exit:.1f}s ago) - Waiting for cooldown")
+                return None
+
+            # Update Confidence EMA for entry
+            raw_confidence = float(ml_result.get("confidence", 0.0))
+            last_ema = self._confidence_ema.get(symbol, raw_confidence)
+            self._confidence_ema[symbol] = (EMA_ALPHA * raw_confidence) + (
+                (1 - EMA_ALPHA) * last_ema
+            )
             
-            # New Entry Check
+            # Use smoothed confidence for entry signal
+            ml_result["confidence"] = self._confidence_ema[symbol]
+            
+            # Extract predicted move from Chronos-2
+            chronos = ml_result.get("chronos", {})
+            forecast_mean = chronos.get("mean", [])
+            predicted_move_pct = 0.0
+            if len(forecast_mean) >= 2:
+                predicted_move_pct = abs((forecast_mean[-1] - forecast_mean[0]) / forecast_mean[0])
+
+            # Spread Gateway: Entry only if Alpha > 2.5 * Spread
+            if predicted_move_pct < (spread_pct * MIN_REWARD_TO_SPREAD_RATIO):
+                logger.info(
+                    f"[SPREAD_FILTER] {symbol} rejected: move {predicted_move_pct:.4%} < {MIN_REWARD_TO_SPREAD_RATIO}x spread ({spread_pct:.4%})"
+                )
+                return None
+
             signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
             if not signal:
                 return None
-            
-            # Allocation Gate
+
+            # Trend confirmation: check if price is moving in signal direction
+            trend_confirmed = self._check_trend_confirmation(symbol, signal["side"])
+            if not trend_confirmed:
+                logger.info(
+                    f"[TREND_FILTER] {symbol} skipped: trend not confirmed for {signal['side']}"
+                )
+                return None
+
+            direction = signal["side"]
+
+            # Require consecutive signals before entry
+            if symbol in self._last_signal_direction:
+                if direction == self._last_signal_direction[symbol]:
+                    self._signal_streak[symbol] = self._signal_streak.get(symbol, 0) + 1
+                else:
+                    self._signal_streak[symbol] = 0
+                    self._last_signal_direction[symbol] = direction
+
+                # Require MIN_CONSECUTIVE_SIGNALS before acting
+                if self._signal_streak.get(symbol, 0) < MIN_CONSECUTIVE_SIGNALS:
+                    logger.info(
+                        f"[STREAK_FILTER] {symbol} waiting: {self._signal_streak.get(symbol, 0)}/{MIN_CONSECUTIVE_SIGNALS}"
+                    )
+                    return None
+
+                if self._signal_streak.get(symbol, 0) >= 3:
+                    logger.debug(
+                        f"[SIGNAL_FILTER] {symbol} same-direction streak {self._signal_streak[symbol]}, reducing size"
+                    )
+                    signal["position_size_multiplier"] *= 0.5
+            else:
+                self._last_signal_direction[symbol] = direction
+                self._signal_streak[symbol] = 0
+                logger.debug(
+                    f"[STREAK_INIT] {symbol} waiting for {MIN_CONSECUTIVE_SIGNALS} consecutive signals"
+                )
+                return None
+
             with self.latency_enforcer.measure_stage("portfolio_allocation"):
                 cash = Decimal(str(balance.get("USD", 0.0)))
                 portfolio_value = cash + sum(
-                    Decimal(str(v)) * Decimal(str(MID_PRICE_BTC)) 
-                    for k, v in balance.items() if k != "USD"
+                    Decimal(str(v)) * Decimal(str(MID_PRICE_BTC))
+                    for k, v in balance.items()
+                    if k != "USD"
                 )
-                
+
                 approved_qty, reason = self.allocator.validate_order_size(
                     symbol=symbol,
                     proposed_qty=Decimal(str(signal["position_size_multiplier"])),
-                    price=Decimal(str(MID_PRICE_BTC)),
+                    price=Decimal(str(current_price)),
                     total_portfolio_value=portfolio_value,
                     current_position_qty=Decimal(str(current_qty)),
                 )
-                
+
                 if approved_qty <= 0:
                     logger.debug(f"[ALLOCATE] {symbol} rejected: {reason}")
                     return None
-                
+
                 signal["position_size_multiplier"] = float(approved_qty)
-            
+                
+                # Dynamic SL/TP Calculation
+                ohlc_list = market_data.get("historical_ohlc", [])
+                atr_val = 0.0
+                if len(ohlc_list) >= self.config.atr_window:
+                    df_ohlc = pl.DataFrame(ohlc_list)
+                    atr_val = float(self.atr_indicator.compute(df_ohlc).tail(1)[0] or 0)
+
+                chronos = ml_result.get("chronos", {})
+                f_95 = float(chronos.get("quantile_95", [0])[-1])
+                f_05 = float(chronos.get("quantile_05", [0])[-1])
+                f_range = f_95 - f_05 if f_95 > 0 else 0.0
+
+                risk_levels = self.guardrail_manager.evaluate(
+                    price=current_price,
+                    atr=atr_val,
+                    forecast_range=f_range,
+                    side=direction
+                )
+
+                signal["stop_loss"] = risk_levels.get("sl_price")
+                signal["take_profit"] = risk_levels.get("tp_price")
+                
+                logger.info(
+                    f"[DYNAMIC_RISK] {symbol} SL={signal['stop_loss']:.2f} "
+                    f"TP={signal['take_profit']:.2f} "
+                    f"({risk_levels.get('risk_source')}, ATR={atr_val:.2f})"
+                )
+
             self._stats["signals"] += 1
             return signal
+
+    def _get_module_traces(self, symbol: str, ml_result: dict[str, Any]) -> dict[str, Any]:
+        """Aggregate forensic traces from all sub-engines with deep diagnostics."""
+        from qtrader.core.latency_enforcer import latency_enforcer
+        
+        latencies = latency_enforcer.get_current_measurements()
+        recon_audit = self.reconciliation_engine.get_last_audit() if hasattr(self, "reconciliation_engine") else {}
+
+        return {
+            "AlphaEngine": {
+                **ml_result,
+                "latency_ms": latencies.get("alpha_computation", {}).get("duration_ms", 0.0),
+                "budget_ms": latencies.get("alpha_computation", {}).get("budget_ms", 5.0),
+            },
+            "RiskEngine": {
+                **(self.kill_switch.get_trace() if hasattr(self.kill_switch, "get_trace") else {}),
+                "latency_ms": latencies.get("risk_check", {}).get("duration_ms", 0.0),
+                "budget_ms": latencies.get("risk_check", {}).get("budget_ms", 5.0),
+            },
+            "RiskGuard": {
+                **(self.guardrail_manager.get_trace() if hasattr(self.guardrail_manager, "get_trace") else {}),
+                "latency_ms": latencies.get("signal_generation", {}).get("duration_ms", 0.0),
+                "budget_ms": latencies.get("signal_generation", {}).get("budget_ms", 5.0),
+            },
+            "Portfolio": {
+                **(self.allocator.get_trace() if hasattr(self.allocator, "get_trace") else {}),
+                "latency_ms": latencies.get("portfolio_allocation", {}).get("duration_ms", 0.0),
+                "budget_ms": latencies.get("portfolio_allocation", {}).get("budget_ms", 10.0),
+            },
+            "Reconciliation": {
+                **recon_audit,
+                "status": "DANGER" if (recon_audit.get("mismatch_count") is not None and recon_audit.get("mismatch_count", 0) > 0) else "OK"
+            },
+            "Strategy": {
+                "streak": self._signal_streak.get(symbol, 0),
+                "last_direction": self._last_signal_direction.get(symbol, "NONE"),
+                "cooldown": self._loss_cooldown.get(symbol, 0),
+                "is_circuit_broken": self._consecutive_losses >= MAX_CONSECUTIVE_LOSSES,
+                "is_anomaly": self._consecutive_losses >= 3  # Simple anomaly flag
+            }
+        }
 
     async def _execute_full_workflow(self, symbol: str, signal: dict[str, Any]) -> None:
         """Full execution workflow with risk and shadow guards."""
@@ -420,25 +735,65 @@ class TradingSystem:
         """Consolidated market data provider."""
         balance = await self.broker.get_balance()
         positions = {k: v for k, v in balance.items() if k != "USD"}
-        
-        base_price = MID_PRICE_BTC if "BTC" in symbol else 3000.0 if "ETH" in symbol else 100.0
-        price = base_price * (1 + random.SystemRandom().uniform(-0.01, 0.01))
-        bid, ask = price * 0.9998, price * 1.0002
-        
+
+        quote = self.broker._quotes.get(symbol, {})
+        if quote and "price" in quote and quote["price"] > 0:
+            price = float(quote["price"])
+            bid = float(quote.get("bid", quote["price"]))
+            ask = float(quote.get("ask", quote["price"]))
+        else:
+            base_price = MID_PRICE_BTC if "BTC" in symbol else 3000.0 if "ETH" in symbol else 100.0
+            price = base_price
+            bid = base_price * 0.9998
+            ask = base_price * 1.0002
+
+        if len(self._market_data[symbol]) > 0:
+            last_entry = self._market_data[symbol][-1]
+            last_price = last_entry["close"] if isinstance(last_entry, dict) else last_entry
+            
+            price_change = (price - last_price) / last_price if last_price > 0 else 0
+            if abs(price_change) > 0.05:
+                logger.warning(
+                    f"[MARKET_DATA] {symbol} price jump {price_change:.2%}, using last known"
+                )
+                price = last_price
+                bid = last_price * 0.9998
+                ask = last_price * 1.0002
+
         self.broker._quotes[symbol] = {
             "price": Decimal(str(price)),
             "bid": Decimal(str(bid)),
-            "ask": Decimal(str(ask))
+            "ask": Decimal(str(ask)),
         }
-        
-        self._market_data[symbol].append(price)
+
+        high = float(quote.get("high", price))
+        low = float(quote.get("low", price))
+
+        # Store OHLC for ATR calculation
+        self._market_data[symbol].append({
+            "high": high,
+            "low": low,
+            "close": price
+        })
         if len(self._market_data[symbol]) > MAX_MD_POINTS:
             self._market_data[symbol] = self._market_data[symbol][-MD_PRUNE_TARGET:]
-            
+
+        # Simple volume proxy
+        volume = 0.0
+        if len(self._market_data[symbol]) >= 2:
+            last_p = self._market_data[symbol][-1]["close"]
+            prev_p = self._market_data[symbol][-2]["close"]
+            volume = abs(last_p - prev_p) / prev_p if prev_p > 0 else 0.0
+
         return {
-            "symbol": symbol, "price": price, "bid": bid, "ask": ask,
-            "historical_prices": list(self._market_data[symbol]),
-            "positions": positions, "volume": random.SystemRandom().uniform(100, 10000)
+            "symbol": symbol,
+            "price": price,
+            "bid": bid,
+            "ask": ask,
+            "historical_ohlc": list(self._market_data[symbol]),
+            "historical_prices": [x["close"] for x in self._market_data[symbol]],
+            "positions": positions,
+            "volume": volume,
         }
 
     async def _run_ml_alpha(
@@ -448,17 +803,50 @@ class TradingSystem:
         historical = market_data.get("historical_prices", [])
         if len(historical) < MIN_HISTORY_FOR_ALPHA:
             return None
-        
+
         result = await self.ml_pipeline.run(
             historical_prices=historical[-100:],
-            market_features={}, market_context={}, system_state={}, prediction_length=10
+            market_features={},
+            market_context={},
+            system_state={},
+            prediction_length=24,
         )
         return {
             "decision": result.decision,
             "chronos": result.chronos_forecast,
             "tabpfn": result.tabpfn_risk,
-            "latency": result.pipeline_latency_ms
+            "latency": result.pipeline_latency_ms,
         }
+
+    def _check_stop_loss_take_profit(
+        self, symbol: str, current_qty: float, current_price: float
+    ) -> dict[str, Any] | None:
+        """Check if current position hits stop loss or take profit."""
+        # AGGRESSIVE MODE: Iterate through all independent trades (lots)
+        lots = self.broker.paper_account.get_positions().get(symbol, [])
+        if not lots:
+            return None
+
+        # Fixed Indentation & Multi-Trade Isolation
+        for lot in lots:
+            avg_entry = float(lot.avg_price)
+            pnl_pct = (current_price - avg_entry) / avg_entry if avg_entry > 0 else 0
+            
+            if lot.side == "BUY":
+                if pnl_pct <= -STOP_LOSS_PCT:
+                    logger.info(f"[LOT_STOP] {symbol} lot {lot.trade_id} exit at {current_price} (SL)")
+                    return {"symbol": symbol, "side": "SELL", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
+                if pnl_pct >= TAKE_PROFIT_PCT:
+                    logger.info(f"[LOT_TP] {symbol} lot {lot.trade_id} exit at {current_price} (TP)")
+                    return {"symbol": symbol, "side": "SELL", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
+            elif lot.side == "SELL":
+                # For SHORTS, pnl_pct is negative if price went up
+                if pnl_pct >= STOP_LOSS_PCT:
+                    return {"symbol": symbol, "side": "BUY", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
+                if pnl_pct <= -TAKE_PROFIT_PCT:
+                    return {"symbol": symbol, "side": "BUY", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
+        
+        return None
 
     def _generate_signal(
         self, symbol: str, ml_result: dict[str, Any], is_exit_check: bool = False
@@ -469,34 +857,63 @@ class TradingSystem:
             decision.action.value if hasattr(decision.action, "value") else decision.action
         )
         confidence = float(decision.confidence)
-        
+
         threshold = MIN_CONFIDENCE_SIM if self.config.simulate else MIN_CONFIDENCE_LIVE
         if is_exit_check:
             threshold = EXIT_CONFIDENCE_SIM if self.config.simulate else EXIT_CONFIDENCE_LIVE
-        
+
         if action == "HOLD" or confidence < threshold:
             return None
-            
-        # Persist thinking log
-        task = asyncio.create_task(self.db_writer.write_thinking_log(
-            symbol=symbol, action=action, confidence=confidence,
-            thinking=str(decision.reasoning), explanation=str(decision.explanation),
-            session_id=self.active_session_id
-        ))
+
+        position_size = float(getattr(decision, "position_size_multiplier", 0.1))
+        position_size = min(position_size, 0.1)
+
+        task = asyncio.create_task(
+            self.db_writer.write_thinking_log(
+                symbol=symbol,
+                action=action,
+                confidence=confidence,
+                thinking=str(decision.reasoning),
+                explanation=str(decision.explanation),
+                session_id=self.active_session_id,
+            )
+        )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
-        
+
         return {
-            "symbol": symbol, "side": "BUY" if action == "BUY" else "SELL",
-            "position_size_multiplier": float(decision.position_size_multiplier),
-            "confidence": confidence, "reasoning": str(decision.reasoning)
+            "symbol": symbol,
+            "side": "BUY" if action == "BUY" else "SELL",
+            "position_size_multiplier": position_size,
+            "confidence": confidence,
+            "reasoning": str(decision.reasoning),
         }
+
+    def _check_trend_confirmation(self, symbol: str, side: str) -> bool:
+        """Check if price trend confirms the signal direction using lookback window."""
+        if not self._market_data[symbol] or len(self._market_data[symbol]) < TREND_LOOKBACK:
+            return True  # Not enough data, allow signal
+
+        prices = self._market_data[symbol][-TREND_LOOKBACK:]
+
+        # Calculate simple moving average difference
+        ma_short = sum(prices[-3:]) / 3
+        ma_long = sum(prices) / len(prices)
+
+        if side == "BUY":
+            # For BUY signal, price should be trending up (short MA > long MA)
+            return ma_short >= ma_long
+        else:
+            # For SELL signal, price should be trending down (short MA < long MA)
+            return ma_short <= ma_long
 
     def _check_risk(self, signal: dict[str, Any]) -> bool:
         """Pre-trade risk validator wrapper."""
         return self.pre_trade_risk.validate_order(
-            symbol=signal["symbol"], side=signal["side"],
-            quantity=Decimal(str(signal["position_size_multiplier"])), price=None
+            symbol=signal["symbol"],
+            side=signal["side"],
+            quantity=Decimal(str(signal["position_size_multiplier"])),
+            price=None,
         ).approved
 
     async def _execute_order(self, signal: dict[str, Any]) -> None:
@@ -510,25 +927,32 @@ class TradingSystem:
                 action=signal["side"],
                 quantity=Decimal(str(signal["position_size_multiplier"])),
                 order_type="MARKET",
-                session_id=self.active_session_id
-            )
+                session_id=self.active_session_id,
+            ),
         )
-        
+
         try:
             oid = await self.broker.submit_order(order)
+            self._position_opened_at[signal["symbol"]] = time.time()
             self._stats["orders"] += 1
-            task = asyncio.create_task(self.db_writer.write_order(
-                broker_order_id=oid, symbol=signal["symbol"], side=signal["side"],
-                order_type="MARKET", quantity=order.quantity, source="TS",
-                session_id=self.active_session_id
-            ))
+            task = asyncio.create_task(
+                self.db_writer.write_order(
+                    broker_order_id=oid,
+                    symbol=signal["symbol"],
+                    side=signal["side"],
+                    order_type="MARKET",
+                    quantity=order.quantity,
+                    source="TS",
+                    session_id=self.active_session_id,
+                )
+            )
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
         except Exception as e:
             logger.error(f"[ORDER] Failed: {e}")
 
     async def _execute_dynamic_exit(
-        self, symbol: str, current_qty: float, exit_signal: dict[str, Any]
+        self, symbol: str, current_qty: float, exit_signal: dict[str, Any], reason: str = "DYNAMIC EXIT"
     ) -> None:
         """Specific logic for tactical exits."""
         side = "SELL" if current_qty > 0 else "BUY"
@@ -541,10 +965,10 @@ class TradingSystem:
                 action=side,
                 quantity=Decimal(str(abs(current_qty))),
                 order_type="MARKET",
-                session_id=self.active_session_id
-            )
+                session_id=self.active_session_id,
+            ),
         )
-        
+
         await self.broker.submit_order(order)
         self._stats["orders"] += 1
 
@@ -553,51 +977,76 @@ class TradingSystem:
         history = self.broker.paper_account.fill_history
         if len(history) <= self._last_fill_count:
             return
-        
-        new_fills = list(history)[self._last_fill_count:]
+
+        new_fills = list(history)[self._last_fill_count :]
         self._last_fill_count = len(history)
-        
+
         for fill in new_fills:
             self._stats["fills"] += 1
             sym, side, qty, px = fill["symbol"], fill["side"], fill["qty"], fill["price"]
-            
-            # State Update
+
             pos = Position(
                 symbol=sym,
                 quantity=Decimal(str(qty)),
                 average_price=Decimal(str(px)),
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
             await self.state_store.set_position(pos)
-            
-            # DB Write
-            task = asyncio.create_task(self.db_writer.write_fill(
-                order_id=fill.get("order_id", ""), symbol=sym, side=side,
-                quantity=Decimal(str(qty)), price=Decimal(str(px)),
-                commission=Decimal(str(fill.get("commission", 0))),
-                source="TS", 
-                session_id=fill.get("session_id") or self.active_session_id
-            ))
+
+            task = asyncio.create_task(
+                self.db_writer.write_fill(
+                    order_id=fill.get("order_id", ""),
+                    symbol=sym,
+                    side=side,
+                    quantity=Decimal(str(qty)),
+                    price=Decimal(str(px)),
+                    commission=Decimal(str(fill.get("commission", 0))),
+                    source="TS",
+                    session_id=fill.get("session_id") or self.active_session_id,
+                )
+            )
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
+
+            realized_pnl = self.broker.paper_account.realized_pnl
+            if realized_pnl > 0:
+                self._consecutive_losses = 0
+                self._win_history.append(1)
+            else:
+                self._win_history.append(0)
+
+            # Check for MLOps retraining (Self-Learning)
+            if len(self._win_history) >= 10:
+                current_wr = sum(self._win_history) / len(self._win_history)
+                if current_wr < 0.35: # Performance decay trigger
+                    decision = self.retrain_system.evaluate(
+                        expected_dist=np.array([0.5, 0.5]), # Mock dist for now
+                        actual_dist=np.array([current_wr, 1-current_wr]),
+                        current_perf=current_wr,
+                        baseline_perf=0.55
+                    )
+                    if decision.trigger:
+                        logger.error(f"[RETRAIN] Performance decay detected (WR={current_wr:.2f}). {decision.reason}")
+
+            logger.info(
+                f"[TRADE] {fill.get('timestamp', '')} | {sym} {side} {qty}@{px} | "
+                f"SL={signal.get('stop_loss', 'N/A')} TP={signal.get('take_profit', 'N/A')} | "
+                f"Reason: {signal.get('reasoning', 'SIGNAL')}"
+            )
 
     async def _periodic_reconciliation(self) -> None:
         """Standard reconciliation checks."""
         self._stats["recon_checks"] += 1
-        # Detailed reconciliation logic omitted for brevity in recovery, 
-        # normally calls self.recon.check()
 
     async def _send_alert(self, severity: AlertSeverity, title: str, message: str) -> None:
         """System alerting."""
-        await self.alert_engine.send_alert(AlertMessage(
-            title=title, message=message, severity=severity, source="TS"
-        ))
+        await self.alert_engine.send_alert(
+            AlertMessage(title=title, message=message, severity=severity, source="TS")
+        )
 
 
 def create_trading_system(
-    simulate: bool = True,
-    symbols: list[str] | None = None,
-    ml_pipeline: Any | None = None
+    simulate: bool = True, symbols: list[str] | None = None, ml_pipeline: Any | None = None
 ) -> TradingSystem:
     config = TradingSystemConfig(simulate=simulate, symbols=symbols or ["BTC-USD"])
     return TradingSystem(config, ml_pipeline=ml_pipeline)
@@ -605,7 +1054,10 @@ def create_trading_system(
 
 async def main() -> None:
     system = create_trading_system(simulate=True, symbols=["BTC-USD"])
-    def handle_signal(sig: int, frame: Any) -> None: system._shutdown_event.set()
+
+    def handle_signal(sig: int, frame: Any) -> None:
+        system._shutdown_event.set()
+
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 

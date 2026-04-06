@@ -103,7 +103,9 @@ class PreTradeRiskValidator:
     def update_portfolio_value(self, value: Decimal) -> None:
         """Update total portfolio value."""
         self._portfolio_value = value
-        self._total_exposure = sum(abs(p) for p in self._positions.values())
+        self._total_exposure = Decimal("0")
+        for p in self._positions.values():
+            self._total_exposure += abs(p)
 
     def validate_order(
         self,
@@ -169,7 +171,8 @@ class PreTradeRiskValidator:
 
         # Check 5: Position limit
         current_position = self._positions.get(symbol, Decimal("0"))
-        new_position = current_position + (quantity if side == "BUY" else -quantity)
+        side_upper = side.upper()
+        new_position = current_position + (quantity if side_upper == "BUY" else -quantity)
         if abs(new_position) > self.config.max_position_per_symbol:
             checks_failed.append(
                 f"POSITION_EXCEEDED: {abs(new_position)} > {self.config.max_position_per_symbol}"

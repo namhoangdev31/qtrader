@@ -3,6 +3,7 @@ import logging
 import time
 from collections import defaultdict
 from decimal import Decimal
+from typing import Any
 
 from qtrader.core.events import EventType, FillEvent, SystemEvent, SystemPayload
 from qtrader.core.state_store import StateStore
@@ -44,6 +45,7 @@ class ReconciliationEngine:
         self._last_recon_time: float = 0.0
         self._recon_count: int = 0
         self._mismatch_count: int = 0
+        self._last_audit: dict[str, Any] = {}
 
     async def start(self) -> None:
         """Subscribe to necessary events and start periodic reconciliation."""
@@ -85,10 +87,10 @@ class ReconciliationEngine:
 
         # Get all tracked positions from OMS
         oms_positions = await self._get_all_oms_positions()
-        
+
         # Also check assets that might be in broker but NOT in OMS yet
         all_symbols = set(oms_positions.keys())
-        for name, adapter in self.oms.adapters.items():
+        for _name, adapter in self.oms.adapters.items():
             try:
                 balances = await adapter.get_balance()
                 for asset in balances:
@@ -103,11 +105,23 @@ class ReconciliationEngine:
                 exchange_qty = await self._fetch_exchange_position(symbol)
                 diff = oms_qty - exchange_qty
 
-                if abs(diff) > Decimal("1e-5"): # Increased tolerance for paper trading
+                if abs(diff) > Decimal("1e-5"):  # Increased tolerance for paper trading
                     # SPECIAL CASE: If OMS is 0 and it's paper trading, we might want to sync
                     if oms_qty == 0 and exchange_qty != 0:
-                        self._log.info(f"PERIODIC_RECON | First-run sync: {symbol} -> {exchange_qty}")
-                        await self.state_store.update_position(symbol, exchange_qty, Decimal("0"))
+                        self._log.info(
+                            f"PERIODIC_RECON | First-run sync: {symbol} -> {exchange_qty}"
+                        )
+                        from datetime import datetime
+
+                        from qtrader.core.state_store import Position
+
+                        pos = Position(
+                            symbol=symbol,
+                            quantity=exchange_qty,
+                            average_price=Decimal("0"),
+                            timestamp=datetime.now(),
+                        )
+                        await self.state_store.set_position(pos)
                         continue
 
                     mismatches.append(
@@ -155,9 +169,20 @@ class ReconciliationEngine:
             await self.event_bus.publish(halt_event)
         else:
             self._log.info(
-                f"PERIODIC_RECON | OK | {len(oms_positions)} symbols reconciled | "
                 f"Recon #{self._recon_count}"
             )
+        
+        self._last_audit = {
+            "timestamp": self._last_recon_time,
+            "mismatches": mismatches,
+            "mismatch_count": len(mismatches),
+            "total_symbols": len(oms_positions),
+            "status": "ERROR" if mismatches else "OK"
+        }
+
+    def get_last_audit(self) -> dict[str, Any]:
+        """Return the latest reconciliation result."""
+        return self._last_audit
 
     async def _get_all_oms_positions(self) -> dict[str, Decimal]:
         """Get all positions from the OMS."""

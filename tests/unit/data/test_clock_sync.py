@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from qtrader.data.clock_sync import ClockSyncResult, ClockSynchronizer
+from qtrader.data.clock_sync import ClockSynchronizer, ClockSyncResult
 
 
 class TestClockSynchronizer:
@@ -40,7 +40,7 @@ class TestClockSynchronizer:
     def test_correct_timestamp(self) -> None:
         sync = ClockSynchronizer(max_drift_ms=1.0)
         # Add drift measurements
-        for i in range(10):
+        for _i in range(10):
             sync.check_drift(system_time_ms=1000000.0 + 2.0, exchange_time_ms=1000000.0)
 
         corrected = sync.correct_timestamp(1000000.0)

@@ -3,14 +3,16 @@ import json
 import os
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 try:
     import mlflow
     import mlflow.pyfunc
+
     MLFLOW_AVAILABLE = True
 except ImportError:
     MLFLOW_AVAILABLE = False
-    mlflow = None  # type: ignore
+    mlflow = None
 
 from qtrader.core.config import Config
 
@@ -32,7 +34,7 @@ class ModelRegistry:
             raise RuntimeError(f"MLflow initialization failed: {exc}") from exc
         self.experiment_name = exp
 
-    def log_model_iteration(
+    def log_model_iteration(  # noqa: PLR0913
         self,
         model_name: str,
         model: Any,
@@ -64,7 +66,7 @@ class ModelRegistry:
                 {
                     "model_type": str(type(model)),
                     "params_hash": params_hash,
-                    "trained_at": datetime.now(Config.timezone).isoformat(),
+                    "trained_at": datetime.now(ZoneInfo(Config.timezone)).isoformat(),
                 }
             )
 
@@ -106,7 +108,7 @@ class ModelRegistry:
                     f"{artifact_path}/model_summary.txt",
                 )
 
-            return run.info.run_id
+            return str(run.info.run_id)
 
     def get_best_model(self, model_name: str, metric: str = "mse") -> str:
         """Retrieves the run ID of the best performing model."""
@@ -116,10 +118,11 @@ class ModelRegistry:
             order_by=[f"metrics.{metric} ASC"],
         )
         if hasattr(runs, "empty") and not runs.empty:
-            return runs.iloc[0]["run_id"]
+            return str(runs.iloc[0]["run_id"])
         # Handle case where search_runs returns a list
         if isinstance(runs, list) and len(runs) > 0:
-            return runs[0].info.run_id if hasattr(runs[0], "info") else runs[0].get("run_id", "")
+            rid = runs[0].info.run_id if hasattr(runs[0], "info") else runs[0].get("run_id", "")
+            return str(rid)
         return ""
 
     def load_model(self, run_id: str) -> Any:

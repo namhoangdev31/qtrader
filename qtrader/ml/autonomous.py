@@ -4,14 +4,15 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 import polars as pl
 
 from qtrader.core.bus import EventBus
 from qtrader.core.events import (
-    EventType,
     MarketEvent,
     SignalEvent,
+    SignalPayload,
     SystemEvent,
     SystemPayload,
 )
@@ -58,14 +59,17 @@ class AutonomousLoop:
 
         if regime_changed:
             event = SignalEvent(
-                symbol="__regime__",
-                signal_type="REGIME_CHANGE",
-                strength=confidence,
-                metadata={
-                    "regime": regime_id,
-                    "confidence": confidence,
-                    "action": "regime_change",
-                },
+                source="AutonomousLoop",
+                payload=SignalPayload(
+                    symbol="__regime__",
+                    signal_type="REGIME_CHANGE",
+                    strength=Decimal(str(confidence)),
+                    metadata={
+                        "regime": regime_id,
+                        "confidence": confidence,
+                        "action": "regime_change",
+                    },
+                ),
             )
             await self.bus.publish(event)
             log.info("Regime change: %s (conf: %.3f)", regime_id, confidence)
@@ -112,7 +116,7 @@ class AutonomousLoop:
             # Emit SystemEvent for downstream trainer consumers
             retrain_event = SystemEvent(
                 source="AutonomousLoop",
-                trace_id=getattr(event, "trace_id", "unknown"),
+                trace_id=event.trace_id,
                 payload=SystemPayload(
                     action="MODEL_RETRAIN",
                     reason=f"Drift score {drift_score:.3f} exceeded threshold",
@@ -129,6 +133,8 @@ class AutonomousLoop:
             self.registry.log_model_iteration(
                 model_name="auto_retrain_trigger",
                 model={"status": "pending"},
+                features=[],
+                params={"trigger": "drift"},
                 metrics={"drift_score": drift_score},
                 tags={"reason": "drift"},
             )
@@ -136,8 +142,8 @@ class AutonomousLoop:
 
 if __name__ == "__main__":
     # Smoke test: construct with dummy components (no EventBus loop).
-    from qtrader.ml.registry import ModelRegistry  # type: ignore[reimported]
-    from qtrader.ml.rotation import ModelRotator  # type: ignore[reimported]
+    from qtrader.ml.registry import ModelRegistry
+    from qtrader.ml.rotation import ModelRotator
 
     _detector = RegimeDetector()
     _rotator = ModelRotator()
@@ -150,4 +156,5 @@ if __name__ == "__main__":
         bus=_bus,
         interval_s=1,
     )
-    assert isinstance(_loop, AutonomousLoop)
+    if not isinstance(_loop, AutonomousLoop):
+        raise TypeError("Failed to initialize AutonomousLoop properly")

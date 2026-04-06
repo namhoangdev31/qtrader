@@ -11,8 +11,7 @@ from qtrader.core.logger import logger
 from qtrader.core.state_store import Position, StateStore
 from qtrader.core.types import FillEvent, LoggerProtocol, OrderEvent
 from qtrader.risk.kill_switch import GlobalKillSwitch
-from qtrader.risk.war_mode import WarModeEngine, WarModeConfig
-from qtrader.ml.phi2_controller import Phi2DecisionController
+from qtrader.risk.war_mode import WarModeEngine
 
 from .orderbook_simulator import OrderbookSimulator
 

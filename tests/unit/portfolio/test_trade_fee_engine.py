@@ -234,7 +234,7 @@ def test_get_recent_fees() -> None:
     tracker = FeeTracker()
 
     # Record fees at different times
-    time1 = time.time()
+    time.time()
     tracker.record_trade_fee(100.0, 0.5, 0.001, "taker", "BTC", "binance")
 
     time.sleep(0.01)

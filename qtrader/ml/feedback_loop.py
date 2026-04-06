@@ -54,9 +54,7 @@ class FeedbackController:
         # Telemetry
         self._stats = {"processed": 0, "filtered": 0}
 
-    def process_trade(
-        self, trade: dict[str, Any], signal: dict[str, Any]
-    ) -> FeedbackSample | None:
+    def process_trade(self, trade: dict[str, Any], signal: dict[str, Any]) -> FeedbackSample | None:
         """
         Process a trade-signal pair into a high-fidelity training sample.
 
@@ -117,7 +115,5 @@ class FeedbackController:
         return {
             "status": "REPORT",
             "processed_count": total,
-            "noise_ratio": (
-                round(self._stats["filtered"] / total, 4) if total > 0 else 0.0
-            ),
+            "noise_ratio": (round(self._stats["filtered"] / total, 4) if total > 0 else 0.0),
         }

@@ -18,7 +18,7 @@ class AlertEngine:
     Prevent silent failures by ensuring critical incidents are logged and escalated.
     """
 
-    def __init__(self, rules_path: str = "qtrader/alerts/alert_rules.json", incident_log_path: str = "qtrader/alerts/incident_log.json"):
+    def __init__(self, rules_path: str = "qtrader/alerts/alert_rules.json", incident_log_path: str = "qtrader/alerts/incident_log.json") -> None:
         self.rules_path = rules_path
         self.incident_log_path = incident_log_path
         self.rules = self._load_rules()

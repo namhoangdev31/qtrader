@@ -57,7 +57,7 @@ async def test_partition_offsets(store):
     payload = MarketPayload(symbol="SOL/USDT", bid=150.0, ask=150.1)
     
     # Partitions BTC and ETH
-    for i in range(5):
+    for _i in range(5):
         evt_btc = MarketEvent(
             trace_id=uuid.uuid4(), 
             source="Test", 

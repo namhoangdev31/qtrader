@@ -12,19 +12,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 
+from qtrader.analytics.session_analyzer import SessionAnalyzer
 from qtrader.api.dependencies import get_system
 from qtrader.api.schemas import (
     OrderRequest,
     PositionRow,
     SimulationConfig,
     StatusResponse,
-    TransactionLog,
-    TradingUpdate,
 )
-from qtrader.core.events import EventType, MarketEvent, MarketPayload, OrderEvent, OrderPayload
-from qtrader.trading_system import TradingSystem  # noqa: TC001
-from qtrader.analytics.session_analyzer import SessionAnalyzer
+from qtrader.core.events import EventType, OrderEvent, OrderPayload
 from qtrader.persistence.db_writer import TradeDBWriter
+from qtrader.trading_system import TradingSystem  # noqa: TC001
 
 logger = logging.getLogger("qtrader.api.router")
 
@@ -49,7 +47,7 @@ def get_sim_engine() -> Any:
             fee_rate=0.04,
             sl_pct=0.02,
             tp_pct=0.03,
-            tick_interval=1.0,
+            tick_interval=1.0,  # Baseline stabilized to 1.0s to reduce noise
             base_price=50000.0,
         )
     return _simulation_engine
@@ -405,11 +403,16 @@ async def trading_updates(websocket: WebSocket) -> None:
             "positions": pos_rows,
             "status": status,
             "recent_logs": [],
-            "pnl_summary": {
-                "total_equity": balance["equity"],
-                "realized_pnl": balance["realized_pnl"],
-                "total_commissions": balance["total_commissions"],
+            # ATOMIC FLATTENING: Match frontend SimSnapshot expected top-level fields
+            "equity": balance["equity"],
+            "cash": balance["cash"],
+            "realized_pnl": balance["realized_pnl"],
+            "total_commissions": balance["total_commissions"],
+            "current_price": sys.last_price if hasattr(sys, "last_price") else 0.0,
+            "live_trace": {
+                "module_traces": getattr(sys, "_last_module_traces", {})
             },
+            "adaptive": getattr(sys.broker.paper_account, "adaptive", {}) if hasattr(sys.broker, "paper_account") else {}
         }
         return update
 
@@ -436,7 +439,8 @@ async def trading_updates(websocket: WebSocket) -> None:
     try:
         sys.event_bus.subscribe(EventType.FILL, update_handler)
         sys.event_bus.subscribe(EventType.SYSTEM, update_handler)
-        logger.info("[WS] Subscribed to FILL and SYSTEM events for WebSocket updates")
+        sys.event_bus.subscribe(EventType.MARKET, update_handler) # HEARTBEAT: Pulse on every tick
+        logger.info("[WS] Subscribed to FILL, SYSTEM, and MARKET events for real-time pulses")
     except Exception as e:
         logger.error(f"[WS] Failed to subscribe to events: {e}", exc_info=True)
 

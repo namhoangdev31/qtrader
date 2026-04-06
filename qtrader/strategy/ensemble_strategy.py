@@ -210,20 +210,17 @@ class EnsembleStrategy:
 
     def _update_performance(self, strategy_signals: dict) -> None:
         """Update performance tracking for each strategy based on their signals."""
-        # In a real implementation, we would wait for fill signals to update performance
-        # For now, we'll use a proxy: the strength of the signal as a proxy for confidence
-        # This is a simplification - production would use actual P&L from fills
-
         for i, signal in strategy_signals.items():
             if i not in self._strategy_performance:
                 self._strategy_performance[i] = []
 
-            # Use signal strength as a proxy for performance (higher strength = better signal)
-            # In production, replace with actual P&L from fills
-            performance_proxy = float(signal.strength)
-            self._strategy_performance[i].append(performance_proxy)
+            buy_prob = signal.metadata.get("buy_prob", 0.0) if hasattr(signal, "metadata") else 0.0
+            sell_prob = (
+                signal.metadata.get("sell_prob", 0.0) if hasattr(signal, "metadata") else 0.0
+            )
+            signal_conviction = abs(buy_prob - sell_prob)
+            self._strategy_performance[i].append(signal_conviction)
 
-            # Keep only the recent window
             if len(self._strategy_performance[i]) > self.performance_window:
                 self._strategy_performance[i] = self._strategy_performance[i][
                     -self.performance_window :

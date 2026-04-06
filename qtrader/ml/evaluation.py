@@ -122,7 +122,11 @@ class ModelEvaluator:
 
         if importances is None:
             return pl.DataFrame(
-                {"feature": feature_names, "importance": [0.0] * len(feature_names), "rank": [0] * len(feature_names)}
+                {
+                    "feature": feature_names,
+                    "importance": [0.0] * len(feature_names),
+                    "rank": [0] * len(feature_names),
+                }
             )
 
         if importances.shape[0] != len(feature_names):
@@ -173,11 +177,7 @@ class ModelEvaluator:
         )
         cost = transaction_cost_bps / 10_000.0
         df_local = df_local.with_columns(
-            [
-                (
-                    pl.col("strategy_return") - pl.col("_turnover") * cost
-                ).alias("net_return")
-            ]
+            [(pl.col("strategy_return") - pl.col("_turnover") * cost).alias("net_return")]
         )
         df_local = df_local.with_columns(
             [(pl.col("net_return") + 1.0).cum_prod().alias("equity_curve")]
@@ -311,7 +311,7 @@ class NestedCrossValidation:
 if __name__ == "__main__":
     import asyncio
 
-    import polars as pl  # type: ignore[reimported]
+    import polars as pl
     from sklearn.linear_model import LinearRegression
 
     from qtrader.core.bus import EventBus
@@ -323,12 +323,12 @@ if __name__ == "__main__":
         event_bus=EventBus(),
         market_data_adapter=object(),
         alpha_modules=[],
-        feature_validator=None, # type: ignore
+        feature_validator=None,
         strategies=[],
-        ensemble_strategy=None, # type: ignore
-        portfolio_allocator=None, # type: ignore
-        runtime_risk_engine=None, # type: ignore
-        oms_adapter=None, # type: ignore
+        ensemble_strategy=None,
+        portfolio_allocator=None,
+        runtime_risk_engine=None,
+        oms_adapter=None,
     )
     orch.initialize()
     orch.validate()
@@ -358,10 +358,9 @@ if __name__ == "__main__":
         param_grid=[{}],
         feature_cols=["x"],
     )
-    assert isinstance(_res, list)
+    if not isinstance(_res, list):
+        raise TypeError("Evaluation result must be a list")
     print(f"Evaluation Complete | Result Count: {len(_res)}")
-    
+
     # 3. Graceful Clean Halt
     asyncio.run(orch.halt_core("Evaluation_Script_Finished"))
-
-

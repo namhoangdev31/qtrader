@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from typing import TYPE_CHECKING
 
-from qtrader.core.events import BaseEvent
+if TYPE_CHECKING:
+    from qtrader.core.events import BaseEvent
 
 
 class PartitionManager:
@@ -12,7 +14,7 @@ class PartitionManager:
     are always routed to the same worker to maintain strict ordering.
     """
 
-    def __init__(self, num_partitions: int = 16):
+    def __init__(self, num_partitions: int = 16) -> None:
         """
         Initialize the partition manager.
         

@@ -72,7 +72,7 @@ class TraceAuthority:
         Decorator/Context manager helper to wrap a block of execution with a specific trace.
         """
         class TraceContextManager:
-            def __init__(self, tid: UUID):
+            def __init__(self, tid: UUID) -> None:
                 self.tid = tid
                 self.token: contextvars.Token | None = None
 

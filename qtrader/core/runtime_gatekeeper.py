@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from qtrader.core.enforcement_engine import enforcement_engine
-from qtrader.core.events import BaseEvent
 from qtrader.core.exceptions import SystemHalt
+
+if TYPE_CHECKING:
+    from qtrader.core.events import BaseEvent
 
 
 class RuntimeGatekeeper:
@@ -22,7 +24,7 @@ class RuntimeGatekeeper:
         self,
         halt_log_path: str = "qtrader/logs/halt_log.json",
         monitoring_map_path: str = "qtrader/audit/runtime_monitoring_map.json"
-    ):
+    ) -> None:
         self.halt_log_path = halt_log_path
         self.monitoring_map_path = monitoring_map_path
         self.halt_count = 0

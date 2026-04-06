@@ -55,8 +55,14 @@ def test_max_weight_constraint(allocator, mock_strategy_data):
     strategy_stats, _ = mock_strategy_data
     # Make A extremely good to trigger the cap (0.50)
     stats_extreme = strategy_stats.with_columns([
-        pl.when(pl.col("strategy_id") == "strat_a").then(0.01).otherwise(pl.col("volatility")).alias("volatility"),
-        pl.when(pl.col("strategy_id") == "strat_a").then(5.0).otherwise(pl.col("sharpe")).alias("sharpe")
+        pl.when(pl.col("strategy_id") == "strat_a")
+        .then(0.01)
+        .otherwise(pl.col("volatility"))
+        .alias("volatility"),
+        pl.when(pl.col("strategy_id") == "strat_a")
+        .then(5.0)
+        .otherwise(pl.col("sharpe"))
+        .alias("sharpe"),
     ])
     
     weights = allocator.allocate(stats_extreme)
@@ -70,8 +76,8 @@ def test_correlation_penalty(allocator, mock_strategy_data):
     weights = allocator.allocate(strategy_stats, strategy_returns)
     
     # Strategy B should be favored more than if it were correlated
-    # (Since its correlation with others is lower than A's correlation with C)
-    pass # No easy numeric assertion without manual calculation, but ensuring it runs
+    assert weights["strat_b"] > 0
+    assert abs(sum(weights.values()) - 1.0) < 1e-6
 
 def test_empty_input(allocator):
     assert allocator.allocate(pl.DataFrame()) == {}

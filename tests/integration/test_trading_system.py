@@ -204,7 +204,7 @@ class TestTradingSystemEndToEnd:
         from qtrader.monitoring.alert_engine import AlertSeverity
 
         # Alert with no channels should return False but not crash
-        result = await system._send_alert(
+        await system._send_alert(
             AlertSeverity.INFO,
             "Test Alert",
             "This is a test",

@@ -100,7 +100,7 @@ async def test_ledger_benchmarking(event_store):
     acc = "BENCH_ACC"
     num_tx = 100  # 2 entries per tx = 200 entries
     
-    for i in range(num_tx):
+    for _i in range(num_tx):
         await ledger.record_transaction(TransactionRecord(
             trace_id=uuid.uuid4(),
             entries=[

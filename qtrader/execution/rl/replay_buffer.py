@@ -1,6 +1,7 @@
-import numpy as np
 from collections import deque
 from typing import Any
+
+import numpy as np
 
 
 class ExperienceReplayBuffer:

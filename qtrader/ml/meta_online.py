@@ -1,4 +1,5 @@
 """Online meta-learning engine for dynamic strategy and feature weighting."""
+
 import math
 from typing import Any
 
@@ -10,7 +11,7 @@ class OnlineMetaLearner:
     Dynamically adjusts strategy weights, feature weights, and risk multiplier based on feedback.
 
     Attributes:
-        regime_states: Dictionary mapping regime to its state (strategy_weights, feature_weights, risk_multiplier).
+        regime_states: Dictionary mapping regime to its state.
         alpha: Exponential decay factor for weight updates (2/(n_memory+1)).
         strategy_min_weight: Minimum allowed weight for any strategy.
         strategy_max_weight: Maximum allowed weight for any strategy.
@@ -20,7 +21,7 @@ class OnlineMetaLearner:
         temperature: Temperature parameter for softmax in strategy weight calculation.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         n_memory: int = 100,
         strategy_min_weight: float = 0.01,
@@ -53,11 +54,7 @@ class OnlineMetaLearner:
 
     def _get_initial_state(self) -> dict[str, Any]:
         """Return the initial state for a new regime."""
-        return {
-            'strategy_weights': {},
-            'feature_weights': {},
-            'risk_multiplier': 1.0
-        }
+        return {"strategy_weights": {}, "feature_weights": {}, "risk_multiplier": 1.0}
 
     def _compute_suggested_strategy_weights(self, feedback: dict[str, Any]) -> dict[str, float]:
         """
@@ -69,7 +66,7 @@ class OnlineMetaLearner:
         Returns:
             Dictionary mapping strategy names to suggested weights (before normalization).
         """
-        strategy_scores = feedback.get('strategy_scores', {})
+        strategy_scores = feedback.get("strategy_scores", {})
         if not strategy_scores:
             return {}
         # Apply softmax with temperature for numerical stability
@@ -94,7 +91,7 @@ class OnlineMetaLearner:
         Returns:
             Dictionary mapping feature names to suggested weights (before normalization).
         """
-        feature_scores = feedback.get('feature_scores', {})
+        feature_scores = feedback.get("feature_scores", {})
         raw_weights = {}
         for feature, ic in feature_scores.items():
             weight = max(0.0, ic - self.ic_threshold)
@@ -119,8 +116,8 @@ class OnlineMetaLearner:
         Returns:
             Suggested risk multiplier (a float).
         """
-        risk_feedback = feedback.get('risk_feedback', {})
-        max_drawdown = risk_feedback.get('max_drawdown', 0.0)
+        risk_feedback = feedback.get("risk_feedback", {})
+        max_drawdown = risk_feedback.get("max_drawdown", 0.0)
         # Higher drawdown leads to lower risk multiplier (more conservative)
         # Formula: multiplier = 1 / (1 + k * drawdown), k=10 for sensitivity
         return 1.0 / (1.0 + max_drawdown * 10.0)
@@ -184,26 +181,20 @@ class OnlineMetaLearner:
     def _update_strategy_weights(self, state: dict[str, Any], feedback: dict[str, Any]) -> None:
         """Update strategy weights in the given state based on feedback."""
         suggested = self._compute_suggested_strategy_weights(feedback)
-        state['strategy_weights'] = self._update_weights(
-            state['strategy_weights'],
-            suggested,
-            self.strategy_min_weight,
-            self.strategy_max_weight
+        state["strategy_weights"] = self._update_weights(
+            state["strategy_weights"], suggested, self.strategy_min_weight, self.strategy_max_weight
         )
 
     def _update_feature_weights(self, state: dict[str, Any], feedback: dict[str, Any]) -> None:
         """Update feature weights in the given state based on feedback."""
         suggested = self._compute_suggested_feature_weights(feedback)
-        state['feature_weights'] = self._update_weights(
-            state['feature_weights'],
-            suggested,
-            self.feature_min_weight,
-            self.feature_max_weight
+        state["feature_weights"] = self._update_weights(
+            state["feature_weights"], suggested, self.feature_min_weight, self.feature_max_weight
         )
 
     def _update_risk_multiplier(self, state: dict[str, Any], feedback: dict[str, Any]) -> None:
         """Update risk multiplier in the given state based on feedback."""
-        current = state['risk_multiplier']
+        current = state["risk_multiplier"]
         suggested = self._compute_suggested_risk_multiplier(feedback)
         # Exponential moving average
         raw_new = (1 - self.alpha) * current + self.alpha * suggested
@@ -220,7 +211,7 @@ class OnlineMetaLearner:
             new_risk = raw_new
         # Clamp to reasonable bounds [0.5, 2.0]
         new_risk = max(0.5, min(2.0, new_risk))
-        state['risk_multiplier'] = new_risk
+        state["risk_multiplier"] = new_risk
 
     def update(self, feedback: dict[str, Any], regime: Any) -> dict[str, Any]:
         """
@@ -247,25 +238,20 @@ class OnlineMetaLearner:
             self._update_risk_multiplier(state, feedback)
 
             return {
-                'strategy_weights': state['strategy_weights'].copy(),
-                'feature_weights': state['feature_weights'].copy(),
-                'risk_multiplier': state['risk_multiplier']
+                "strategy_weights": state["strategy_weights"].copy(),
+                "feature_weights": state["feature_weights"].copy(),
+                "risk_multiplier": state["risk_multiplier"],
             }
         except Exception as e:
-            # Log the error and return the current state for the regime to avoid crashing
-            # In a real system, we would use a proper logger; here we use print for simplicity.
-            logger.info(f"Error in OnlineMetaLearner.update: {e}")
+            # Log the error and return current state
+            logger.info("Error in OnlineMetaLearner.update: %s", e)
             if regime in self.regime_states:
                 state = self.regime_states[regime]
                 return {
-                    'strategy_weights': state['strategy_weights'].copy(),
-                    'feature_weights': state['feature_weights'].copy(),
-                    'risk_multiplier': state['risk_multiplier']
+                    "strategy_weights": state["strategy_weights"].copy(),
+                    "feature_weights": state["feature_weights"].copy(),
+                    "risk_multiplier": state["risk_multiplier"],
                 }
             else:
                 # Return neutral state if regime not found
-                return {
-                    'strategy_weights': {},
-                    'feature_weights': {},
-                    'risk_multiplier': 1.0
-                }
+                return {"strategy_weights": {}, "feature_weights": {}, "risk_multiplier": 1.0}

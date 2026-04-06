@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from qtrader.core.events import NAVEvent, NAVPayload
-from qtrader.core.state_store import SystemState
+
+if TYPE_CHECKING:
+    from qtrader.core.state_store import SystemState
 
 logger = logging.getLogger(__name__)
 

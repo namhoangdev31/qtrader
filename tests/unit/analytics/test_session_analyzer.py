@@ -1,7 +1,10 @@
-import pytest
-from unittest.mock import AsyncMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from qtrader.analytics.session_analyzer import SessionAnalyzer
+
 
 @pytest.mark.asyncio
 async def test_session_analyzer_no_trades():

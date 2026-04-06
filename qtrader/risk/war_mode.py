@@ -13,8 +13,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from qtrader.core.events import EventType, SystemEvent, SystemPayload
-
 _LOG = logging.getLogger("qtrader.risk.war_mode")
 
 

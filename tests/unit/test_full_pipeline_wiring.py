@@ -1,7 +1,10 @@
-import pytest
-from unittest.mock import MagicMock, patch
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from qtrader.trading_system import TradingSystem, TradingSystemConfig
+
 
 @pytest.fixture
 def mock_ml_result():

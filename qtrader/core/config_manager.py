@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from qtrader.core.event_store import BaseEventStore
 from qtrader.core.events import ConfigChangeEvent, ConfigChangePayload
+
+if TYPE_CHECKING:
+    from qtrader.core.event_store import BaseEventStore
 
 logger = logging.getLogger(__name__)
 

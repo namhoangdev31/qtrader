@@ -1,4 +1,4 @@
-.PHONY: help install test lint check clean up down logs log-api log-bot log-ml rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader
+.PHONY: help install test lint check clean up down logs log-api log-bot log-ml log-ollama ml-status ml-test rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader
 
 help:
 	@echo "=== QTrader Commands ==="
@@ -10,6 +10,11 @@ help:
 	@echo "    log-api      View dashboard API logs"
 	@echo "    log-bot      View orchestrator bot logs"
 	@echo "    log-ml       View ML engine logs"
+	@echo "    log-ollama   View Ollama LLM logs"
+	@echo ""
+	@echo "  Intelligence (AI/ML):"
+	@echo "    ml-status    Check ML engine health and model status"
+	@echo "    ml-test      Run ML-specific unit tests"
 	@echo ""
 	@echo "  Development:"
 	@echo "    install      Install local dependencies (uv sync)"
@@ -46,6 +51,16 @@ log-bot:
 
 log-ml:
 	docker logs -f qt-ml-engine
+
+log-ollama:
+	docker logs -f qt-ollama
+
+# --- Intelligence (AI/ML) ---
+ml-status:
+	@curl -s http://localhost:8001/info | python3 -m json.tool
+
+ml-test:
+	uv run pytest tests/unit/ml/ -v
 
 # --- Development ---
 install:

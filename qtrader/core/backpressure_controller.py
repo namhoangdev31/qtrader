@@ -25,7 +25,7 @@ class BackpressureController:
         warning_threshold: int = 2000,
         throttle_threshold: int = 5000,
         reject_threshold: int = 10000
-    ):
+    ) -> None:
         """
         Initialize thresholds for backpressure.
         

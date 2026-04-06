@@ -14,7 +14,7 @@ import pytest
 # -------------------------------------------------------------------------------------
 class Position:
     """Python equivalent of rust_core Position for contract testing."""
-    def __init__(self, symbol):
+    def __init__(self, symbol: str) -> None:
         self.symbol = symbol
         self.qty = 0.0
         self.avg_entry_price = 0.0
@@ -173,7 +173,7 @@ def test_partial_fill_sequence():
 
 class Account:
     """Minimal Account for contract testing."""
-    def __init__(self, cash):
+    def __init__(self, cash: float) -> None:
         self.cash = cash
         self.positions: dict[str, Position] = {}
 

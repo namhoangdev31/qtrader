@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 async def _ui_heartbeat(system: Any) -> None:
     """Publish periodic SYSTEM events so WebSocket clients stay connected and get updates."""
-    from qtrader.core.events import SystemEvent, EventType, SystemPayload
+    from qtrader.core.events import EventType, SystemEvent, SystemPayload
 
     while True:
         try:
@@ -121,7 +121,7 @@ async def index() -> HTMLResponse:
     """Serve the root index HTML."""
     html_path = os.path.join(TEMPLATES_DIR, "index.html")
     if os.path.exists(html_path):
-        with open(html_path, "r", encoding="utf-8") as f:
+        with open(html_path, encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     return HTMLResponse(content="<h1>QTrader UI: index.html not found!</h1>", status_code=404)
 

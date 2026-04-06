@@ -1,0 +1,132 @@
+import React, { useEffect, useState } from 'react';
+import { Database, Zap, ShieldAlert, ShoppingCart, Activity } from 'lucide-react';
+
+interface FlowVisualizerProps {
+  lastTickTimestamp?: string;
+  lastSignal?: any;
+  simRunning: boolean;
+  liveTrace?: any;
+}
+
+export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ lastTickTimestamp, lastSignal, simRunning, liveTrace }) => {
+  const [activeStage, setActiveStage] = useState<number>(-1);
+
+  useEffect(() => {
+    if (lastTickTimestamp) {
+      // Trigger animation sequence
+      setActiveStage(0);
+      const timer1 = setTimeout(() => setActiveStage(1), 300);
+      const timer2 = setTimeout(() => setActiveStage(2), 600);
+      const timer3 = setTimeout(() => lastSignal ? setActiveStage(3) : setActiveStage(-1), 900);
+      
+      const resetTimer = setTimeout(() => setActiveStage(-1), 2000);
+      
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+        clearTimeout(resetTimer);
+      };
+    }
+  }, [lastTickTimestamp, lastSignal]);
+
+  return (
+    <div className="bg-[#161a25] border border-[#1e222d] rounded-lg p-6 flex flex-col items-center justify-between h-full min-h-[300px]">
+      <div className="w-full flex items-center justify-between mb-8">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-500 flex items-center gap-2">
+          <Activity size={16} /> Real-time Execution Flow
+        </h3>
+        <div className={`px-2 py-1 rounded text-[10px] font-bold border ${
+          simRunning ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+        }`}>
+          {simRunning ? 'LIVESTREAMING' : 'IDLE'}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center w-full relative">
+        <StageItem 
+          icon={<Database size={24} />} 
+          label="Ingestion" 
+          active={activeStage >= 0} 
+          subLabel={liveTrace?.ingestion ? `$${liveTrace.ingestion.price.toFixed(2)}` : "MARKET TICK"}
+        />
+        <Connector active={activeStage >= 1} />
+        <StageItem 
+          icon={<Zap size={24} />} 
+          label="Alpha" 
+          active={activeStage >= 1} 
+          subLabel={liveTrace?.alpha ? `RSI: ${liveTrace.alpha.indicators.rsi.toFixed(1)}` : "ATOMIC TRIO"}
+          highlight={lastSignal?.action !== 'HOLD'}
+        />
+        <Connector active={activeStage >= 2} />
+        <StageItem 
+          icon={<ShieldAlert size={24} />} 
+          label="Risk" 
+          active={activeStage >= 2} 
+          subLabel={liveTrace?.risk ? `SL: ${liveTrace.risk.initial_stop_loss.toFixed(2)}` : "PORTFOLIO GUARD"}
+          type={lastSignal?.action === 'HOLD' ? 'warning' : 'success'}
+        />
+        <Connector active={activeStage >= 3} />
+        <StageItem 
+          icon={<ShoppingCart size={24} />} 
+          label="Execution" 
+          active={activeStage >= 3} 
+          subLabel={liveTrace?.execution ? `SLIP: ${liveTrace.execution.slippage_bps.toFixed(2)}bp` : "ORDER ROUTER"}
+          highlight={lastSignal?.action === 'BUY' || lastSignal?.action === 'SELL'}
+        />
+      </div>
+
+      <div className="w-full mt-8 grid grid-cols-2 gap-4">
+        <div className="bg-black/20 p-3 rounded border border-[#1e222d]">
+          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Last Pipeline Pulse</p>
+          <p className="text-xs font-mono text-blue-300">{lastTickTimestamp || 'NONE'}</p>
+        </div>
+        <div className="bg-black/20 p-3 rounded border border-[#1e222d]">
+          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Signal Strategy</p>
+          <p className="text-xs font-mono text-emerald-300">{lastSignal?.action || 'HOLDING'}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function StageItem({ icon, label, active, subLabel, highlight, type = 'success' }: { 
+  icon: React.ReactNode, 
+  label: string, 
+  active: boolean, 
+  subLabel: string, 
+  highlight?: boolean, 
+  type?: 'success' | 'warning' | 'error' 
+}) {
+  return (
+    <div className={`flex flex-col items-center gap-3 transition-all duration-500 relative ${active ? 'scale-110 opacity-100' : 'opacity-40 scale-100'}`}>
+      <div className={`p-4 rounded-xl border-2 shadow-2xl transition-all duration-300 ${
+        highlight 
+          ? 'bg-blue-500 border-blue-400 text-white shadow-blue-500/50' 
+          : active 
+            ? 'bg-blue-500/20 border-blue-500/80 text-blue-400 shadow-blue-500/20' 
+            : 'bg-slate-800 border-slate-700 text-slate-500'
+      }`}>
+        {icon}
+      </div>
+      <div className="text-center">
+        <div className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-white' : 'text-slate-600'}`}>
+          {label}
+        </div>
+        <div className={`text-[8px] font-bold uppercase mt-0.5 whitespace-nowrap ${
+          active ? (type === 'success' ? 'text-emerald-400' : 'text-amber-400') : 'text-slate-700'
+        }`}>
+          {subLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Connector({ active }: { active: boolean }) {
+  return (
+    <div className="flex-1 h-[2px] min-w-[30px] mx-2 relative bg-slate-800">
+      <div className={`absolute inset-0 bg-blue-500 transition-all duration-500 ${active ? 'w-full shadow-lg shadow-blue-500/50' : 'w-0'}`} />
+    </div>
+  );
+}

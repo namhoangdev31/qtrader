@@ -17,7 +17,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import aiohttp
@@ -27,6 +27,7 @@ from qtrader.core.decimal_adapter import d
 
 try:
     import redis.asyncio as redis_lib
+
     HAS_REDIS = True
 except ImportError:
     redis_lib = None
@@ -35,10 +36,13 @@ from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.execution.brokers.base import BrokerAdapter
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
 from qtrader.execution.http import RetryConfig, request_json
+from qtrader.execution.paper_engine import AdaptiveConfig
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from qtrader.risk.kill_switch import GlobalKillSwitch
-    from qtrader.security.order_signing import OrderSigner, SignedOrder
+    from qtrader.security.order_signing import OrderSigner
 
 logger = logging.getLogger("qtrader.broker.coinbase")
 
@@ -58,33 +62,72 @@ class PaperAccount:
     realized_pnl: Decimal = Decimal("0")
     avg_entry_prices: dict[str, Decimal] = field(default_factory=dict)
     active_session_id: str | None = None
+    adaptive: AdaptiveConfig = field(default_factory=AdaptiveConfig)
 
     @property
     def equity(self) -> Decimal:
-        """Total equity (Cash + Market Value)."""
-        return self.cash
+        """Total equity (Cash + Market Value of all positions)."""
+        position_value = Decimal("0")
+        for asset, qty in self.positions.items():
+            price = Decimal("0")
+            if asset in self.avg_entry_prices:
+                price = self.avg_entry_prices[asset]
+            position_value += abs(qty) * price
+        return self.cash + position_value
 
     def update_position(self, asset: str, qty: Decimal, price: Decimal, side: str) -> None:
-        """Update position and track PnL."""
+        """Update position and track PnL correctly for both long and short."""
         current = self.positions.get(asset, Decimal("0"))
         avg_price = self.avg_entry_prices.get(asset, Decimal("0"))
+        side_upper = side.upper()
 
-        if side.upper() == "BUY":
-            # Add to position
+        if side_upper == "BUY":
+            if current >= 0:
+                total_cost = avg_price * current + price * qty
+                new_qty = current + qty
+                if new_qty != 0:
+                    self.avg_entry_prices[asset] = total_cost / new_qty
+                self.positions[asset] = new_qty
+                self.cash -= price * qty
+            else:
+                closing_qty = min(qty, abs(current))
+                if avg_price > 0:
+                    realized = (avg_price - price) * closing_qty
+                    self.realized_pnl += realized
+                new_qty = current + qty
+                if new_qty == 0:
+                    self.positions.pop(asset, None)
+                    self.avg_entry_prices.pop(asset, None)
+                elif new_qty > 0:
+                    self.avg_entry_prices[asset] = price
+                    self.positions[asset] = new_qty
+                    self.cash -= price * new_qty
+                else:
+                    self.positions[asset] = new_qty
+                    self.cash -= price * qty
+        elif current <= 0:
             total_cost = avg_price * abs(current) + price * qty
-            new_qty = current + qty
+            new_qty = current - qty
             if new_qty != 0:
                 self.avg_entry_prices[asset] = total_cost / abs(new_qty)
             self.positions[asset] = new_qty
-            self.cash -= price * qty
-        else:
-            # Sell / reduce position
-            if current > 0:
-                # Realize PnL on long position
-                realized = (price - avg_price) * min(qty, current)
-                self.realized_pnl += realized
-            self.positions[asset] = current - qty
             self.cash += price * qty
+        else:
+            closing_qty = min(qty, current)
+            if avg_price > 0:
+                realized = (price - avg_price) * closing_qty
+                self.realized_pnl += realized
+            new_qty = current - qty
+            if new_qty == 0:
+                self.positions.pop(asset, None)
+                self.avg_entry_prices.pop(asset, None)
+            elif new_qty < 0:
+                self.avg_entry_prices[asset] = price
+                self.positions[asset] = new_qty
+                self.cash += price * abs(new_qty)
+            else:
+                self.positions[asset] = new_qty
+                self.cash += price * qty
 
         if self.positions.get(asset, d(0)) == 0:
             self.positions.pop(asset, None)
@@ -125,8 +168,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
     ) -> None:
         self.api_key = api_key or Config.COINBASE_API_KEY
         self.api_secret = api_secret or Config.COINBASE_API_SECRET
-        # Force Paper Trading (simulate=True)
-        self.simulate = True
+        self.simulate = simulate if simulate is not None else True
         self._rest_base = rest_base or Config.COINBASE_REST_BASE
         self._key_name = key_name or Config.COINBASE_KEY_NAME
         self._private_key_pem = private_key_pem or Config.COINBASE_PRIVATE_KEY
@@ -139,7 +181,8 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         self.kill_switch = kill_switch
         self.order_signer = order_signer
 
-        # Paper trading config
+        # Initialize paper account with adaptive strategy
+        self.paper_account = PaperAccount()
         self.paper_slippage_bps = paper_slippage_bps
         self.paper_latency_ms = paper_latency_ms
         self.paper_commission_rate = paper_commission_rate
@@ -234,7 +277,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         return {
             "cash": float(self.paper_account.cash),
             "positions": {k: float(v) for k, v in self.paper_account.positions.items()},
-            "equity": float(self.paper_account.cash),  # Simplified
+            "equity": float(self.paper_account.equity),
             "realized_pnl": float(self.paper_account.realized_pnl),
             "total_commissions": float(self.paper_account.total_commissions),
             "order_count": len(self.paper_account.orders),
@@ -282,15 +325,17 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         else:
             price = order.price or d(0)
 
-        # Performance-Based Fee Model: 
+        # Performance-Based Fee Model:
         # 0% on entry, 15% of GROSS PROFIT on exit.
         commission = d(0)
         asset = order.symbol.split("-")[0]
         current_qty = self.paper_account.positions.get(asset, d(0))
         avg_entry = self.paper_account.avg_entry_prices.get(asset, d(0))
-        
-        is_exit = (current_qty > 0 and order.side == "SELL") or (current_qty < 0 and order.side == "BUY")
-        
+
+        is_exit = (current_qty > 0 and order.side == "SELL") or (
+            current_qty < 0 and order.side == "BUY"
+        )
+
         if is_exit:
             # Calculate realized gross profit
             closing_qty = min(abs(current_qty), order.quantity)
@@ -298,11 +343,20 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
                 gross_profit = (price - avg_entry) * closing_qty
             else:
                 gross_profit = (avg_entry - price) * closing_qty
-                
+
             if gross_profit > 0:
                 commission = gross_profit * d(str(self.performance_fee_rate))
+                # Self-learning: Record win
+                self.paper_account.adaptive.record_win(float(gross_profit))
+                logger.info(f"[ADAPTIVE] Profit realized. Win streak optimized: {self.paper_account.adaptive.win_streak}")
+            else:
+                # Self-learning: Record loss
+                self.paper_account.adaptive.record_loss(float(gross_profit))
+                logger.warning(f"[ADAPTIVE] Loss realized. Loss streak detected: {self.paper_account.adaptive.loss_streak}. Adjusting risk...")
 
-        session_id = getattr(order.payload, "session_id", None) or self.paper_account.active_session_id
+        session_id = (
+            getattr(order.payload, "session_id", None) or self.paper_account.active_session_id
+        )
 
         fill = FillEvent(
             source="CoinbasePaperTrading",
@@ -535,7 +589,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             price = d(str(f.get("price") or "0.0"))
             commission = d(str(f.get("commission") or "0.0"))
             side = str(f.get("side") or "").upper() or "BUY"
-            trade_id = str(f.get("trade_id") or f.get("tradeId") or uuid.uuid4())
+            str(f.get("trade_id") or f.get("tradeId") or uuid.uuid4())
             fills.append(
                 FillEvent(
                     source="CoinbaseLive",

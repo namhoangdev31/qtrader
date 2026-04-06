@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -110,16 +109,13 @@ class PurgedKFoldCV:
 
             # Purging: remove any train samples overlapping the test period.
             purge_mask = ~(
-                (keyed[events_col] >= test_start_time)
-                & (keyed[events_col] <= test_end_time)
+                (keyed[events_col] >= test_start_time) & (keyed[events_col] <= test_end_time)
             )
 
             # Embargo: remove samples within embargo window after test_end_time.
             if embargo > 0:
                 embargo_end_idx = min(test_end + embargo, n)
-                embargo_mask = ~(
-                    (keyed["idx"] >= test_end) & (keyed["idx"] < embargo_end_idx)
-                )
+                embargo_mask = ~((keyed["idx"] >= test_end) & (keyed["idx"] < embargo_end_idx))
                 train_mask = purge_mask & embargo_mask & (~test_mask)
             else:
                 train_mask = purge_mask & (~test_mask)
@@ -143,9 +139,10 @@ if __name__ == "__main__":
     )
     _wf = WalkForwardPipeline(train_size=50, test_size=10, embargo=5)
     _splits = _wf.get_splits(_df)
-    assert len(_splits) > 0
+    if not _splits:
+        raise ValueError("Walk-forward pipeline failed to generate splits")
 
     _cv = PurgedKFoldCV(n_splits=5, embargo_pct=0.02)
     _cv_splits = _cv.split(_df, events_col="timestamp")
-    assert len(_cv_splits) > 0
-
+    if not _cv_splits:
+        raise ValueError("Purged K-Fold CV failed to generate splits")

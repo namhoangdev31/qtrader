@@ -1,6 +1,7 @@
 """
 Meta-learning engine for dynamic strategy and feature weight adjustment.
 """
+
 from collections import deque
 
 import numpy as np
@@ -14,7 +15,7 @@ class MetaLearningEngine:
     - Signal confidence scaling
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         window_size: int = 50,
         min_trades: int = 10,
@@ -31,7 +32,8 @@ class MetaLearningEngine:
             window_size: Rolling window size for performance memory
             min_trades: Minimum trades required for weight updates
             temperature: Temperature for softmax weighting
-            strategy_weights: Weights for (sharpe, pnl_mean, drawdown, hit_ratio) in score calculation
+            strategy_weights: Weights for (sharpe, pnl_mean, drawdown, hit_ratio)
+                in score calculation
             decay_penalty: Penalty factor for feature decay
             min_weight: Minimum weight after clipping
             max_weight: Maximum weight after clipping
@@ -45,10 +47,12 @@ class MetaLearningEngine:
         self.max_weight = max_weight
 
         # Performance memory: global and per-regime
-        self.global_strategy_history: dict[str, deque] = {}
-        self.global_feature_history: dict[str, deque] = {}
-        self.regime_strategy_history: dict[str, dict[str, deque]] = {}
-        self.regime_feature_history: dict[str, dict[str, deque]] = {}
+        self.global_strategy_history: dict[str, deque[tuple[float, float, float, float]]] = {}
+        self.global_feature_history: dict[str, deque[tuple[float, float]]] = {}
+        self.regime_strategy_history: dict[
+            str, dict[str, deque[tuple[float, float, float, float]]]
+        ] = {}
+        self.regime_feature_history: dict[str, dict[str, deque[tuple[float, float]]]] = {}
 
         # Current regime info
         self.current_regime: str | None = None
@@ -81,7 +85,7 @@ class MetaLearningEngine:
             if strategy not in self.global_strategy_history:
                 self.global_strategy_history[strategy] = deque(maxlen=self.window_size)
             self.global_strategy_history[strategy].append(
-                (metrics['sharpe'], metrics['pnl_mean'], metrics['drawdown'], metrics['hit_ratio'])
+                (metrics["sharpe"], metrics["pnl_mean"], metrics["drawdown"], metrics["hit_ratio"])
             )
 
         for feature, (ic, decay) in feature_performance.items():
@@ -99,7 +103,7 @@ class MetaLearningEngine:
             if strategy not in self.regime_strategy_history[regime]:
                 self.regime_strategy_history[regime][strategy] = deque(maxlen=self.window_size)
             self.regime_strategy_history[regime][strategy].append(
-                (metrics['sharpe'], metrics['pnl_mean'], metrics['drawdown'], metrics['hit_ratio'])
+                (metrics["sharpe"], metrics["pnl_mean"], metrics["drawdown"], metrics["hit_ratio"])
             )
 
         for feature, (ic, decay) in feature_performance.items():
@@ -112,19 +116,21 @@ class MetaLearningEngine:
         self.current_regime = regime
         self.regime_probability = regime_prob
 
-    def _compute_strategy_scores(self, history: dict[str, deque]) -> dict[str, float]:
+    def _compute_strategy_scores(
+        self, history: dict[str, deque[tuple[float, float, float, float]]]
+    ) -> dict[str, float]:
         """Compute strategy scores from history."""
         scores = {}
-        for strategy, deque in history.items():
-            if len(deque) < self.min_trades:
+        for strategy, hist in history.items():
+            if len(hist) < self.min_trades:
                 scores[strategy] = 0.0
                 continue
 
-            # Calculate average metrics over window
-            sharpe_avg = np.mean([x[0] for x in deque])
-            pnl_mean_avg = np.mean([x[1] for x in deque])
-            drawdown_avg = np.mean([x[2] for x in deque])
-            hit_ratio_avg = np.mean([x[3] for x in deque])
+            # Calculate average metrics over window.
+            sharpe_avg = float(np.mean([x[0] for x in hist]))
+            pnl_mean_avg = float(np.mean([x[1] for x in hist]))
+            drawdown_avg = float(np.mean([x[2] for x in hist]))
+            hit_ratio_avg = float(np.mean([x[3] for x in hist]))
 
             # Compute score: w1*sharpe + w2*pnl_mean - w3*drawdown + w4*hit_ratio
             score = (
@@ -136,16 +142,18 @@ class MetaLearningEngine:
             scores[strategy] = score
         return scores
 
-    def _compute_feature_scores(self, history: dict[str, deque]) -> dict[str, float]:
+    def _compute_feature_scores(
+        self, history: dict[str, deque[tuple[float, float]]]
+    ) -> dict[str, float]:
         """Compute feature scores from history."""
         scores = {}
-        for feature, deque in history.items():
-            if len(deque) < self.min_trades:
+        for feature, hist in history.items():
+            if len(hist) < self.min_trades:
                 scores[feature] = 0.0
                 continue
 
-            ic_avg = np.mean([x[0] for x in deque])
-            decay_avg = np.mean([x[1] for x in deque])
+            ic_avg = float(np.mean([x[0] for x in hist]))
+            decay_avg = float(np.mean([x[1] for x in hist]))
             score = ic_avg - self.decay_penalty * decay_avg
             scores[feature] = score
         return scores
@@ -162,29 +170,27 @@ class MetaLearningEngine:
 
         # Shift for numerical stability
         max_score = max(scores.values())
-        exp_scores = {
-            k: np.exp((v - max_score) / self.temperature) for k, v in scores.items()
-        }
+        exp_scores = {k: np.exp((v - max_score) / self.temperature) for k, v in scores.items()}
         sum_exp = sum(exp_scores.values())
         return {k: v / sum_exp for k, v in exp_scores.items()}
 
     def _clip_and_normalize(self, weights: dict[str, float]) -> dict[str, float]:
         """Clip weights to bounds and renormalize."""
-        clipped = {
-            k: max(self.min_weight, min(self.max_weight, v)) for k, v in weights.items()
-        }
+        clipped = {k: max(self.min_weight, min(self.max_weight, v)) for k, v in weights.items()}
         total = sum(clipped.values())
         if total == 0:
             n = len(clipped)
             return {k: 1.0 / n for k in clipped}
         return {k: v / total for k, v in clipped.items()}
 
-    def _average_sharpe(self, history: dict[str, deque]) -> float:
+    def _average_sharpe(
+        self, history: dict[str, deque[tuple[float, float, float, float]]]
+    ) -> float:
         """Calculate average Sharpe across all strategies."""
         sharpes = []
-        for deque in history.values():
-            if deque:
-                sharpes.extend([x[0] for x in deque])
+        for hist in history.values():
+            if hist:
+                sharpes.extend([x[0] for x in hist])
         return float(np.mean(sharpes)) if sharpes else 0.0
 
     def _sigmoid(self, x: float) -> float:
@@ -207,9 +213,11 @@ class MetaLearningEngine:
         ):
             # Fallback to equal weights
             n_strats = len(self.global_strategy_history) or 1
-            global_strategy_weights = {
-                k: 1.0 / n_strats for k in self.global_strategy_history.keys()
-            } if self.global_strategy_history else {}
+            global_strategy_weights = (
+                {k: 1.0 / n_strats for k in self.global_strategy_history.keys()}
+                if self.global_strategy_history
+                else {}
+            )
         else:
             strategy_scores = self._compute_strategy_scores(self.global_strategy_history)
             global_strategy_weights = self._softmax(strategy_scores)
@@ -218,9 +226,11 @@ class MetaLearningEngine:
             len(v) < self.min_trades for v in self.global_feature_history.values()
         ):
             n_feats = len(self.global_feature_history) or 1
-            global_feature_weights = {
-                k: 1.0 / n_feats for k in self.global_feature_history.keys()
-            } if self.global_feature_history else {}
+            global_feature_weights = (
+                {k: 1.0 / n_feats for k in self.global_feature_history.keys()}
+                if self.global_feature_history
+                else {}
+            )
         else:
             feature_scores = self._compute_feature_scores(self.global_feature_history)
             global_feature_weights = self._softmax(feature_scores)
@@ -264,32 +274,20 @@ class MetaLearningEngine:
         for strat in all_strats:
             g = global_strategy_weights.get(strat, 0.0)
             r = regime_strategy_weights.get(strat, 0.0)
-            blended = (
-                self.regime_probability * r
-                + (1 - self.regime_probability) * g
-            )
+            blended = self.regime_probability * r + (1 - self.regime_probability) * g
             blended_strategy_weights[strat] = blended
 
         blended_feature_weights = {}
-        all_feats = set(
-            list(global_feature_weights.keys()) + list(regime_feature_weights.keys())
-        )
+        all_feats = set(list(global_feature_weights.keys()) + list(regime_feature_weights.keys()))
         for feat in all_feats:
             g = global_feature_weights.get(feat, 0.0)
             r = regime_feature_weights.get(feat, 0.0)
-            blended = (
-                self.regime_probability * r
-                + (1 - self.regime_probability) * g
-            )
+            blended = self.regime_probability * r + (1 - self.regime_probability) * g
             blended_feature_weights[feat] = blended
 
         # Clip and normalize
-        blended_strategy_weights = self._clip_and_normalize(
-            blended_strategy_weights
-        )
-        blended_feature_weights = self._clip_and_normalize(
-            blended_feature_weights
-        )
+        blended_strategy_weights = self._clip_and_normalize(blended_strategy_weights)
+        blended_feature_weights = self._clip_and_normalize(blended_feature_weights)
 
         # Confidence multiplier: sigmoid(avg_sharpe) * regime_confidence
         avg_sharpe = self._average_sharpe(self.global_strategy_history)

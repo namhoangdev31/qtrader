@@ -19,19 +19,17 @@ from qtrader.core.event_store import FileEventStore
 from qtrader.core.events import (
     BaseEvent,
     EventType,
+    FeatureEvent,
+    FeaturePayload,
+    FillEvent,
     MarketEvent,
+    OrderEvent,
+    OrderPayload,
     SignalEvent,
     SignalPayload,
     SystemEvent,
     SystemPayload,
-    FeatureEvent,
-    FeaturePayload,
     ValidatedFeatureEvent,
-    OrderEvent,
-    OrderPayload,
-    FillEvent,
-    FillPayload,
-    RiskPayload,
 )
 from qtrader.core.types import (
     AllocationWeights,
@@ -50,7 +48,10 @@ except ImportError:
 from loguru import logger
 
 from qtrader.alerts.alert_engine import alert_engine
+from qtrader.alpha.base import BaseAlpha
+from qtrader.analytics.accounting import FundAccountingEngine
 from qtrader.analytics.drift import DriftMonitor
+from qtrader.analytics.tca_engine import TCAEngine
 from qtrader.core.config import settings
 from qtrader.core.config_manager import ConfigManager
 from qtrader.core.decimal_adapter import math_authority
@@ -65,41 +66,31 @@ from qtrader.core.state_store import Position, StateStore
 from qtrader.core.system_state import SystemState, state_manager
 from qtrader.core.trace_authority import TraceAuthority
 from qtrader.execution.latency_model import LatencyModel
+from qtrader.execution.microstructure.microprice import Microprice
+from qtrader.execution.order_id import OrderIDGenerator
 from qtrader.execution.orderbook_enhanced import OrderbookEnhanced
+from qtrader.execution.reconciliation_engine import ReconciliationEngine
+from qtrader.execution.routing.liquidity_model import MultiVenueLiquidityModel
 from qtrader.execution.shadow_engine import ShadowEngine
 from qtrader.execution.slippage_model import SlippageModel
 from qtrader.execution.smart_router import SmartOrderRouter
-from qtrader.execution.reconciliation_engine import ReconciliationEngine
-from qtrader.execution.order_id import OrderIDGenerator
-from qtrader.execution.microstructure.microprice import Microprice
-from qtrader.execution.microstructure.toxic_flow import ToxicFlowPredictor
-from qtrader.execution.microstructure.queue_model import QueuePositionModel
-from qtrader.execution.routing.router import DynamicRoutingEngine
-from qtrader.execution.routing.cost_model import RoutingCostModel
-from qtrader.execution.routing.fill_model import VenueFillProbabilityModel
-from qtrader.execution.routing.liquidity_model import MultiVenueLiquidityModel
-from qtrader.risk.kill_switch import GlobalKillSwitch
-from qtrader.risk.regime_adapter import RegimeAdapter
-from qtrader.risk.position_sizer import PositionSizer
-from qtrader.risk.recovery_system import RecoverySystem
-from qtrader.risk.monitoring_engine import MonitoringEngine
-from qtrader.portfolio.cash_ledger import CashLedger
-from qtrader.portfolio.nav_engine import NAVEngine
-from qtrader.portfolio.funding_engine import FundingEngine
-from qtrader.portfolio.risk_monitor import RealTimeRiskMonitor
-from qtrader.portfolio.drawdown_controller import LiveDrawdownController
-from qtrader.portfolio.position_sizing import PositionSizer as PortfolioPositionSizer
-from qtrader.analytics.accounting import FundAccountingEngine
-from qtrader.analytics.tca_engine import TCAEngine
-from qtrader.governance.strategy_fsm import StrategyFSM
 from qtrader.metrics.telemetry_pipeline import telemetry_pipeline
 from qtrader.ml.meta_online import OnlineMetaLearner
 from qtrader.monitoring.feedback.feedback_engine import FeedbackEngine
 from qtrader.oms.oms_adapter import OMSAdapter
 from qtrader.portfolio.allocator import AllocatorBase
+from qtrader.portfolio.cash_ledger import CashLedger
+from qtrader.portfolio.drawdown_controller import LiveDrawdownController
+from qtrader.portfolio.funding_engine import FundingEngine
+from qtrader.portfolio.nav_engine import NAVEngine
+from qtrader.portfolio.position_sizing import PositionSizer as PortfolioPositionSizer
+from qtrader.portfolio.risk_monitor import RealTimeRiskMonitor
+from qtrader.risk.kill_switch import GlobalKillSwitch
+from qtrader.risk.monitoring_engine import MonitoringEngine
 from qtrader.risk.network_kill_switch import NetworkKillSwitch
+from qtrader.risk.recovery_system import RecoverySystem
+from qtrader.risk.regime_adapter import RegimeAdapter
 from qtrader.risk.runtime import RuntimeRiskEngine
-from qtrader.alpha.base import BaseAlpha
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.validation.feature_validator import FeatureValidator
@@ -590,7 +581,7 @@ class TradingOrchestrator:
     async def _periodic_check(self) -> None:
         """Periodic tasks: Risk check, Rebalance, Heartbeat, Alerting."""
         await alert_engine.check_metrics()
-        current_ts = asyncio.get_event_loop().time()
+        asyncio.get_event_loop().time()
 
         if self.hft_optimizer:
             self.hft_optimizer.check_and_update_safety_mode()
@@ -696,7 +687,7 @@ class TradingOrchestrator:
         await metrics.increment("throughput")
 
         # 0. Config Gate (Control Vector Injection)
-        alpha_decay = self.config_manager.get("alpha_decay_ms", 1000)
+        self.config_manager.get("alpha_decay_ms", 1000)
 
         # 1. Decimal Normalization (Numerical Integrity Gate)
         market_data.close = self.math_authority.d(market_data.close)
@@ -955,7 +946,7 @@ class TradingOrchestrator:
     async def handle_fills(self, fill_event: FillEvent) -> None:
         await runtime_gatekeeper.check_event(fill_event)
         trace_id = fill_event.trace_id
-        log = logger.bind(trace_id=trace_id)
+        logger.bind(trace_id=trace_id)
 
         symbol = fill_event.payload.symbol
         quantity_dec = fill_event.payload.quantity

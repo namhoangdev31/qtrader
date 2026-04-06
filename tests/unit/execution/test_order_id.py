@@ -59,6 +59,6 @@ class TestOrderIDGenerator:
         """Test that registry is bounded."""
         gen = OrderIDGenerator()
         # Generate enough to trigger trimming (max 1M, trims to 500k)
-        for i in range(10_000):
+        for _i in range(10_000):
             await gen.generate_order_id("TEST", "SYM")
         assert gen.get_registry_size() == 10_000  # Under limit, no trimming yet

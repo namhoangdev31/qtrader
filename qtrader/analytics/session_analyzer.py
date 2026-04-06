@@ -6,12 +6,12 @@ Calculates PnL, AI thinking accuracy, and EV drift for a specific trading sessio
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
 from typing import Any
 
 import polars as pl
-from qtrader.core.db import DBClient
+
 from qtrader.analytics.performance import PerformanceAnalytics
+from qtrader.core.db import DBClient
 
 logger = logging.getLogger("qtrader.analytics.session")
 

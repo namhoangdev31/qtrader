@@ -4,12 +4,15 @@ import asyncio
 import json
 import logging
 import os
-from typing import Protocol
-from uuid import UUID
+from typing import TYPE_CHECKING, Protocol
 
 from qtrader.core.event_factory import EventFactory
 from qtrader.core.event_index import EventIndex
-from qtrader.core.events import BaseEvent
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from qtrader.core.events import BaseEvent
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,7 @@ class FileEventStore:
     Uses JSONLine format with per-partition logs and an in-memory index for idempotency.
     """
 
-    def __init__(self, base_path: str = "data/event_store"):
+    def __init__(self, base_path: str = "data/event_store") -> None:
         """
         Initialize the partitioned event store.
 

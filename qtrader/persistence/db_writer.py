@@ -50,6 +50,7 @@ class TradeDBWriter:
                 commission       NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+                session_id       UUID,
                 metadata         JSONB        DEFAULT '{}'
             );
             """,
@@ -65,6 +66,7 @@ class TradeDBWriter:
                 status           VARCHAR(20)  NOT NULL DEFAULT 'SUBMITTED',
                 submitted_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+                session_id       UUID,
                 metadata         JSONB        DEFAULT '{}'
             );
             """,
@@ -76,6 +78,7 @@ class TradeDBWriter:
                 average_price    NUMERIC(24, 8) NOT NULL,
                 unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                session_id       UUID,
                 UNIQUE (symbol, timestamp)
             );
             """,
@@ -87,7 +90,8 @@ class TradeDBWriter:
                 realized_pnl     NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 total_commission NUMERIC(24, 8) NOT NULL DEFAULT 0,
-                timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+                timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                session_id       UUID
             );
             """,
             """
@@ -99,6 +103,7 @@ class TradeDBWriter:
                 thinking         TEXT         NOT NULL,
                 explanation      TEXT,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                session_id       UUID,
                 metadata         JSONB        DEFAULT '{}'
             );
             """,
@@ -144,8 +149,9 @@ class TradeDBWriter:
         for query in hypertable_queries:
             try:
                 await DBClient.execute(query)
-            except Exception:
-                pass  # TimescaleDB extension may not be available
+            except Exception as e:
+                # TimescaleDB extension may not be available or hypertable already exists
+                logger.debug(f"[DB] Hypertable creation skipped: {e}")
 
         self._initialized = True
         logger.info("[DB] Persistence layer initialized")
@@ -166,7 +172,10 @@ class TradeDBWriter:
             await self.initialize()
 
         query = """
-            INSERT INTO fills (order_id, symbol, side, quantity, price, commission, source, session_id)
+            INSERT INTO fills (
+                order_id, symbol, side, quantity, price, 
+                commission, source, session_id
+            )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """
         try:
@@ -181,7 +190,10 @@ class TradeDBWriter:
                 source,
                 session_id,
             )
-            logger.info(f"[DB] Fill persisted: {symbol} {side} {quantity}@{price} (Session: {session_id})")
+            logger.info(
+                f"[DB] Fill persisted: {symbol} {side} {quantity}@{price} "
+                f"(Session: {session_id})"
+            )
         except Exception as e:
             logger.error(f"[DB] Failed to persist fill: {e}")
 
@@ -201,7 +213,10 @@ class TradeDBWriter:
             await self.initialize()
 
         query = """
-            INSERT INTO orders (broker_order_id, symbol, side, order_type, quantity, price, source, session_id)
+            INSERT INTO orders (
+                broker_order_id, symbol, side, order_type, 
+                quantity, price, source, session_id
+            )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """
         try:
@@ -216,7 +231,10 @@ class TradeDBWriter:
                 source,
                 session_id,
             )
-            logger.info(f"[DB] Order persisted: {symbol} {side} {quantity} (Session: {session_id})")
+            logger.info(
+                f"[DB] Order persisted: {symbol} {side} {quantity} "
+                f"(Session: {session_id})"
+            )
         except Exception as e:
             logger.error(f"[DB] Failed to persist order: {e}")
 
@@ -235,7 +253,10 @@ class TradeDBWriter:
         query = """
             INSERT INTO positions (symbol, quantity, average_price, unrealized_pnl, session_id)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (symbol, timestamp) DO NOTHING
+            ON CONFLICT (symbol, timestamp) DO UPDATE
+            SET quantity = EXCLUDED.quantity, 
+                average_price = EXCLUDED.average_price, 
+                unrealized_pnl = EXCLUDED.unrealized_pnl
         """
         try:
             await DBClient.execute(
@@ -258,7 +279,10 @@ class TradeDBWriter:
             await self.initialize()
 
         query = """
-            INSERT INTO pnl_snapshots (total_equity, cash, realized_pnl, unrealized_pnl, total_commission, session_id)
+            INSERT INTO pnl_snapshots (
+                total_equity, cash, realized_pnl, 
+                unrealized_pnl, total_commission, session_id
+            )
             VALUES ($1, $2, $3, $4, $5, $6)
         """
         try:
@@ -287,27 +311,45 @@ class TradeDBWriter:
             logger.error(f"[DB] Failed to fetch positions: {e}")
             return []
 
-    async def get_recent_fills(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def get_recent_fills(self, limit: int = 50, session_id: str | None = None) -> list[dict[str, Any]]:
         """Get recent fills."""
-        query = """
-            SELECT fill_id, order_id, symbol, side, quantity, price, commission, timestamp
-            FROM fills ORDER BY timestamp DESC LIMIT $1
-        """
+        if session_id:
+            query = """
+                SELECT fill_id, order_id, symbol, side, quantity, price, commission, timestamp
+                FROM fills WHERE session_id = $2 ORDER BY timestamp DESC LIMIT $1
+            """
+            params = [limit, session_id]
+        else:
+            query = """
+                SELECT fill_id, order_id, symbol, side, quantity, price, commission, timestamp
+                FROM fills ORDER BY timestamp DESC LIMIT $1
+            """
+            params = [limit]
+
         try:
-            rows = await DBClient.fetch(query, limit)
+            rows = await DBClient.fetch(query, *params)
             return [dict(r) for r in rows]
         except Exception as e:
             logger.error(f"[DB] Failed to fetch fills: {e}")
             return []
 
-    async def get_pnl_history(self, limit: int = 100) -> list[dict[str, Any]]:
+    async def get_pnl_history(self, limit: int = 100, session_id: str | None = None) -> list[dict[str, Any]]:
         """Get recent PnL snapshots."""
-        query = """
-            SELECT total_equity, cash, realized_pnl, unrealized_pnl, total_commission, timestamp
-            FROM pnl_snapshots ORDER BY timestamp DESC LIMIT $1
-        """
+        if session_id:
+            query = """
+                SELECT total_equity, cash, realized_pnl, unrealized_pnl, total_commission, timestamp
+                FROM pnl_snapshots WHERE session_id = $2 ORDER BY timestamp DESC LIMIT $1
+            """
+            params = [limit, session_id]
+        else:
+            query = """
+                SELECT total_equity, cash, realized_pnl, unrealized_pnl, total_commission, timestamp
+                FROM pnl_snapshots ORDER BY timestamp DESC LIMIT $1
+            """
+            params = [limit]
+
         try:
-            rows = await DBClient.fetch(query, limit)
+            rows = await DBClient.fetch(query, *params)
             return [dict(r) for r in rows]
         except Exception as e:
             logger.error(f"[DB] Failed to fetch PnL history: {e}")
@@ -328,7 +370,10 @@ class TradeDBWriter:
             await self.initialize()
 
         query = """
-            INSERT INTO ai_thinking_logs (symbol, action, confidence, thinking, explanation, metadata, session_id)
+            INSERT INTO ai_thinking_logs (
+                symbol, action, confidence, thinking, 
+                explanation, metadata, session_id
+            )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
         """
         try:

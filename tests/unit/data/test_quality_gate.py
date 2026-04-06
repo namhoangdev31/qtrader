@@ -31,7 +31,7 @@ class TestDataQualityGate:
         DataQualityGate.check_stale(fresh_ts, max_age_ms=5000)
 
     def test_check_trade_quote_mismatch_within_spread(self) -> None:
-        valid, reason = DataQualityGate.check_trade_quote_mismatch(
+        valid, _reason = DataQualityGate.check_trade_quote_mismatch(
             trade_price=150.0, best_bid=149.9, best_ask=150.1
         )
         assert valid
@@ -53,7 +53,7 @@ class TestDataQualityGate:
         assert "above ask" in reason.lower()
 
     def test_check_trade_quote_mismatch_invalid_spread(self) -> None:
-        valid, reason = DataQualityGate.check_trade_quote_mismatch(
+        valid, _reason = DataQualityGate.check_trade_quote_mismatch(
             trade_price=150.0, best_bid=0, best_ask=0
         )
         assert valid  # Skip check for invalid spread

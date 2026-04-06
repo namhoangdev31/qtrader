@@ -46,7 +46,7 @@ def test_validator_ready(mock_managers):
             validator = PreExecutionValidator(root_path=".")
             is_ready = validator.validate(seed_manager=seed_manager)
             
-            assert is_ready == True
+            assert is_ready
             assert any(r.name == "ConfigManager" and r.status for r in validator.results)
             assert any(r.name == "SeedManager" and r.status for r in validator.results)
             assert any(r.name == "TraceAuthority" and r.status for r in validator.results)
@@ -71,9 +71,9 @@ def test_validator_blocked_by_config(mock_managers):
             validator = PreExecutionValidator()
             is_ready = validator.validate(seed_manager=seed_manager)
             
-            assert is_ready == False
+            assert not is_ready
             assert validator.results[0].name == "ConfigManager"
-            assert validator.results[0].status == False
+            assert not validator.results[0].status
 
 def test_validator_blocked_by_floats(mock_managers):
     """Should fail if high-risk floats are detected."""
@@ -93,5 +93,5 @@ def test_validator_blocked_by_floats(mock_managers):
             validator = PreExecutionValidator()
             is_ready = validator.validate(seed_manager=seed_manager)
             
-            assert is_ready == False
+            assert not is_ready
             assert any(r.name == "FloatScan" and not r.status for r in validator.results)

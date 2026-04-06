@@ -34,6 +34,7 @@ class CapitalAllocationEngine:
         # Telemetry for institutional situational awareness.
         self._current_distribution: dict[str, Decimal] = {}
         self._capital_concentration: Decimal = d(0)
+        self._last_trace: dict[str, Any] = {}
 
     def allocate_capital(
         self,
@@ -185,7 +186,21 @@ class CapitalAllocationEngine:
         scaled_qty = scaled_qty.quantize(Decimal("0.00000001"))
         
         reason = f"CONCENTRATION_GUARD | Scaled from {proposed_qty} to {scaled_qty} (Cap: {self._max_cap:.0%})"
+        self._last_trace = {
+            "symbol": symbol,
+            "proposed_qty": float(proposed_qty),
+            "approved_qty": float(scaled_qty),
+            "current_notional": float(current_notional),
+            "new_notional": float(new_notional),
+            "concentration": float(concentration),
+            "max_cap": float(self._max_cap),
+            "reason": reason
+        }
         return scaled_qty, reason
+
+    def get_trace(self) -> dict[str, Any]:
+        """Produce forensic trace of capital allocation."""
+        return self._last_trace
 
 
 class CapitalAllocator:

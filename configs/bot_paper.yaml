@@ -3,7 +3,7 @@ feature_cols: []
 initial_capital: 1000.0
 rebalance_interval_s: 300
 signal_col: ml_signal
-signal_interval_s: 30
+signal_interval_s: 1
 strategy: momentum
 symbols:
 - BTC/USDT

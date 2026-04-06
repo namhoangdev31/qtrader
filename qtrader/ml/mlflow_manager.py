@@ -10,15 +10,18 @@ import asyncio
 import json
 import logging
 import os
+import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
 # Try to import MLflow, but don't fail if not available
 try:
     import mlflow
+    import mlflow.pyfunc
     import mlflow.tracking
     from mlflow.exceptions import MlflowException
     from mlflow.tracking import MlflowClient
@@ -26,9 +29,23 @@ try:
     MLFLOW_AVAILABLE = True
 except ImportError:
     MLFLOW_AVAILABLE = False
-    mlflow = None  # type: ignore
-    MlflowClient = None  # type: ignore
-    MlflowException = Exception  # type: ignore
+    mlflow = None
+    MlflowClient = None
+    MlflowException = Exception
+
+T = TypeVar("T")
+
+
+@dataclass(slots=True, frozen=True)
+class PromotionConfig:
+    """Config for model promotion logic."""
+
+    sharpe_threshold: float = 1.0
+    drawdown_threshold: float = 0.1
+    hit_rate_threshold: float = 0.5
+    sharpe_improvement: float = 0.0
+    drawdown_improvement: float = 0.0
+    hit_rate_improvement: float = 0.0
 
 
 class MLflowManager:
@@ -99,7 +116,9 @@ class MLflowManager:
             else:
                 self._experiment_id = experiment.experiment_id
                 self.logger.info(
-                    f"Using existing MLflow experiment: {experiment_name} (ID: {self._experiment_id})"
+                    "Using existing MLflow experiment: %s (ID: %s)",
+                    experiment_name,
+                    self._experiment_id,
                 )
         except Exception as e:
             self.logger.error(f"Failed to initialize MLflow: {e}")
@@ -172,9 +191,6 @@ class MLflowManager:
 
             # Log artifacts if provided
             if artifacts:
-                # Create a temporary directory for artifacts
-                import tempfile
-
                 with tempfile.TemporaryDirectory() as tmpdir:
                     # Save each artifact as JSON file
                     for artifact_name, artifact_data in artifacts.items():
@@ -189,19 +205,16 @@ class MLflowManager:
 
             # Log a dummy model using MLflow's pyfunc
             try:
-                import mlflow.pyfunc
 
-                class DummyModel(mlflow.pyfunc.PythonModel):
-                    def predict(self, context, model_input):
+                class DummyModel(mlflow.pyfunc.PythonModel):  # type: ignore[misc]
+                    def predict(self, context: Any, model_input: T) -> T:
                         return model_input
 
                 # Log the model
                 mlflow.pyfunc.log_model(artifact_path="model", python_model=DummyModel())
             except Exception as e:
-                self.logger.warning(f"Failed to log model: {e}")
+                self.logger.warning("Failed to log model: %s", e)
                 # Fallback: log a simple artifact
-                import tempfile
-
                 with tempfile.TemporaryDirectory() as tmpdir:
                     model_path = Path(tmpdir) / "model.txt"
                     model_path.write_text(f"Dummy model for {strategy_name}")
@@ -215,14 +228,20 @@ class MLflowManager:
                 model_version = mlflow.register_model(model_uri, model_name)
 
                 # Initially assign to staging stage
-                self._client.transition_model_version_stage(
-                    name=model_name,
-                    version=model_version.version,
-                    stage="Staging",
-                    archive_existing_versions=False,
-                )
+                client = self._client
+                if client is not None:
+                    client.transition_model_version_stage(
+                        name=model_name,
+                        version=model_version.version,
+                        stage="Staging",
+                        archive_existing_versions=False,
+                    )
+                else:
+                    self.logger.warning("MLflow client not available for staging transition")
                 self.logger.info(
-                    f"Registered model {model_name} version {model_version.version} in Staging stage"
+                    "Registered model %s version %s in Staging",
+                    model_name,
+                    model_version.version,
                 )
             except Exception as e:
                 self.logger.error(f"Failed to register model {model_name}: {e}")
@@ -301,23 +320,30 @@ class MLflowManager:
                 and drawdown < drawdown_threshold
                 and hit_rate > hit_rate_threshold
             ):
-                # Promote to production
+                # Promote
                 model_name = f"strategy_{strategy_name}"
+                client = self._client
+                if client is None:
+                    raise RuntimeError("MLflow client not initialized")
                 # Get the latest version (should be the one we just registered in staging)
-                latest_versions = self._client.get_latest_versions(model_name, stages=["Staging"])
+                latest_versions = client.get_latest_versions(model_name, stages=["Staging"])
                 if not latest_versions:
                     self.logger.warning(f"No staging version found for {model_name}")
                     return False
 
                 version = latest_versions[0].version
-                # Transition to production
-                self._client.transition_model_version_stage(
+                # 3. Transition to Production
+                client.transition_model_version_stage(
                     name=model_name,
                     version=version,
                     stage="Production",
                     archive_existing_versions=True,  # Archive previous production version
                 )
-                self.logger.info(f"Promoted {model_name} version {version} to Production")
+                self.logger.info(
+                    "Promoted %s version %s to Production",
+                    model_name,
+                    version,
+                )
                 return True
             else:
                 self.logger.info(
@@ -333,26 +359,16 @@ class MLflowManager:
         self,
         strategy_name: str,
         shadow_run_id: str,
-        sharpe_threshold: float = 1.0,
-        drawdown_threshold: float = 0.1,
-        hit_rate_threshold: float = 0.5,
-        sharpe_improvement_threshold: float = 0.0,
-        drawdown_improvement_threshold: float = 0.0,  # note: drawdown lower is better
-        hit_rate_improvement_threshold: float = 0.0,
+        config: PromotionConfig | None = None,
     ) -> bool:
-        """Evaluate a shadow mode run and promote to production if it meets absolute thresholds and is better than the current production model.
+        """Evaluate a shadow run and promote if better than production.
+
+        Checks against absolute thresholds and improvement over current model.
 
         Args:
             strategy_name: Name of the strategy
             shadow_run_id: MLflow run ID of the shadow run to evaluate
-            sharpe_threshold: Minimum Sharpe ratio for promotion
-            drawdown_threshold: Maximum allowed drawdown for promotion
-            hit_rate_threshold: Minimum hit rate for promotion
-            sharpe_improvement_threshold: Minimum improvement in Sharpe ratio required over production (shadow - production)
-            drawdown_improvement_threshold: Maximum allowed drawdown for shadow relative to production (production drawdown - shadow drawdown must be > this)
-            hit_rate_improvement_threshold: Minimum improvement in hit rate required over production (shadow - production)
-
-        Returns:
+            config: Promotion criteria configuration
             True if promoted to production, False otherwise
         """
         if not self.enable_mlflow:
@@ -361,38 +377,32 @@ class MLflowManager:
 
         loop = asyncio.get_event_loop()
         try:
-            result = await loop.run_in_executor(
+            result: bool = await loop.run_in_executor(
                 None,
                 self._promote_if_better_than_production_sync,
                 strategy_name,
                 shadow_run_id,
-                sharpe_threshold,
-                drawdown_threshold,
-                hit_rate_threshold,
-                sharpe_improvement_threshold,
-                drawdown_improvement_threshold,
-                hit_rate_improvement_threshold,
+                config,
             )
             return result
         except Exception as e:
             self.logger.error(f"Failed to promote if better than production: {e}")
             return False
 
-    def _promote_if_better_than_production_sync(
+    def _promote_if_better_than_production_sync(  # noqa: PLR0911
         self,
         strategy_name: str,
         shadow_run_id: str,
-        sharpe_threshold: float,
-        drawdown_threshold: float,
-        hit_rate_threshold: float,
-        sharpe_improvement_threshold: float,
-        drawdown_improvement_threshold: float,
-        hit_rate_improvement_threshold: float,
+        cfg: PromotionConfig,
     ) -> bool:
         """Synchronous evaluation and promotion (to be run in thread pool)."""
+        client = self._client
+        if client is None:
+            raise RuntimeError("MLflow client not initialized")
+
         try:
             # First, evaluate the shadow run against absolute thresholds
-            shadow_run = self._client.get_run(shadow_run_id)
+            shadow_run = client.get_run(shadow_run_id)
             shadow_metrics = shadow_run.data.metrics
 
             # Extract required metrics from shadow run
@@ -402,53 +412,60 @@ class MLflowManager:
 
             self.logger.info(
                 f"Evaluating shadow strategy {strategy_name} (run {shadow_run_id}): "
-                f"Sharpe={sharpe:.3f} (>{sharpe_threshold}), "
-                f"Drawdown={drawdown:.3f} (<{drawdown_threshold}), "
-                f"Hit Rate={hit_rate:.3f} (>{hit_rate_threshold})"
+                f"Sharpe={sharpe:.3f} (>{cfg.sharpe_threshold}), "
+                f"Drawdown={drawdown:.3f} (<{cfg.drawdown_threshold}), "
+                f"Hit Rate={hit_rate:.3f} (>{cfg.hit_rate_threshold})"
             )
 
             # Check absolute thresholds for shadow run
             if not (
-                sharpe > sharpe_threshold
-                and drawdown < drawdown_threshold
-                and hit_rate > hit_rate_threshold
+                sharpe > cfg.sharpe_threshold
+                and drawdown < cfg.drawdown_threshold
+                and hit_rate > cfg.hit_rate_threshold
             ):
                 self.logger.info(
-                    f"Shadow strategy {strategy_name} did not meet absolute promotion criteria. "
-                    f"Keeping in Staging or failing."
+                    "Shadow strategy %s failed absolute criteria (Sharpe=%.2f, DD=%.2f)",
+                    strategy_name,
+                    sharpe,
+                    drawdown,
                 )
                 return False
 
             # If we get here, the shadow run meets absolute thresholds.
             # Now, check if there is a current production model to compare with.
             model_name = f"strategy_{strategy_name}"
-            prod_versions = self._client.get_latest_versions(model_name, stages=["Production"])
+            prod_versions = client.get_latest_versions(model_name, stages=["Production"])
             if not prod_versions:
                 self.logger.info(
-                    f"No production version found for {model_name}. Promoting based on absolute thresholds only."
+                    f"No production version found for {model_name}. "
+                    "Promoting based on absolute thresholds only."
                 )
-                # No production model, so we promote based on absolute thresholds
-                # We need to get the version from the shadow run's model (which should be in Staging)
-                staging_versions = self._client.get_latest_versions(model_name, stages=["Staging"])
+                # No production model: promote based on absolute thresholds.
+                # Get version from shadow run's model (should be in Staging).
+                staging_versions = client.get_latest_versions(model_name, stages=["Staging"])
                 if not staging_versions:
                     self.logger.warning(f"No staging version found for {model_name} to promote")
                     return False
                 version = staging_versions[0].version
-                self._client.transition_model_version_stage(
+                client.transition_model_version_stage(
                     name=model_name,
                     version=version,
                     stage="Production",
                     archive_existing_versions=False,
                 )
                 self.logger.info(
-                    f"Promoted {model_name} version {version} from shadow run {shadow_run_id} to Production (no existing production model)"
+                    "Promoted %s v%s from run %s to Production (first version)",
+                    model_name,
+                    version,
+                    shadow_run_id,
                 )
                 return True
 
             # We have a production model, get its run ID and metrics
             prod_version = prod_versions[0]
+            # 2. Get metrics for current production model
             prod_run_id = prod_version.run_id
-            prod_run = self._client.get_run(prod_run_id)
+            prod_run = client.get_run(prod_run_id)
             prod_metrics = prod_run.data.metrics
 
             # Extract required metrics from production run
@@ -457,52 +474,56 @@ class MLflowManager:
             prod_hit_rate = prod_metrics.get("hit_rate", 0.0)
 
             self.logger.info(
-                f"Comparing with production model {model_name} version {prod_version.version} (run {prod_run_id}): "
-                f"Production Sharpe={prod_sharpe:.3f}, Drawdown={prod_drawdown:.3f}, Hit Rate={prod_hit_rate:.3f}"
+                "Production model %s v%s: Sharpe=%.3f",
+                model_name,
+                prod_version.version,
+                prod_sharpe,
             )
 
             # Check if shadow run is better than production by the improvement thresholds
             sharpe_improvement = sharpe - prod_sharpe
             drawdown_improvement = (
                 prod_drawdown - drawdown
-            )  # note: we want drawdown to be lower, so improvement is positive when shadow drawdown < production drawdown
+            )  # note: we want drawdown to be lower, so improvement is positive
             hit_rate_improvement = hit_rate - prod_hit_rate
 
             if (
-                sharpe_improvement > sharpe_improvement_threshold
-                and drawdown_improvement > drawdown_improvement_threshold
-                and hit_rate_improvement > hit_rate_improvement_threshold
+                sharpe_improvement > cfg.sharpe_improvement
+                and drawdown_improvement > cfg.drawdown_improvement
+                and hit_rate_improvement > cfg.hit_rate_improvement
             ):
                 self.logger.info(
-                    f"Shadow strategy {strategy_name} is better than production by thresholds: "
-                    f"Sharpe improvement={sharpe_improvement:.3f} (>{sharpe_improvement_threshold}), "
-                    f"Drawdown improvement={drawdown_improvement:.3f} (>{drawdown_improvement_threshold}), "
-                    f"Hit rate improvement={hit_rate_improvement:.3f} (>{hit_rate_improvement_threshold})"
+                    "Shadow strategy %s is better than production (Sharpe +%.3f)",
+                    strategy_name,
+                    sharpe_improvement,
                 )
-                # Promote shadow run to production, archive existing production
-                # We use the version from the shadow run's model (which should be in Staging)
-                staging_versions = self._client.get_latest_versions(model_name, stages=["Staging"])
+                # 3. Transition to Production
+                # Promote shadow run to production, archive existing production.
+                # Get version from shadow run's model (should be in Staging).
+                staging_versions = client.get_latest_versions(
+                    model_name, stages=["Staging"]
+                )
                 if not staging_versions:
-                    self.logger.warning(f"No staging version found for {model_name} to promote")
+                    self.logger.warning(
+                        "No staging version found for %s to promote", model_name
+                    )
                     return False
+
                 version = staging_versions[0].version
-                self._client.transition_model_version_stage(
+                # 3. Transition to Production
+                client.transition_model_version_stage(
                     name=model_name,
                     version=version,
                     stage="Production",
                     archive_existing_versions=True,
                 )
                 self.logger.info(
-                    f"Promoted {model_name} version {version} from shadow run {shadow_run_id} to Production, archived version {prod_version.version}"
+                    f"Promoted {model_name} version {version} from shadow run {shadow_run_id} "
+                    f"to Production, archived version {prod_version.version}"
                 )
                 return True
             else:
-                self.logger.info(
-                    f"Shadow strategy {strategy_name} is not sufficiently better than production. "
-                    f"Sharpe improvement={sharpe_improvement:.3f} (>{sharpe_improvement_threshold}?), "
-                    f"Drawdown improvement={drawdown_improvement:.3f} (>{drawdown_improvement_threshold}?), "
-                    f"Hit rate improvement={hit_rate_improvement:.3f} (>{hit_rate_improvement_threshold}?)"
-                )
+                self.logger.info("Shadow strategy %s is not better than production", strategy_name)
                 return False
         except Exception as e:
             self.logger.error(f"Error during evaluation and promotion: {e}")
@@ -535,10 +556,14 @@ class MLflowManager:
 
     def _rollback_to_previous_production_sync(self, strategy_name: str) -> bool:
         """Synchronous rollback (to be run in thread pool)."""
+        client = self._client
+        if client is None:
+            raise RuntimeError("MLflow client not initialized")
+
         try:
             model_name = f"strategy_{strategy_name}"
             # Get current production version
-            prod_versions = self._client.get_latest_versions(model_name, stages=["Production"])
+            prod_versions = client.get_latest_versions(model_name, stages=["Production"])
             if not prod_versions:
                 self.logger.warning(f"No production version found for {model_name}")
                 return False
@@ -546,7 +571,7 @@ class MLflowManager:
 
             # Get previous versions that are archived (these were previous production)
             # We look for versions in the Archived stage
-            archived_versions = self._client.get_latest_versions(model_name, stages=["Archived"])
+            archived_versions = client.get_latest_versions(model_name, stages=["Archived"])
             if not archived_versions:
                 self.logger.warning(f"No archived version found for {model_name} to rollback to")
                 return False
@@ -559,21 +584,24 @@ class MLflowManager:
             previous_version = archived_versions_sorted[0].version
 
             # Archive current production version
-            self._client.transition_model_version_stage(
+            client.transition_model_version_stage(
                 name=model_name,
                 version=current_prod_version,
                 stage="Archived",
                 archive_existing_versions=False,
             )
-            # Promote the archived version back to production
-            self._client.transition_model_version_stage(
+            # Promote            # 3. Transition to Production
+            client.transition_model_version_stage(
                 name=model_name,
                 version=previous_version,
                 stage="Production",
                 archive_existing_versions=True,
             )
             self.logger.info(
-                f"Rolled back {model_name} from version {current_prod_version} to {previous_version}"
+                "Rolled back %s from version %s to %s",
+                model_name,
+                current_prod_version,
+                previous_version,
             )
             return True
         except Exception as e:
@@ -607,10 +635,14 @@ class MLflowManager:
 
     def _load_production_model_sync(self, strategy_name: str) -> Any | None:
         """Synchronous model loading (to be run in thread pool)."""
+        client = self._client
+        if client is None:
+            raise RuntimeError("MLflow client not initialized")
+
         try:
             model_name = f"strategy_{strategy_name}"
             # Get the latest production version
-            prod_versions = self._client.get_latest_versions(model_name, stages=["Production"])
+            prod_versions = client.get_latest_versions(model_name, stages=["Production"])
             if not prod_versions:
                 self.logger.warning(f"No production version found for {model_name}")
                 return None
@@ -621,7 +653,12 @@ class MLflowManager:
             # In a real implementation, you would load your actual model here
             # For now, we'll just return the model URI as a placeholder
             # Replace this with your actual model loading logic
-            self.logger.info(f"Loading model {model_name} version {version} from {model_uri}")
+            self.logger.info(
+                "Loading model %s version %s from %s",
+                model_name,
+                version,
+                model_uri,
+            )
 
             # Placeholder: return model URI
             # In reality, you would do something like:
@@ -648,9 +685,13 @@ class MLflowManager:
             model_name = f"strategy_{strategy_name}"
             # Get latest versions in each stage
             stages = ["None", "Staging", "Production", "Archived"]
+            client = self._client
+            if client is None:
+                raise RuntimeError("MLflow client not initialized")
+
             status = {}
             for stage in stages:
-                versions = self._client.get_latest_versions(model_name, stages=[stage])
+                versions = client.get_latest_versions(model_name, stages=[stage])
                 if versions:
                     status[stage.lower()] = {
                         "version": versions[0].version,

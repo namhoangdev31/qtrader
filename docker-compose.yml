@@ -106,18 +106,20 @@ services:
       - SERVICE_TYPE=ML
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       - CHRONOS_MODEL_ID=${CHRONOS_MODEL_ID:-amazon/chronos-2}
-      - TABPFN_MODEL_ID=xgboost
+      - TABPFN_MODEL_ID=Prior-Labs/tabpfn_2_5
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - hf_cache:/app/.cache/huggingface
     restart: always
     depends_on:
       - mlflow
+      - ollama
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 90s
     deploy:
       resources:
         limits:
@@ -178,6 +180,26 @@ services:
       retries: 3
 
   # ============================================================
+  # Ollama — Mac-optimized Large Language Model Engine
+  # ============================================================
+  ollama:
+    container_name: qt-ollama
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts/ollama_setup.sh:/scripts/ollama_setup.sh
+    entrypoint: ["/usr/bin/bash", "/scripts/ollama_setup.sh"]
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 4G
+
+  # ============================================================
   # Frontend UI — Next.js Dashboard
   # ============================================================
   frontend:
@@ -203,6 +225,7 @@ volumes:
   mlflow_data:
   redis_data:
   hf_cache:
+  ollama_data:
 
 networks:
   default:

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from qtrader.core.container import container
-from qtrader.core.events import BaseEvent
 from qtrader.core.exceptions import ConstraintViolation
 from qtrader.core.violation_handler import violation_handler
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from qtrader.core.events import BaseEvent
 
 
 class EnforcementEngine:
@@ -17,7 +20,7 @@ class EnforcementEngine:
     Integrates with core authorities to ensure 100% compliance.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = container.get("config")
         self.trace = container.get("trace")
         self.logger = container.get("logger")
@@ -131,7 +134,7 @@ def guard(engine: EnforcementEngine):
                     raise e
             return async_wrapper
         else:
-            def sync_wrapper(*args, **kwargs):
+            def sync_wrapper(*args, **kwargs) -> NoReturn:
                 raise RuntimeError("Synchronous execution not supported under EnforcementEngine. All guarded paths must be async.")
             return sync_wrapper
     return decorator

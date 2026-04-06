@@ -1,13 +1,15 @@
 """Public exports for qtrader.ml."""
 
 from qtrader.ml.autonomous import AutonomousLoop
+
 try:
     from qtrader.ml.distributed import RayCompute, RayHyperparamTuner
+
     _has_ray = True
 except (ImportError, ModuleNotFoundError):
     _has_ray = False
-    RayCompute = None  # type: ignore
-    RayHyperparamTuner = None  # type: ignore
+    RayCompute = None
+    RayHyperparamTuner = None
 
 from qtrader.ml.evaluation import ModelEvaluator, NestedCrossValidation
 from qtrader.ml.feedback_loop import FeedbackController, FeedbackSample
@@ -26,7 +28,7 @@ try:
     _has_torch = True
 except (ImportError, RuntimeError):
     _has_torch = False
-    LSTMSignalModel = None  # type: ignore
+    LSTMSignalModel = None
 
 __all__ = [
     "AutonomousLoop",
@@ -54,4 +56,3 @@ if _has_ray:
 
 if _has_torch:
     __all__.append("LSTMSignalModel")
-

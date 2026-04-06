@@ -15,12 +15,28 @@ from __future__ import annotations
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 logger = logging.getLogger("qtrader.ml.chronos")
+
+# Constants for trend analysis
+TREND_THRESHOLD = 0.001
+MIN_SAMPLES_FOR_TREND = 2
+
+# Standard Chronos returns 9 quantiles:
+# [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+MEDIAN_IDX = 4
+Q05_IDX = 0  # 0.1 in standard
+Q95_IDX = 8  # 0.9 in standard
+LOWER_BOUND_IDX = 1  # 0.2
+UPPER_BOUND_IDX = 7  # 0.8
+
+# Array dimensions
+NDIM_BATCH_VARIATE = 3  # (n_variates, n_quantiles, prediction_length)
+NDIM_QUANTILES_ONLY = 2  # (n_quantiles, prediction_length)
 
 
 @dataclass(slots=True)
@@ -39,16 +55,18 @@ class ForecastResult:
 
     @property
     def confidence_width(self) -> np.ndarray:
-        return self.upper_bound - self.lower_bound
+        result: np.ndarray = self.upper_bound - self.lower_bound
+        return result
 
     @property
     def trend_direction(self) -> str:
-        if len(self.mean) < 2:
+        if len(self.mean) < MIN_SAMPLES_FOR_TREND:
             return "FLAT"
+        # Relative change from start to end of forecast
         change = (self.mean[-1] - self.mean[0]) / max(abs(self.mean[0]), 1e-10)
-        if change > 0.001:
+        if change > TREND_THRESHOLD:
             return "BULLISH"
-        elif change < -0.001:
+        if change < -TREND_THRESHOLD:
             return "BEARISH"
         return "FLAT"
 
@@ -93,7 +111,8 @@ class ChronosForecastAdapter:
         logger.info(f"[CHRONOS] Loading {self.model_id} from HuggingFace...")
 
         try:
-            from chronos import Chronos2Pipeline  # type: ignore
+            # PLC0415: Heavy dependency loaded locally to avoid overhead on non-ML nodes
+            from chronos import Chronos2Pipeline  # noqa: PLC0415
 
             load_kwargs: dict[str, Any] = {}
             if self.device != "auto":
@@ -142,32 +161,33 @@ class ChronosForecastAdapter:
 
         if self._pipeline is not None:
             # Official Chronos-2 pipeline returns quantiles directly
-            # Output shape: list of [n_variates, n_quantiles, prediction_length]
+            # Output shape: [n_variates, n_quantiles, prediction_length]
             forecast_list = self._pipeline.predict(
                 prices.reshape(1, 1, -1),
                 prediction_length=prediction_length,
             )
-            forecast = forecast_list[0] # Get first series in batch
+            forecast = forecast_list[0]  # Get first series in batch
 
             if hasattr(forecast, "numpy"):
                 forecast = forecast.numpy()
 
-            # Chronos-2 usually returns 9 quantiles: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+            # Chronos-2 usually returns 9 quantiles:
+            # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
             # Index 4 is the median (0.5), 0 is 0.1, 8 is 0.9, etc.
-            if forecast.ndim == 3: # (n_variates, n_quantiles, prediction_length)
-                # We assume univariate (n_variates=1)
-                f = forecast[0] 
-                mean = f[4] # Median
-                quantile_05 = f[0] # Actually 0.1 in standard Chronos, but close enough for UI
-                quantile_95 = f[8] # Actually 0.9 in standard Chronos
-                lower_bound = f[1] # 0.2
-                upper_bound = f[7] # 0.8
-            elif forecast.ndim == 2: # (n_quantiles, prediction_length)
-                mean = forecast[4]
-                quantile_05 = forecast[0]
-                quantile_95 = forecast[8]
-                lower_bound = forecast[1]
-                upper_bound = forecast[7]
+            if forecast.ndim == NDIM_BATCH_VARIATE:
+                # We assume univariate (n_variates=1), take first and only variate
+                f = forecast[0]
+                mean = f[MEDIAN_IDX]
+                quantile_05 = f[Q05_IDX]
+                quantile_95 = f[Q95_IDX]
+                lower_bound = f[LOWER_BOUND_IDX]
+                upper_bound = f[UPPER_BOUND_IDX]
+            elif forecast.ndim == NDIM_QUANTILES_ONLY:
+                mean = forecast[MEDIAN_IDX]
+                quantile_05 = forecast[Q05_IDX]
+                quantile_95 = forecast[Q95_IDX]
+                lower_bound = forecast[LOWER_BOUND_IDX]
+                upper_bound = forecast[UPPER_BOUND_IDX]
             else:
                 mean = forecast
                 quantile_05 = forecast * 0.95
@@ -200,7 +220,7 @@ class ChronosForecastAdapter:
     @staticmethod
     def _fallback_forecast(prices: np.ndarray, prediction_length: int) -> np.ndarray:
         """Simple fallback forecast when model is not available."""
-        if len(prices) < 2:
+        if len(prices) < MIN_SAMPLES_FOR_TREND:
             return np.full(prediction_length, prices[0] if len(prices) > 0 else 0.0)
 
         # Linear trend + mean reversion

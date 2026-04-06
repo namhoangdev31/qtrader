@@ -8,8 +8,8 @@ import polars as pl
 from loguru import logger
 
 if TYPE_CHECKING:
-    from qtrader.core.events import MarketEvent
     from qtrader.core.event_bus import EventBus
+    from qtrader.core.events import MarketEvent
 
 MIN_WINDOW_SIZE = 10
 
@@ -142,7 +142,7 @@ class DataQualityGate:
         if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
             return True, "Invalid spread — skip check"
 
-        spread = best_ask - best_bid
+        best_ask - best_bid
         mid = (best_bid + best_ask) / 2.0
 
         # Trade should be within the spread (or very close to it)

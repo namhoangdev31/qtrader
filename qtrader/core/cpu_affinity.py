@@ -103,7 +103,6 @@ class CPUAffinityManager:
             import ctypes
 
             libc = ctypes.CDLL("libc.so.6")
-            CPU_SETSIZE = 1024
             mask = 1 << core_id
             # pthread_setaffinity_np
             result = libc.sched_setaffinity(0, 8, ctypes.byref(ctypes.c_ulong(mask)))

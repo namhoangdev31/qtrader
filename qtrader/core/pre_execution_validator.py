@@ -151,5 +151,5 @@ class PreExecutionValidator:
             json.dump(self._readiness_matrix, f, indent=2)
             
         # 3. Export Float Report (if not already handled by scanner)
-        scanner = FloatScanner(str(self.root_path)) # Re-scan or reuse if I could
+        FloatScanner(str(self.root_path)) # Re-scan or reuse if I could
         # For simplicity, we just rely on the precheck_report having the status.

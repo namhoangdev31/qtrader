@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS fills (
     notional         NUMERIC(24, 8) GENERATED ALWAYS AS (quantity * price) STORED,
     timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+    session_id       UUID,
     metadata         JSONB        DEFAULT '{}'
 );
 
@@ -29,7 +30,9 @@ SELECT create_hypertable('fills', 'timestamp', if_not_exists => TRUE);
 
 CREATE INDEX IF NOT EXISTS idx_fills_symbol ON fills (symbol);
 CREATE INDEX IF NOT EXISTS idx_fills_order_id ON fills (order_id);
+CREATE INDEX IF NOT EXISTS idx_fills_session ON fills (session_id);
 CREATE INDEX IF NOT EXISTS idx_fills_timestamp ON fills (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_fills_session_time ON fills (session_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_fills_side ON fills (side);
 
 -- ============================================================
@@ -50,6 +53,7 @@ CREATE TABLE IF NOT EXISTS orders (
     submitted_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     filled_at        TIMESTAMPTZ,
     source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+    session_id       UUID,
     metadata         JSONB        DEFAULT '{}'
 );
 
@@ -57,6 +61,7 @@ SELECT create_hypertable('orders', 'submitted_at', if_not_exists => TRUE);
 
 CREATE INDEX IF NOT EXISTS idx_orders_symbol ON orders (symbol);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status);
+CREATE INDEX IF NOT EXISTS idx_orders_session ON orders (session_id);
 CREATE INDEX IF NOT EXISTS idx_orders_submitted ON orders (submitted_at DESC);
 
 -- ============================================================
@@ -71,6 +76,7 @@ CREATE TABLE IF NOT EXISTS positions (
     realized_pnl     NUMERIC(24, 8) NOT NULL DEFAULT 0,
     timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+    session_id       UUID,
 
     -- Unique constraint: latest position per symbol
     UNIQUE (symbol, timestamp)
@@ -91,12 +97,14 @@ CREATE TABLE IF NOT EXISTS pnl_snapshots (
     realized_pnl     NUMERIC(24, 8) NOT NULL DEFAULT 0,
     unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
     total_commission NUMERIC(24, 8) NOT NULL DEFAULT 0,
-    timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    session_id       UUID
 );
 
 SELECT create_hypertable('pnl_snapshots', 'timestamp', if_not_exists => TRUE);
-
+CREATE INDEX IF NOT EXISTS idx_pnl_session ON pnl_snapshots (session_id);
 CREATE INDEX IF NOT EXISTS idx_pnl_timestamp ON pnl_snapshots (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pnl_session_time ON pnl_snapshots (session_id, timestamp DESC);
 
 -- ============================================================
 -- 5. SYSTEM_EVENTS TABLE — Pipeline heartbeat, alerts, errors
@@ -107,6 +115,7 @@ CREATE TABLE IF NOT EXISTS system_events (
     action           VARCHAR(50)  NOT NULL,
     reason           TEXT,
     source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+    session_id       UUID,
     metadata         JSONB        DEFAULT '{}',
     timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -127,6 +136,7 @@ CREATE TABLE IF NOT EXISTS ai_thinking_logs (
     thinking         TEXT         NOT NULL,
     explanation      TEXT,
     timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    session_id       UUID,
     metadata         JSONB        DEFAULT '{}'
 );
 
