@@ -43,7 +43,7 @@ class FundingEngine:
         Returns:
             FundingEvent: Standardized event containing the calculated payment.
         """
-        # Mathematical model: Payment = Position × Price × Rate
+        # Mathematical model: Payment = Position x Price x Rate
         funding_amount = quantity * mark_price * funding_rate
 
         logger.debug(
@@ -97,25 +97,6 @@ class FundingEngine:
                     debit=amount,
                     credit=Decimal("0"),
                     description=f"Funding Collected | {funding_event.payload.symbol}"
-                )
-            ]
-        else:
-            # User is RECEIVING funding
-            abs_amount = abs(amount)
-            entries = [
-                # 1. Increase User Cash
-                LedgerEntryPayload(
-                    account_id=account_id,
-                    debit=abs_amount,
-                    credit=Decimal("0"),
-                    description=f"Funding Payment Received | {funding_event.payload.symbol}"
-                ),
-                # 2. Decrease System/Peer Pool
-                LedgerEntryPayload(
-                    account_id="SYSTEM_FUNDING_POOL",
-                    debit=Decimal("0"),
-                    credit=abs_amount,
-                    description=f"Funding Disbursed | {funding_event.payload.symbol}"
                 )
             ]
         else:

@@ -88,7 +88,7 @@ class AtomicTrioPipeline:
         self,
         chronos_model_id: str = "amazon/chronos-2",
         chronos_backend: str = "auto",
-        tabpfn_model_id: str = "Prior-Labs/tabpfn_2_5",
+        tabpfn_model_id: str = "xgboost",
         tabpfn_device: str = "cpu",
         tabpfn_n_estimators: int = 4,
         phi2_model_id: str = "mlx-community/phi-2",
@@ -118,7 +118,7 @@ class AtomicTrioPipeline:
 
         from qtrader.ml.chronos_adapter import ChronosForecastAdapter
         from qtrader.ml.phi2_controller import Phi2DecisionController
-        from qtrader.ml.tabpfn_adapter import TabPFNRiskAdapter
+        from qtrader.ml.xgboost_adapter import XGBoostRiskAdapter
 
         logger.info("[ATOMIC_TRIO] Initializing pipeline...")
 
@@ -127,10 +127,9 @@ class AtomicTrioPipeline:
             device=self.chronos_backend,
         )
 
-        self._tabpfn = TabPFNRiskAdapter(
-            model_id=self.tabpfn_model_id,
+        self._tabpfn = XGBoostRiskAdapter(
+            model_id="xgboost_risk_v1",
             device=self.tabpfn_device,
-            n_estimators=self.tabpfn_n_estimators,
         )
 
         self._phi2 = Phi2DecisionController(
@@ -191,7 +190,7 @@ class AtomicTrioPipeline:
                 tabpfn_risk = risk_result.to_dict()
                 tabpfn_latency = (time.time() - t0) * 1000
             except Exception as e:
-                logger.warning(f"[ATOMIC_TRIO] TabPFN failed: {e}")
+                logger.warning(f"[ATOMIC_TRIO] XGBoost ML failed: {e}")
 
         # Stage 3: Phi-2 Decision
         phi2_latency = 0.0

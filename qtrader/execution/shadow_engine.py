@@ -518,3 +518,29 @@ class ShadowEngine:
                 f"({info['remaining_days']:.1f} days remaining)"
             )
         return True, "Shadow validation duration satisfied"
+
+    def can_trade_live(self, symbol: str) -> tuple[bool, str]:
+        """
+        Final pre-trade check for institutional shadow validation.
+        
+        Standash §4.13: Shadow Guard.
+        """
+        if not self.shadow_mode:
+            return True, "Shadow mode disabled (Force Live)"
+
+        # 1. Duration check
+        can_promote, reason = self.can_promote_to_live()
+        if not can_promote:
+            return False, reason
+
+        # 2. Performance degradation check (Tracking Error)
+        # If mean square error between live/shadow fills is too high
+        total_error = self.metrics.get("execution_error", 0.0)
+        trade_count = len(self.recent_shadow_fills)
+        
+        if trade_count > 5:
+            avg_error = total_error / trade_count
+            if avg_error > 0.05:  # 5% tracking error limit
+                return False, f"SHADOW_DEGRADATION | High Tracking Error: {avg_error:.2%}"
+
+        return True, "SHADOW_VALIDATED"

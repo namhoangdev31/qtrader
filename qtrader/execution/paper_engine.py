@@ -1,9 +1,30 @@
+"""Paper Trading Engine with continuous simulation, SL/TP, and adaptive strategy.
+
+Executes simulated orders against real Coinbase market data.
+Tracks P&L, computes realistic slippage via Kyle's Lambda,
+and supports continuous autonomous trading with adaptive parameters.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import logging
+import random
+import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
-from qtrader.core.events import FillEvent, OrderEvent
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+from qtrader.core.events import (
+    FillEvent,
+    FillPayload,
+    OrderEvent,
+)
 
 _LOG = logging.getLogger("qtrader.paper")
 
@@ -19,131 +40,575 @@ class TradeRecord:
     pnl_pct: float
     slippage_bps: float
     venue: str
+    DEFAULT_SL_PCT: float = 0.02
+    DEFAULT_TP_PCT: float = 0.05
+    EPSILON_QTY: float = 1e-8
+    MIN_HISTORY_FOR_ANALYSIS: int = 20
+    SIGNIFICANT_PRICE_CHANGE: float = 0.0001
+    reason: str = "SIGNAL"
+    stop_loss: float = 0.0
+    take_profit: float = 0.0
+    entry_time: str = ""
+    exit_time: str = ""
+    commission: float = 0.0
+    trade_id: str = ""
+
+
+@dataclass
+class OpenPosition:
+    symbol: str
+    side: str
+    qty: float
+    avg_price: float
+    avg_comm_per_unit: float
+    stop_loss: float
+    take_profit: float
+    entry_time: str
+    position_id: str = ""
+
+
+@dataclass
+class AdaptiveConfig:
+    base_stop_loss_pct: float = 0.02
+    base_take_profit_pct: float = 0.03
+    base_position_size_pct: float = 0.20
+    max_position_usd: float = 5000.0
+
+    win_streak: int = 0
+    loss_streak: int = 0
+    total_wins: int = 0
+    total_losses: int = 0
+    total_pnl: float = 0.0
+
+    streak_adjust_step: float = 0.005
+    max_sl_adjustment: float = 0.03
+    max_tp_adjustment: float = 0.05
+    min_position_pct: float = 0.05
+    max_position_pct: float = 0.50
+
+    # Streak thresholds
+    STREAK_LOSS_CRITICAL: int = 3
+    STREAK_WIN_STABLE: int = 2
+    STREAK_MAX_ADJUST_WINDOWS: int = 6
+    STREAK_WIN_REWARD: int = 3
+
+    @property
+    def current_stop_loss_pct(self) -> float:
+        base = self.base_stop_loss_pct
+        if self.loss_streak >= self.STREAK_LOSS_CRITICAL:
+            adj = self.streak_adjust_step * min(self.loss_streak, self.STREAK_MAX_ADJUST_WINDOWS)
+            return min(base + adj, base + self.max_sl_adjustment)
+        if self.win_streak >= self.STREAK_WIN_STABLE:
+            return max(
+                base - self.streak_adjust_step * min(self.win_streak, 4),
+                base - self.max_sl_adjustment,
+            )
+        return base
+
+    @property
+    def current_take_profit_pct(self) -> float:
+        base = self.base_take_profit_pct
+        if self.loss_streak >= self.STREAK_LOSS_CRITICAL:
+            adj = self.streak_adjust_step * min(self.loss_streak, self.STREAK_MAX_ADJUST_WINDOWS)
+            return max(base - adj, base - self.max_tp_adjustment)
+        if self.win_streak >= self.STREAK_WIN_STABLE:
+            return min(
+                base + self.streak_adjust_step * min(self.win_streak, 4),
+                base + self.max_tp_adjustment,
+            )
+        return base
+
+    @property
+    def current_position_size_pct(self) -> float:
+        base = self.base_position_size_pct
+        if self.loss_streak >= self.STREAK_WIN_STABLE:
+            adj = self.streak_adjust_step * min(self.loss_streak, self.STREAK_MAX_ADJUST_WINDOWS)
+            return max(base - adj, self.min_position_pct)
+        if self.win_streak >= self.STREAK_WIN_REWARD:
+            return min(
+                base + self.streak_adjust_step * min(self.win_streak, 4), self.max_position_pct
+            )
+        return base
+
+    def record_win(self, pnl: float) -> None:
+        self.win_streak += 1
+        self.loss_streak = 0
+        self.total_wins += 1
+        self.total_pnl += pnl
+
+    def record_loss(self, pnl: float) -> None:
+        self.loss_streak += 1
+        self.win_streak = 0
+        self.total_losses += 1
+        self.total_pnl += pnl
+
+    @property
+    def win_rate(self) -> float:
+        total = self.total_wins + self.total_losses
+        return self.total_wins / total if total > 0 else 0.0
+
+    @property
+    def expected_value(self) -> float:
+        wr = self.win_rate
+        if wr in {0, 1} or self.total_losses == 0:
+            return 0.0
+        avg_w = self.total_pnl / max(self.total_wins, 1) if self.total_wins > 0 else 0
+        loss_pnl = self.total_pnl - (avg_w * self.total_wins)
+        avg_l = abs(loss_pnl) / self.total_losses
+        return wr * avg_w - (1 - wr) * avg_l
 
 
 class PaperTradingEngine:
-    """
-    Executes simulated orders against real Coinbase market data.
-    Tracks P&L and computes realistic slippage via Kyle's Lambda.
-    """
+    """Paper trading with continuous simulation, SL/TP, and adaptive strategy."""
 
     def __init__(
         self,
-        starting_capital: float = 100000.0,
-        fee_rate: float = 0.0004,
+        starting_capital: float = 1000.0,
+        fee_rate: float = 0.0,  # No longer used as a flat taker fee
+        performance_fee: float = 0.15,
+        max_concurrent_positions: int = 10,
         max_trades_history: int = 100_000,
+        sl_pct: float = 0.02,
+        tp_pct: float = 0.03,
+        tick_interval: float = 0.2,
+        base_price: float = 50000.0,
     ) -> None:
         self.starting_capital = starting_capital
-        self.fee_rate = fee_rate
+        self.performance_fee = performance_fee
+        self.max_concurrent_positions = max_concurrent_positions
         self.closed_trades: list[TradeRecord] = []
         self._max_trades_history = max_trades_history
 
-        # position tracking: dict[symbol, tuple(qty, avg_price, avg_commission_per_unit)]
+        # Simulation Constants
+        self.PRICE_HISTORY_LIMIT = 5000
+        self.PRICE_HISTORY_PRUNE = 2000
+        self.MIN_HISTORY_FOR_ANALYSIS = 20
+        self.RSI_PERIOD = 14
+        self.RSI_BULL_GATE = 45.0
+        self.RSI_BEAR_GATE = 55.0
+        self.RSI_OVERSOLD = 30.0
+        self.RSI_OVERBOUGHT = 70.0
+        self.REVERSAL_THRESHOLD = 0.35
+        self.MIN_TRADE_NOTIONAL = 10.0
+        self.EPSILON_QTY = 1e-8
+        self.THINKING_HISTORY_LIMIT = 100
+
         self._open_positions: dict[str, tuple[float, float, float]] = {}
+        self._managed_positions: dict[str, OpenPosition] = {}
+
+        self.adaptive = AdaptiveConfig(
+            base_stop_loss_pct=sl_pct,
+            base_take_profit_pct=tp_pct,
+        )
+
+        self._cash = starting_capital
+        self._total_commissions = 0.0
+        self._total_gross_pnl = 0.0
+        self._peak_equity = starting_capital
+        self._max_drawdown = 0.0
+        self._current_price = base_price
+        self._base_price = base_price
+        self._price_history: list[float] = []
+        self._volatility = 0.002
+        self._running = False
+        self._tick_interval = tick_interval
+        self._last_external_tick = 0.0
+        self._last_thinking = "Awaiting first analysis..."
+        self._last_explanation = "Simulation engine is initializing market data buffer..."
+        self._thinking_history: list[dict[str, Any]] = []
+
+        self.EXTERNAL_TICK_TIMEOUT = 2.0
+
+        self._on_update: Callable[[dict[str, Any]], None] | None = None
+
+    def set_update_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
+        self._on_update = handler
+
+    def _emit(self, data: dict[str, Any]) -> None:
+        if self._on_update:
+            try:
+                self._on_update(data)
+            except Exception as e:
+                _LOG.error(f"[PAPER] Update handler error: {e}")
+
+    @property
+    def cash(self) -> float:
+        return self._cash
+
+    @property
+    def equity(self) -> float:
+        market_value = 0.0
+        for _, (qty, avg_price, _) in self._open_positions.items():
+            if qty > 0:
+                # Long: Market Value = Quantity * Current Price
+                market_value += qty * self._current_price
+            elif qty < 0:
+                # Short: Market Value = Notional + (Entry - Current) * Quantity
+                # But since we subtract full notional from cash on entry, 
+                # we add back (Notional + PnL)
+                notional = abs(qty) * avg_price
+                pnl = (avg_price - self._current_price) * abs(qty)
+                market_value += notional + pnl
+        return self._cash + market_value
+
+    @property
+    def realized_pnl(self) -> float:
+        # Net Realized PnL = (Total Equity change) - (Current Unrealized Gross PnL)
+        # This ensures entry commissions are reflected in "Realized" immediately.
+        market_value = 0.0
+        notional_value = 0.0
+        for _, (qty, avg_price, _) in self._open_positions.items():
+            notional_value += abs(qty) * avg_price
+            if qty > 0:
+                market_value += qty * self._current_price
+            else:
+                pnl = (avg_price - self._current_price) * abs(qty)
+                market_value += (abs(qty) * avg_price) + pnl
+        
+        unrealized_gross = market_value - notional_value
+        total_net_pnl = self.equity - self.starting_capital
+        return total_net_pnl - unrealized_gross
+
+    @property
+    def total_commissions(self) -> float:
+        return self._total_commissions
+
+    def _simulate_price_tick(self) -> float:
+        if time.time() - self._last_external_tick < self.EXTERNAL_TICK_TIMEOUT:
+            self._price_history.append(self._current_price)
+            if len(self._price_history) > self.PRICE_HISTORY_LIMIT:
+                self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
+            return self._current_price
+
+        drift = random.SystemRandom().gauss(0, self._volatility)
+        mean_revert = (self._base_price - self._current_price) / self._base_price * 0.0001
+        self._current_price *= 1 + drift + mean_revert
+        self._current_price = max(self._current_price, 1.0)
+        self._price_history.append(self._current_price)
+        if len(self._price_history) > self.PRICE_HISTORY_LIMIT:
+            self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
+        return self._current_price
+
+    def _generate_signal(self) -> dict[str, Any] | None:
+        if len(self._price_history) < self.MIN_HISTORY_FOR_ANALYSIS:
+            return None
+        
+        # We now allow signal generation while in position to support DYNAMIC_EXIT
+
+        recent = self._price_history[-20:]
+        sma_short = sum(recent[-5:]) / 5
+        sma_long = sum(recent[-10:]) / 10
+
+        rsi = 50.0
+        if len(recent) >= self.RSI_PERIOD:
+            gains, losses = [], []
+            for i in range(1, min(self.RSI_PERIOD + 1, len(recent))):
+                diff = recent[i] - recent[i - 1]
+                gains.append(diff if diff > 0 else 0)
+                losses.append(abs(diff) if diff < 0 else 0)
+            avg_g = sum(gains) / len(gains) if gains else 0
+            avg_l = sum(losses) / len(losses) if losses else 1
+            rs = avg_g / max(avg_l, 0.0001)
+            rsi = 100 - 100 / (1 + rs)
+
+        if sma_short > sma_long * 1.0001 and rsi < self.RSI_BULL_GATE:
+            self._last_thinking = (
+                f"SMA Bullish Cross ({sma_short:.2f} > {sma_long:.2f}) | "
+                f"RSI Oversold ({rsi:.1f})"
+            )
+            self._last_explanation = (
+                f"The system detected a bullish SMA crossover with RSI at {rsi:.1f}. "
+                "Executing adaptive entry with confirmed momentum."
+            )
+            res = {"action": "BUY", "strength": 0.5 + random.SystemRandom().random() * 0.3}
+        elif sma_short < sma_long * 0.9999 and rsi > self.RSI_BEAR_GATE:
+            self._last_thinking = (
+                f"SMA Bearish Cross ({sma_short:.2f} < {sma_long:.2f}) | "
+                f"RSI Overbought ({rsi:.1f})"
+            )
+            self._last_explanation = (
+                f"Bearish SMA crossover detected. RSI is at {rsi:.1f}, "
+                "suggesting overbought conditions. Risk protocols suggest "
+                "a short position to capture the expected mean reversion."
+            )
+            res = {"action": "SELL", "strength": 0.5 + random.SystemRandom().random() * 0.3}
+        else:
+            # Update thinking even on HOLD
+            res = None
+            if rsi < self.RSI_OVERSOLD:
+                self._last_thinking = f"Extreme RSI Oversold ({rsi:.1f}) - Monitoring base"
+                self._last_explanation = (
+                    "RSI is extremely low. Waiting for bottom confirmation before entry."
+                )
+            elif rsi > self.RSI_OVERBOUGHT:
+                self._last_thinking = f"Extreme RSI Overbought ({rsi:.1f}) - Monitoring peak"
+                self._last_explanation = (
+                    "RSI is extremely high. Monitoring for exhaustion "
+                    "before considering shorts."
+                )
+            else:
+                self._last_thinking = (
+                    f"Market Neutral | RSI: {rsi:.1f} | "
+                    f"SMA Delta: {abs(sma_short - sma_long):.2f}"
+                )
+                self._last_explanation = (
+                    "No strong directional conviction. Maintaining HOLD status "
+                    "to preserve capital."
+                )
+ 
+        # Add to history
+        self._thinking_history.append({
+            "timestamp": time.time(),
+            "thinking": self._last_thinking,
+            "explanation": self._last_explanation
+        })
+        if len(self._thinking_history) > self.THINKING_HISTORY_LIMIT:
+            self._thinking_history = self._thinking_history[-self.THINKING_HISTORY_LIMIT:]
+
+        return res
+
+    def _open_managed_position(self, side: str, strength: float) -> OpenPosition | None:
+        equity = self.equity
+        pos_pct = self.adaptive.current_position_size_pct        # Standard position sizing
+        notional = min(equity * pos_pct, self.adaptive.max_position_usd)
+        notional = max(notional, equity * self.adaptive.min_position_pct)
+        if notional < self.MIN_TRADE_NOTIONAL:
+            return None
+
+        price = self._current_price
+        qty = notional / price
+
+        sl_pct = self.adaptive.current_stop_loss_pct
+        tp_pct = self.adaptive.current_take_profit_pct
+ 
+        # No entry commission in performance fee model
+        self._cash -= notional
+        commission = 0.0
+        
+        # Update metrics
+        if side == "BUY":
+            sl = price * (1 - sl_pct)
+            tp = price * (1 + tp_pct)
+        else:
+            sl = price * (1 + sl_pct)
+            tp = price * (1 - tp_pct)
+
+        sign = 1 if side == "BUY" else -1
+        sym = "BTC-USD"
+        commission = 0.0
+        self._open_positions[sym] = (qty * sign, price, commission / qty)
+
+        pos = OpenPosition(
+            symbol=sym,
+            side=side,
+            qty=qty,
+            avg_price=price,
+            avg_comm_per_unit=commission / qty,
+            stop_loss=sl,
+            take_profit=tp,
+            entry_time=datetime.now(timezone.utc).isoformat(),
+            position_id=str(uuid.uuid4()),
+        )
+        self._managed_positions[sym] = pos
+
+        _LOG.info(
+            f"[PAPER] OPEN {side} {sym} qty={qty:.6f} @ {price:.2f} | "
+            f"SL={sl:.2f} TP={tp:.2f} | Notional=${notional:.2f}"
+        )
+        return pos
+
+    def _check_exit_conditions(self) -> TradeRecord | None:
+        for sym, pos in list(self._managed_positions.items()):
+            price = self._current_price
+            reason = None
+            if pos.side == "BUY":
+                if price <= pos.stop_loss:
+                    reason = "STOP_LOSS"
+                elif price >= pos.take_profit:
+                    reason = "TAKE_PROFIT"
+            elif price >= pos.stop_loss:
+                reason = "STOP_LOSS"
+            elif price <= pos.take_profit:
+                reason = "TAKE_PROFIT"
+            
+            if reason:
+                return self._close_managed_position(sym, reason, price)
+        return None
+
+    def _check_dynamic_exit(self, signal: dict[str, Any] | None) -> TradeRecord | None:
+        """Check if current signals warrant an early tactical exit."""
+        if not signal or not self._managed_positions:
+            return None
+        
+        for sym, pos in list(self._managed_positions.items()):
+            action = signal.get("action")
+            strength = signal.get("strength", 0.0)
+            
+            # Reversal Detection: Exit if signal contradicts current position
+            should_exit = False
+            if (pos.side == "BUY" and action == "SELL" and 
+                strength >= self.REVERSAL_THRESHOLD):
+                should_exit = True
+            elif (pos.side == "SELL" and action == "BUY" and 
+                  strength >= self.REVERSAL_THRESHOLD):
+                should_exit = True
+                
+            if should_exit:
+                _LOG.info(
+                    f"[PAPER] DYNAMIC_EXIT triggered for {sym} | "
+                    f"Signal={action} strength={strength:.2f}"
+                )
+                return self._close_managed_position(sym, "DYNAMIC_EXIT", self._current_price)
+        
+        return None
+
+    def _close_managed_position(self, symbol: str, reason: str, exit_price: float) -> TradeRecord:
+        pos = self._managed_positions.pop(symbol)
+        curr_qty, curr_price, curr_comm = self._open_positions.get(symbol, (0.0, 0.0, 0.0))
+
+        if curr_qty > 0:
+            # LONG: Gross = (Exit - Entry) * Qty
+            gross_pnl = (exit_price - curr_price) * pos.qty
+        else:
+            # SHORT: Gross = (Entry - Exit) * Qty
+            gross_pnl = (curr_price - exit_price) * pos.qty
+
+        # Performance Fee: 15% of positive gross PnL
+        entry_comm = curr_comm * pos.qty
+        exit_comm = 0.0
+        if gross_pnl > 0:
+            exit_comm = gross_pnl * self.performance_fee
+        
+        net_pnl = gross_pnl - entry_comm - exit_comm
+        # Net Return % = Net PnL / Entry Notional
+        net_pnl_pct = net_pnl / (curr_price * pos.qty) if curr_price > 0 else 0
+
+        # SETTLEMENT: Return Notional + Gross PnL - Exit Fee
+        notional_entry = curr_price * pos.qty
+        self._cash += (notional_entry + gross_pnl) - exit_comm
+        
+        self._total_commissions += exit_comm
+        self._total_gross_pnl += gross_pnl
+        self._open_positions.pop(symbol, None)
+
+        if net_pnl > 0:
+            self.adaptive.record_win(net_pnl)
+        else:
+            self.adaptive.record_loss(net_pnl)
+
+        ref_mid = self._current_price
+        slippage_bps = (abs(exit_price - ref_mid) / ref_mid * 10000) if ref_mid > 0 else 0
+
+        trade = TradeRecord(
+            symbol=symbol,
+            side=pos.side,
+            entry_price=pos.avg_price,
+            exit_price=exit_price,
+            qty=pos.qty,
+            pnl=net_pnl,
+            pnl_pct=net_pnl_pct,
+            slippage_bps=slippage_bps,
+            venue="SIMULATED",
+            reason=reason,
+            stop_loss=pos.stop_loss,
+            take_profit=pos.take_profit,
+            entry_time=pos.entry_time,
+            exit_time=datetime.now(timezone.utc).isoformat(),
+            commission=exit_comm,
+            trade_id=str(uuid.uuid4()),
+        )
+        self.closed_trades.append(trade)
+        if len(self.closed_trades) > self._max_trades_history:
+            self.closed_trades = self.closed_trades[-self._max_trades_history // 2 :]
+
+        # Update drawdown
+        peak = self.equity
+        self._peak_equity = max(self._peak_equity, peak)
+        dd = (self._peak_equity - self.equity) / self._peak_equity if self._peak_equity > 0 else 0
+        self._max_drawdown = max(self._max_drawdown, dd)
+
+        _LOG.info(
+            f"[PAPER] CLOSE {reason} {symbol} {pos.side} | "
+            f"Entry={pos.avg_price:.2f} Exit={exit_price:.2f} | "
+            f"PnL=${net_pnl:.2f} ({net_pnl_pct:.2f}%) | WR={self.adaptive.win_rate:.1%}"
+        )
+        return trade
 
     def _kyle_lambda(self, order_qty: float, top_depth: float) -> float:
-        """
-        Estimate price impact (slippage) based on order size vs top-of-book depth.
-        Using a more conservative 10 bps max cap for liquid crypto books.
-        """
         if top_depth <= 0:
-            return 0.0005  # 5 bps default penalty
-
-        # Base slippage of 0.2 bps + impact
+            return 0.0005
         ratio = order_qty / top_depth
         impact = 0.00002 + (0.0001 * ratio)
-
-        # Max slippage capped at 10 bps (0.1%) for institutional realism
         return min(impact, 0.0010)
 
     def simulate_fill(self, order: OrderEvent, market_state: dict[str, Any]) -> FillEvent:
-        """
-        Process the order against the current market state and generate a fill.
-        """
         bid = float(market_state.get("bid", 0.0))
         ask = float(market_state.get("ask", 0.0))
         top_depth = float(market_state.get("top_depth", 0.0))
         mid = (bid + ask) / 2.0 if (bid > 0 and ask > 0) else 0.0
 
         if ask <= 0 or bid <= 0:
-            _LOG.warning(
-                f"Invalid market state for {order.symbol}: bid={bid}, ask={ask}. Cannot fill."
-            )
-            if order.price:
-                price = order.price
-            else:
+            _LOG.warning(f"Invalid market state for {order.symbol}: bid={bid}, ask={ask}")
+            price = float(order.price) if order.price else 0.0
+            if price <= 0:
                 raise ValueError(f"No valid price available to fill {order.symbol}")
         else:
-            slippage = self._kyle_lambda(order.quantity, top_depth)
-
-            # Cross the spread + price impact
+            slippage = self._kyle_lambda(float(order.quantity), top_depth)
             if order.side.upper() == "BUY":
                 price = ask * (1 + slippage)
             else:
                 price = bid * (1 - slippage)
-
-        # Apply a flat commission
-        commission = price * order.quantity * self.fee_rate
+ 
+        # Flat taker fee removed in favor of performance fee on exit
+        commission = 0.0
 
         fill = FillEvent(
-            symbol=order.symbol,
-            quantity=order.quantity,
-            price=price,
-            commission=commission,
-            side=order.side,
-            order_id=order.order_id or str(uuid.uuid4()),
-            fill_id=str(uuid.uuid4()),
+            source="PaperTradingEngine",
+            payload=FillPayload(
+                order_id=order.order_id or str(uuid.uuid4()),
+                symbol=order.symbol,
+                side=order.side,
+                quantity=order.quantity,
+                price=Decimal(str(price)),
+                commission=Decimal(str(commission)),
+            ),
         )
 
-        # Track the trade for EV calculation
         self._record_trade(fill, market_state.get("venue", "SIMULATED_COINBASE"), mid)
-
         return fill
 
     def _record_trade(self, fill: FillEvent, venue: str, mid_price: float) -> None:
-        """Track entry and exit for closed P&L records with accurate fee subtraction."""
-        sym = fill.symbol
-        side = fill.side.upper()
-        qty = fill.quantity
-        price = fill.price
-        comm = fill.commission
+        sym = fill.payload.symbol
+        side = fill.payload.side.upper()
+        qty = float(fill.payload.quantity)
+        price = float(fill.payload.price)
+        comm = float(fill.payload.commission)
         comm_per_unit = comm / qty if qty > 0 else 0.0
-
-        # mid_price is used to calculate TRUE slippage (impact + spread)
-        # falling back to price if mid is unavailable (though it shouldn't be)
         ref_mid = mid_price if mid_price > 0 else price
 
         curr_qty, curr_price, curr_comm_per_unit = self._open_positions.get(sym, (0.0, 0.0, 0.0))
 
         if curr_qty == 0:
-            # New position
             sign = 1 if side == "BUY" else -1
             self._open_positions[sym] = (qty * sign, price, comm_per_unit)
         elif (curr_qty > 0 and side == "BUY") or (curr_qty < 0 and side == "SELL"):
-            # Increasing position
             sign = 1 if side == "BUY" else -1
             total_qty = abs(curr_qty) + qty
             avg_price = ((abs(curr_qty) * curr_price) + (qty * price)) / total_qty
             avg_comm = ((abs(curr_qty) * curr_comm_per_unit) + comm) / total_qty
             self._open_positions[sym] = (total_qty * sign, avg_price, avg_comm)
         else:
-            # Closing position
             closing_qty = min(abs(curr_qty), qty)
-
-            # Gross directional PnL
-            if curr_qty > 0:  # Long closed by SELL
+            if curr_qty > 0:
                 gross_pnl = (price - curr_price) * closing_qty
-                pnl_pct = (price - curr_price) / curr_price
-            else:  # Short closed by BUY
+                pnl_pct = (price - curr_price) / curr_price if curr_price > 0 else 0
+            else:
                 gross_pnl = (curr_price - price) * closing_qty
-                pnl_pct = (curr_price - price) / curr_price
+                pnl_pct = (curr_price - price) / curr_price if curr_price > 0 else 0
 
-            # Net PnL = gross - (entry fees pro-rata) - (exit fees pro-rata)
             exit_comm_share = (comm / qty) * closing_qty
             entry_comm_share = curr_comm_per_unit * closing_qty
             net_pnl = gross_pnl - entry_comm_share - exit_comm_share
-
-            # slippage relative to MID price (standard institutional metric)
             slippage_bps = (abs(price - ref_mid) / ref_mid) * 10000.0 if ref_mid > 0 else 0
 
             record = TradeRecord(
@@ -156,24 +621,228 @@ class PaperTradingEngine:
                 pnl_pct=pnl_pct,
                 slippage_bps=slippage_bps,
                 venue=venue,
+                commission=comm,
             )
             self.closed_trades.append(record)
-            # Bounded history: trim oldest if exceeds max
             if len(self.closed_trades) > self._max_trades_history:
                 self.closed_trades = self.closed_trades[-self._max_trades_history // 2 :]
 
-            # Update remaining
             rem_qty = abs(curr_qty) - closing_qty
             sign = 1 if curr_qty > 0 else -1
-
-            if rem_qty < 1e-8:
+            if rem_qty < self.EPSILON_QTY:
                 self._open_positions.pop(sym, None)
             else:
                 self._open_positions[sym] = (rem_qty * sign, curr_price, curr_comm_per_unit)
 
-            # If flip
             if qty > closing_qty:
                 flipped_qty = qty - closing_qty
                 flipped_sign = 1 if side == "BUY" else -1
-                # Commission for the flipped portion is pro-rata of current fill
                 self._open_positions[sym] = (flipped_qty * flipped_sign, price, comm_per_unit)
+
+    def _build_snapshot(self) -> dict[str, Any]:
+        eq = self.equity
+        realized = self.realized_pnl
+        return {
+            "type": "simulation_update",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "equity": round(eq, 2),
+            "cash": round(self._cash, 2),
+            "realized_pnl": round(realized, 2),
+            "total_commissions": round(self._total_commissions, 4),
+            "total_gross_pnl": round(self._total_gross_pnl, 2),
+            "current_price": round(self._current_price, 2),
+            "ai_thinking": self._last_thinking,
+            "ai_explanation": self._last_explanation,
+            "thinking_history": self._thinking_history,
+            "base_price": self._base_price,
+            "open_positions": [
+                {
+                    "symbol": sym,
+                    "side": "BUY" if qty > 0 else "SELL",
+                    "quantity": abs(qty),
+                    "entry_price": avg_price,
+                    "current_price": self._current_price,
+                    "unrealized_pnl": round(
+                        (self._current_price - avg_price) * qty
+                        if qty > 0
+                        else (avg_price - self._current_price) * abs(qty),
+                        2,
+                    ),
+                    "unrealized_pnl_pct": round(
+                        ((self._current_price - avg_price) / avg_price * 100)
+                        if avg_price > 0
+                        else 0,
+                        2,
+                    ),
+                    "stop_loss": 0.0,
+                    "take_profit": 0.0,
+                    "entry_time": "",
+                }
+                for sym, (qty, avg_price, _) in self._open_positions.items()
+            ],
+            "trade_history": [
+                {
+                    "trade_id": t.trade_id or f"trade-{i}",
+                    "symbol": t.symbol,
+                    "side": t.side,
+                    "entry_price": t.entry_price,
+                    "exit_price": t.exit_price,
+                    "quantity": t.qty,
+                    "entry_time": t.entry_time or "",
+                    "exit_time": t.exit_time or "",
+                    "pnl": round(t.pnl, 2),
+                    "pnl_pct": round(t.pnl_pct * 100, 2),
+                    "commission": round(t.commission, 4),
+                    "reason": t.reason,
+                    "stop_loss": t.stop_loss,
+                    "take_profit": t.take_profit,
+                }
+                for i, t in enumerate(self.closed_trades[-50:])
+            ],
+            "adaptive": {
+                "stop_loss_pct": self.adaptive.current_stop_loss_pct,
+                "take_profit_pct": self.adaptive.current_take_profit_pct,
+                "position_size_pct": self.adaptive.current_position_size_pct,
+                "win_rate": self.adaptive.win_rate,
+                "total_wins": self.adaptive.total_wins,
+                "total_losses": self.adaptive.total_losses,
+                "win_streak": self.adaptive.win_streak,
+                "loss_streak": self.adaptive.loss_streak,
+                "expected_value": round(self.adaptive.expected_value, 2),
+                "max_drawdown_pct": self._max_drawdown,
+                "total_trades": self.adaptive.total_wins + self.adaptive.total_losses,
+            },
+            "peak_equity": round(self._peak_equity, 2),
+            "max_drawdown": self._max_drawdown,
+            "position_value": round(
+                sum(
+                    abs(qty) * self._current_price
+                    if qty > 0
+                    else (avg_price + (avg_price - self._current_price)) * abs(qty)
+                    for sym, (qty, avg_price, _) in self._open_positions.items()
+                ),
+                2,
+            ),
+        }
+
+    async def run_continuous(self) -> None:
+        """Main continuous simulation loop."""
+        self._running = True
+        _LOG.info(f"[PAPER] Starting continuous simulation | capital=${self.starting_capital}")
+
+        tick = 0
+        while self._running:
+            try:
+                tick += 1
+                self._simulate_price_tick()
+
+                # Check static exits (SL/TP)
+                exit_record = self._check_exit_conditions()
+                if exit_record:
+                    self._emit(self._build_snapshot())
+
+                # Continuous Market Analysis
+                if len(self._price_history) >= self.MIN_HISTORY_FOR_ANALYSIS:
+                    signal = self._generate_signal()
+                    
+                    # 1. If in position, check for tactical AI exit
+                    if self._managed_positions:
+                        dynamic_exit = self._check_dynamic_exit(signal)
+                        if dynamic_exit:
+                            self._emit(self._build_snapshot())
+                    
+                    # Multi-order logic: Open new positions if limits allow
+                    if len(self._managed_positions) < self.max_concurrent_positions:
+                        if signal:
+                            # Avoid doubling down on the same side 
+                            # if it contributes too much to concentration
+                            sym = "BTC-USD"
+                            existing = self._managed_positions.get(sym)
+                            if not existing or existing.side != signal["action"]:
+                                opened = self._open_managed_position(
+                                    signal["action"], 
+                                    signal["strength"]
+                                )
+                                if opened:
+                                    self._emit(self._build_snapshot())
+
+                if tick % 5 == 0:
+                    self._emit(self._build_snapshot())
+
+                await asyncio.sleep(self._tick_interval)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                _LOG.error(f"[PAPER] Simulation error: {e}", exc_info=True)
+                await asyncio.sleep(0.5)
+
+    def stop(self) -> None:
+        self._running = False
+
+    def update_base_price(self, price: float, force_current: bool = False) -> None:
+        """Update the base (mean-reversion) price and optionally the current price.
+
+        Args:
+            price: The new base price (USD)
+            force_current: If True, also sets the current simulation price to this value.
+        """
+        if price <= 0:
+            return
+        self._base_price = price
+        if force_current or not self._running:
+            self._current_price = price
+        _LOG.info(f"[PAPER] Base price updated to {price:.2f} (force_current={force_current})")
+
+    async def handle_market_event(self, event: Any) -> None:
+        """Update simulation state with external real-time market data.
+
+        Accepts MarketEvent from the global EventBus.
+        """
+        try:
+            # Detect symbol and price from MarketPayload or ticker data
+            symbol = event.payload.symbol
+            if "BTC-USD" not in symbol:
+                return
+
+            # Extract price from payload (pre-calculated) or raw data (ticker)
+            # In qtrader.trading_system._on_market_data_update, 'price' is added to data
+            data = event.payload.data
+            price = float(data.get("price") or 0.0)
+
+            if price <= 0:
+                # Fallback to mid-match if ticker price is missing
+                bid = float(event.payload.bid)
+                ask = float(event.payload.ask)
+                if bid > 0 and ask > 0:
+                    price = (bid + ask) / 2.0
+
+            if price > 0:
+                old_price = self._current_price
+                self._current_price = price
+                self._base_price = price
+                self._last_external_tick = time.time()
+
+                # If price changed significantly, emit a snapshot update immediately
+                if abs(old_price - price) / old_price > self.SIGNIFICANT_PRICE_CHANGE:
+                    self._emit(self._build_snapshot())
+
+        except Exception as e:
+            _LOG.error(f"[PAPER] Failed to handle external market data: {e}")
+
+    def reset(self) -> None:
+        self._cash = self.starting_capital
+        self._current_price = self._base_price
+        self._price_history.clear()
+        self._open_positions.clear()
+        self._managed_positions.clear()
+        self.closed_trades.clear()
+        self._total_commissions = 0.0
+        self._total_gross_pnl = 0.0
+        self._peak_equity = self.starting_capital
+        self._max_drawdown = 0.0
+        self.adaptive = AdaptiveConfig(
+            base_stop_loss_pct=self.adaptive.base_stop_loss_pct,
+            base_take_profit_pct=self.adaptive.base_take_profit_pct,
+        )
+        _LOG.info("[PAPER] Engine reset")

@@ -1,7 +1,14 @@
 """Public exports for qtrader.ml."""
 
 from qtrader.ml.autonomous import AutonomousLoop
-from qtrader.ml.distributed import RayCompute, RayHyperparamTuner
+try:
+    from qtrader.ml.distributed import RayCompute, RayHyperparamTuner
+    _has_ray = True
+except (ImportError, ModuleNotFoundError):
+    _has_ray = False
+    RayCompute = None  # type: ignore
+    RayHyperparamTuner = None  # type: ignore
+
 from qtrader.ml.evaluation import ModelEvaluator, NestedCrossValidation
 from qtrader.ml.feedback_loop import FeedbackController, FeedbackSample
 from qtrader.ml.hmm_smoother import HMMRegimeSmoother
@@ -31,8 +38,6 @@ __all__ = [
     "NestedCrossValidation",
     "OnlineLearner",
     "PurgedKFoldCV",
-    "RayCompute",
-    "RayHyperparamTuner",
     "RegimeDetector",
     "RegimeStabilityScore",
     "ReplayBuffer",
@@ -43,6 +48,9 @@ __all__ = [
     "VolatilityRegimeDetector",
     "WalkForwardPipeline",
 ]
+
+if _has_ray:
+    __all__.extend(["RayCompute", "RayHyperparamTuner"])
 
 if _has_torch:
     __all__.append("LSTMSignalModel")

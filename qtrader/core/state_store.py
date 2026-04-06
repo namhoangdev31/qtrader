@@ -18,6 +18,12 @@ from decimal import Decimal
 from typing import Any
 
 from qtrader.core.state_replication import StateReplicator
+from qtrader.core.config import settings
+
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +153,67 @@ class StateStore:
         self._max_active_orders = max_active_orders
         self._max_positions = max_positions
         self._replicator = replicator
+        
+        # Redis support for shared state
+        self._redis: redis.Redis | None = None
+        self._use_redis = False
+        if redis and settings.redis_host:
+            try:
+                self._redis = redis.Redis(
+                    host=settings.redis_host,
+                    port=settings.redis_port,
+                    password=settings.redis_password,
+                    db=settings.redis_db,
+                    decode_responses=True
+                )
+                self._use_redis = True
+                self._logger.info(f"STATE_STORE | Connected to Redis at {settings.redis_host}:{settings.redis_port}")
+            except Exception as e:
+                self._logger.error(f"STATE_STORE | Failed to connect to Redis: {e}")
+
+    async def sync_from_remote(self) -> None:
+        """Sync local state from Redis if available."""
+        if not self._use_redis or not self._redis:
+            return
+            
+        try:
+            # Sync Positions
+            pos_data = await self._redis.hgetall(f"{settings.redis_prefix}:positions")
+            if pos_data:
+                async with self._lock:
+                    for sym, data_json in pos_data.items():
+                        import json
+                        d = json.loads(data_json)
+                        self._state.positions[sym] = Position(
+                            symbol=sym,
+                            quantity=Decimal(d["quantity"]),
+                            average_price=Decimal(d["average_price"]),
+                            timestamp=datetime.fromisoformat(d["timestamp"])
+                        )
+            
+            # Sync Portfolio Value
+            val = await self._redis.get(f"{settings.redis_prefix}:portfolio_value")
+            if val:
+                async with self._lock:
+                    self._state.portfolio_value = Decimal(val)
+                    
+            self._logger.info("STATE_STORE | Synced state from Redis")
+        except Exception as e:
+            self._logger.error(f"STATE_STORE | Remote sync failed: {e}")
+
+    async def _update_redis_position(self, symbol: str, position: Position) -> None:
+        if self._use_redis and self._redis:
+            import json
+            data = {
+                "quantity": str(position.quantity),
+                "average_price": str(position.average_price),
+                "timestamp": position.timestamp.isoformat()
+            }
+            await self._redis.hset(f"{settings.redis_prefix}:positions", symbol, json.dumps(data))
+
+    async def _update_redis_portfolio_value(self, value: Decimal) -> None:
+        if self._use_redis and self._redis:
+            await self._redis.set(f"{settings.redis_prefix}:portfolio_value", str(value))
 
     async def get_positions(self) -> dict[str, Position]:
         """Get a copy of all positions (copy-on-write, no deepcopy)."""
@@ -171,6 +238,9 @@ class StateStore:
             self._state.positions[position.symbol] = position.copy()
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+            
+            # Persist to Redis
+            await self._update_redis_position(position.symbol, position)
 
         # Publish state snapshot for replication (Standash §5.2)
         self._publish_if_primary()
@@ -191,6 +261,9 @@ class StateStore:
             self._state.portfolio_value = value
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+            
+            # Persist to Redis
+            await self._update_redis_portfolio_value(value)
         self._publish_if_primary()
 
     async def get_equity_curve(self) -> list[tuple[datetime, Decimal]]:

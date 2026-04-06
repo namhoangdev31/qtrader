@@ -17,19 +17,28 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Callable, Optional
-
-d = Decimal
+from typing import Any, Callable, Optional, TYPE_CHECKING
+from urllib.parse import urlparse
 
 import aiohttp
 
-from qtrader.core.config import Config
+from qtrader.core.config import Config, settings
 from qtrader.core.decimal_adapter import d
+
+try:
+    import redis.asyncio as redis_lib
+    HAS_REDIS = True
+except ImportError:
+    redis_lib = None
+    HAS_REDIS = False
 from qtrader.core.events import FillEvent, FillPayload, OrderEvent
+from qtrader.execution.brokers.base import BrokerAdapter
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
 from qtrader.execution.http import RetryConfig, request_json
-from qtrader.risk.kill_switch import GlobalKillSwitch
-from qtrader.security.order_signing import OrderSigner, SignedOrder
+
+if TYPE_CHECKING:
+    from qtrader.risk.kill_switch import GlobalKillSwitch
+    from qtrader.security.order_signing import OrderSigner, SignedOrder
 
 logger = logging.getLogger("qtrader.broker.coinbase")
 
@@ -48,6 +57,7 @@ class PaperAccount:
     total_commissions: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
     avg_entry_prices: dict[str, Decimal] = field(default_factory=dict)
+    active_session_id: str | None = None
 
     @property
     def equity(self) -> Decimal:
@@ -81,7 +91,7 @@ class PaperAccount:
             self.avg_entry_prices.pop(asset, None)
 
 
-class CoinbaseBrokerAdapter:
+class CoinbaseBrokerAdapter(BrokerAdapter):
     """
     Broker adapter for Coinbase Advanced Trade.
 
@@ -133,11 +143,30 @@ class CoinbaseBrokerAdapter:
         self.paper_slippage_bps = paper_slippage_bps
         self.paper_latency_ms = paper_latency_ms
         self.paper_commission_rate = paper_commission_rate
+        self.performance_fee_rate = 0.15
 
         # Paper trading state
-        self.paper_account = PaperAccount()
+        initial_balance = Decimal("1000.0")
+        self.paper_account = PaperAccount(initial_balance=initial_balance, cash=initial_balance)
+        logger.info(
+            f"[BROKER] Paper account initialized | simulate={self.simulate} | initial_balance={initial_balance}"
+        )
         self._quotes: dict[str, dict[str, Decimal]] = {}
         self._orderbook_snapshots: dict[str, dict[str, list[tuple[Decimal, Decimal]]]] = {}
+
+        # Redis support for paper account persistence
+        self._redis: Any | None = None
+        if HAS_REDIS and redis_lib and settings.redis_host:
+            try:
+                self._redis = redis_lib.Redis(
+                    host=settings.redis_host,
+                    port=settings.redis_port,
+                    password=settings.redis_password,
+                    db=settings.redis_db,
+                    decode_responses=True,
+                )
+            except Exception:
+                pass
 
         # WebSocket state
         self._ws_task: asyncio.Task | None = None
@@ -158,7 +187,7 @@ class CoinbaseBrokerAdapter:
             raise PermissionError(
                 "Missing COINBASE_KEY_NAME / COINBASE_PRIVATE_KEY for live REST mode"
             )
-        from urllib.parse import urlparse
+        # Sign order before submission (Standash §5.3)
 
         parsed = urlparse(self._rest_base)
         full_path = f"{parsed.path.rstrip('/')}{path}"
@@ -188,8 +217,20 @@ class CoinbaseBrokerAdapter:
         if bids and asks:
             self._quotes[symbol] = {"bid": bids[0][0], "ask": asks[0][0]}
 
-    def get_paper_balance(self) -> dict[str, Any]:
-        """Get current paper trading account state."""
+    async def get_paper_balance(self) -> dict[str, Any]:
+        """Get current paper trading account state (synced with Redis)."""
+        if self._redis:
+            try:
+                cash_val = await self._redis.get(f"{settings.redis_prefix}:paper_cash")
+                if cash_val:
+                    self.paper_account.cash = Decimal(cash_val)
+
+                pos_data = await self._redis.hgetall(f"{settings.redis_prefix}:paper_positions")
+                if pos_data:
+                    self.paper_account.positions = {k: Decimal(v) for k, v in pos_data.items()}
+            except Exception:
+                pass
+
         return {
             "cash": float(self.paper_account.cash),
             "positions": {k: float(v) for k, v in self.paper_account.positions.items()},
@@ -205,6 +246,7 @@ class CoinbaseBrokerAdapter:
         self.paper_account = PaperAccount(initial_balance=initial_balance, cash=initial_balance)
         self.paper_account.orders.clear()
         self.paper_account.fills.clear()
+        logger.info(f"[BROKER] Paper account reset | initial_balance={initial_balance}")
 
     def _simulate_fill(self, order: OrderEvent, broker_order_id: str) -> FillEvent | None:
         """Simulate a realistic fill with slippage and commission.
@@ -240,10 +282,27 @@ class CoinbaseBrokerAdapter:
         else:
             price = order.price or d(0)
 
-        # Commission
-        commission = (
-            price * order.quantity * d(str(self.paper_commission_rate)) if price > 0 else d(0)
-        )
+        # Performance-Based Fee Model: 
+        # 0% on entry, 15% of GROSS PROFIT on exit.
+        commission = d(0)
+        asset = order.symbol.split("-")[0]
+        current_qty = self.paper_account.positions.get(asset, d(0))
+        avg_entry = self.paper_account.avg_entry_prices.get(asset, d(0))
+        
+        is_exit = (current_qty > 0 and order.side == "SELL") or (current_qty < 0 and order.side == "BUY")
+        
+        if is_exit:
+            # Calculate realized gross profit
+            closing_qty = min(abs(current_qty), order.quantity)
+            if current_qty > 0:
+                gross_profit = (price - avg_entry) * closing_qty
+            else:
+                gross_profit = (avg_entry - price) * closing_qty
+                
+            if gross_profit > 0:
+                commission = gross_profit * d(str(self.performance_fee_rate))
+
+        session_id = getattr(order.payload, "session_id", None) or self.paper_account.active_session_id
 
         fill = FillEvent(
             source="CoinbasePaperTrading",
@@ -254,13 +313,18 @@ class CoinbaseBrokerAdapter:
                 quantity=order.quantity,
                 price=price,
                 commission=commission,
+                session_id=session_id,
             ),
         )
 
         # Update paper account
-        asset = order.symbol.split("-")[0]
         self.paper_account.update_position(asset, order.quantity, price, order.side or "BUY")
         self.paper_account.total_commissions += commission
+
+        # Sync to Redis if available
+        if self._redis:
+            asyncio.create_task(self._sync_paper_to_redis(asset))
+
         self.paper_account.order_history.append(
             {
                 "order_id": broker_order_id,
@@ -281,11 +345,28 @@ class CoinbaseBrokerAdapter:
                 "qty": float(fill.payload.quantity),
                 "price": float(fill.payload.price),
                 "commission": float(fill.payload.commission),
+                "session_id": fill.payload.session_id,
                 "timestamp": time.time(),
             }
         )
 
         return fill
+
+    async def _sync_paper_to_redis(self, asset: str) -> None:
+        """Helper to persist paper state to Redis."""
+        if not self._redis:
+            return
+        try:
+            await self._redis.set(
+                f"{settings.redis_prefix}:paper_cash", str(self.paper_account.cash)
+            )
+            await self._redis.hset(
+                f"{settings.redis_prefix}:paper_positions",
+                asset,
+                str(self.paper_account.positions.get(asset, Decimal("0"))),
+            )
+        except Exception:
+            pass
 
     # ========================================================================
     # Order Management
@@ -457,19 +538,24 @@ class CoinbaseBrokerAdapter:
             trade_id = str(f.get("trade_id") or f.get("tradeId") or uuid.uuid4())
             fills.append(
                 FillEvent(
-                    symbol=str(f.get("product_id") or f.get("symbol") or ""),
-                    quantity=size,
-                    price=price,
-                    commission=commission,
-                    side=side,
-                    order_id=order_id,
-                    fill_id=trade_id,
+                    source="CoinbaseLive",
+                    payload=FillPayload(
+                        symbol=str(f.get("product_id") or f.get("symbol") or ""),
+                        quantity=size,
+                        price=price,
+                        commission=commission,
+                        side=side,
+                        order_id=order_id,
+                    ),
                 )
             )
         return fills
 
     async def get_balance(self) -> dict:
         if self.simulate:
+            # Sync from Redis first
+            await self.get_paper_balance()
+
             # Return flat mapping of Asset -> Quantity for ReconciliationEngine
             balances = {"USD": self.paper_account.cash}
             for asset, qty in self.paper_account.positions.items():
@@ -525,10 +611,13 @@ class CoinbaseBrokerAdapter:
     async def start_websocket(self) -> None:
         """Start WebSocket connection for real-time market data and order updates."""
         if self._ws_running:
+            logger.warning("[COINBASE_WS] WebSocket already running, skipping start")
             return
         self._ws_running = True
         self._ws_task = asyncio.create_task(self._websocket_loop())
-        logger.info("[COINBASE_WS] WebSocket loop started")
+        logger.info(
+            f"[COINBASE_WS] WebSocket loop started | products={self._ws_product_ids} | simulate={self.simulate}"
+        )
 
     async def stop_websocket(self) -> None:
         """Stop WebSocket connection."""
@@ -565,11 +654,8 @@ class CoinbaseBrokerAdapter:
                             "channels": [
                                 "level2",
                                 "heartbeat",
-                                {
-                                    "name": "ticker",
-                                    "product_ids": self._ws_product_ids
-                                }
-                            ]
+                                {"name": "ticker", "product_ids": self._ws_product_ids},
+                            ],
                         }
                         await ws.send_json(subscribe_msg)
                         logger.info(
@@ -601,11 +687,11 @@ class CoinbaseBrokerAdapter:
                     await self._on_market_data(data)
                 else:
                     self._on_market_data(data)
-            
+
             product_id = data.get("product_id", "")
             bid = d(str(data.get("best_bid", "0")))
             ask = d(str(data.get("best_ask", "0")))
-            
+
             if bid > 0 and ask > 0:
                 self.update_quote(product_id, bid, ask)
 

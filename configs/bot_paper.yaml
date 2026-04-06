@@ -1,6 +1,6 @@
 execution_algo: twap
 feature_cols: []
-initial_capital: 100000.0
+initial_capital: 1000.0
 rebalance_interval_s: 300
 signal_col: ml_signal
 signal_interval_s: 30

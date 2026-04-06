@@ -4,8 +4,14 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
-import ray
-from ray import tune
+try:
+    import ray
+    from ray import tune
+    _HAS_RAY = True
+except ImportError:
+    _HAS_RAY = False
+    ray = None
+    tune = None
 
 from qtrader.core.config import Config
 from qtrader.ml.evaluation import ModelEvaluator
@@ -23,6 +29,8 @@ class RayCompute:
     """Helper for distributed task execution using Ray (local or cluster)."""
 
     def __init__(self) -> None:
+        if not _HAS_RAY:
+            raise ImportError("Ray is not installed. Please install 'qtrader[ray]' or use the 'production-ml' Docker image.")
         if not ray.is_initialized():
             ray.init(
                 address=Config.RAY_ADDRESS,
@@ -40,7 +48,7 @@ class RayCompute:
 
     def shutdown(self) -> None:
         """Shutdown the underlying Ray runtime."""
-        if ray.is_initialized():
+        if _HAS_RAY and ray.is_initialized():
             ray.shutdown()
 
 
@@ -81,19 +89,9 @@ class RayHyperparamTuner:
         target_col: str = "forward_return",
         feature_cols: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Run Ray Tune to optimize hyperparameters.
-
-        Args:
-            model_cls: Model class with ``fit(X, y)`` and ``predict(X)`` methods.
-            param_space: Ray Tune parameter space dictionary.
-            df: Full dataset as Polars DataFrame.
-            wf_pipeline: Walk-forward pipeline for backtesting.
-            target_col: Column containing forward returns.
-            feature_cols: Optional list of feature columns.
-
-        Returns:
-            Best hyperparameter configuration found.
-        """
+        if not _HAS_RAY:
+            raise ImportError("Ray is not installed. RayTune cannot be used without the 'ray[tune]' dependency.")
+        
         if target_col not in df.columns:
             raise ValueError(f"Target column '{target_col}' not found in DataFrame.")
 

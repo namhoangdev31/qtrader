@@ -31,7 +31,7 @@ class EventBus:
     ) -> None:
         """
         Initialize the distributed event bus.
-        
+
         Args:
             num_partitions: Number of virtual partitions for scaling.
             event_store: Optional persistent storage for incoming events.
@@ -42,11 +42,11 @@ class EventBus:
         self._partition_manager = PartitionManager(num_partitions=num_partitions)
         self._backpressure = BackpressureController()
         self._event_store = event_store
-        
+
         self._queues: dict[int, asyncio.Queue[BaseEvent]] = {
             i: asyncio.Queue(maxsize=20000) for i in range(num_partitions)
         }
-        
+
         self._running = False
         self._worker_tasks: list[asyncio.Task] = []
         self._handler_timeout = handler_timeout
@@ -62,12 +62,12 @@ class EventBus:
         if self._running:
             return
         self._running = True
-        
+
         # Spawn one worker task per partition to guarantee strict serial ordering per key
         for i in range(self._partition_manager.num_partitions):
             task = asyncio.create_task(self._partition_worker(i))
             self._worker_tasks.append(task)
-            
+
         logger.info(f"EventBus started with {len(self._worker_tasks)} partitions")
 
     async def stop(self) -> None:
@@ -75,11 +75,11 @@ class EventBus:
         if not self._running:
             return
         self._running = False
-        
+
         # Cancel all tasks and wait
         for task in self._worker_tasks:
             task.cancel()
-        
+
         if self._worker_tasks:
             await asyncio.gather(*self._worker_tasks, return_exceptions=True)
         self._worker_tasks = []
@@ -88,36 +88,43 @@ class EventBus:
     async def publish(self, event: BaseEvent) -> bool:
         """
         Publish an event with backpressure control and partitioning.
-        
+
         Returns:
             bool: True if published, False if dropped due to load.
         """
         if not self._running:
-            logger.warning(f"Attempted to publish to stopped EventBus: {event.event_type}")
+            logger.warning(
+                f"[EVENT_BUS] Attempted to publish to stopped EventBus: {event.event_type}"
+            )
             return False
 
         # 1. Backpressure Check
         p_index = self._partition_manager.get_partition_index(event)
         q_size = self._queues[p_index].qsize()
-        
+
         if self._backpressure.should_drop(q_size, event.event_type):
             self._events_dropped_count += 1
+            logger.warning(
+                f"[EVENT_BUS] Dropped event {event.event_type} due to backpressure (queue_size={q_size})"
+            )
             return False
-            
+
         # 2. Assign partition key if not already present
         if not event.partition_key:
-            # We can't actually modify a frozen Pydantic model's field!
-            # We must create a copy with the new metadata or just rely on the manager internally.
-            # However, the contract says event.partition_key should be a field.
-            # I'll use event.model_copy() to stick to immutability rules.
-            event = event.model_copy(update={"partition_key": self._partition_manager.get_partition_key(event)})
+            event = event.model_copy(
+                update={"partition_key": self._partition_manager.get_partition_key(event)}
+            )
 
         # 3. Route to partition
         try:
             await self._queues[p_index].put(event)
+            logger.debug(f"[EVENT_BUS] Published {event.event_type} to partition {p_index}")
             return True
         except asyncio.QueueFull:
             self._events_dropped_count += 1
+            logger.error(
+                f"[EVENT_BUS] Queue full for partition {p_index}, dropping event {event.event_type}"
+            )
             return False
 
     async def _partition_worker(self, index: int) -> None:
@@ -126,28 +133,28 @@ class EventBus:
         Ensures e1 is delivered and handled before e2 starts for that partition.
         """
         queue = self._queues[index]
-        
+
         while self._running:
             try:
                 event = await queue.get()
                 start_time = time.perf_counter()
-                
+
                 # 4. Deliver to all relevant subscribers
                 if event.event_type in self._subscribers:
                     handlers = self._subscribers[event.event_type]
                     for handler in handlers:
                         await self._safe_deliver(handler, event)
-                
+
                 # 5. Ack & Persist to EventStore (Post-delivery as per prompt)
                 if self._event_store:
                     await self._event_store.append(event)
-                
+
                 # Update metrics
                 duration = (time.perf_counter() - start_time) * 1000
                 self._last_latencies[index] = duration
                 self._events_processed_count += 1
                 queue.task_done()
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -157,17 +164,19 @@ class EventBus:
         """Execute a single handler with timeout and retry logic."""
         # Note: We create a copy for redelivery attempt to maintain immutability
         current_event = event
-        
+
         for attempt in range(1, self._max_retries + 2):
             try:
                 if attempt > 1:
                     current_event = current_event.model_copy(update={"delivery_attempt": attempt})
-                
+
                 await asyncio.wait_for(handler(current_event), timeout=self._handler_timeout)
                 return
             except Exception as e:
                 if attempt > self._max_retries:
-                    logger.error(f"Handler failed after total {attempt} attempts for {current_event.event_id}: {e}")
+                    logger.error(
+                        f"Handler failed after total {attempt} attempts for {current_event.event_id}: {e}"
+                    )
                 else:
                     # Immediate retry logic
                     continue
@@ -188,7 +197,9 @@ class EventBus:
         return {
             "total_processed": self._events_processed_count,
             "total_dropped": self._events_dropped_count,
-            "avg_latency_ms": sum(self._last_latencies.values()) / len(self._last_latencies) if self._last_latencies else 0.0,
+            "avg_latency_ms": sum(self._last_latencies.values()) / len(self._last_latencies)
+            if self._last_latencies
+            else 0.0,
             "queue_depths": {i: q.qsize() for i, q in self._queues.items()},
-            "throughput": self._events_processed_count
+            "throughput": self._events_processed_count,
         }

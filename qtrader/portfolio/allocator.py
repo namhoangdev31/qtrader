@@ -147,6 +147,46 @@ class CapitalAllocationEngine:
             "active_capital_nodes": len(self._current_distribution),
         }
 
+    def validate_order_size(
+        self,
+        symbol: str,
+        proposed_qty: Decimal,
+        price: Decimal,
+        total_portfolio_value: Decimal,
+        current_position_qty: Decimal = d(0),
+    ) -> tuple[Decimal, str]:
+        """
+        Validate and potentially scale a proposed order size based on concentration limits.
+        
+        Standash §4.5: Diversification Gating.
+
+        Returns:
+            (approved_qty, reason)
+        """
+        if total_portfolio_value <= 0:
+            return proposed_qty, "INITIAL_ALLOCATION"
+
+        # Calculate potential new concentration
+        new_total_qty = current_position_qty + proposed_qty
+        new_notional = abs(new_total_qty) * price
+        concentration = new_notional / total_portfolio_value
+
+        if concentration <= self._max_cap:
+            return proposed_qty, "WITHIN_LIMITS"
+
+        # Scale down to meet max_cap
+        allowed_notional = total_portfolio_value * self._max_cap
+        current_notional = abs(current_position_qty) * price
+        
+        remaining_notional = max(d(0), allowed_notional - current_notional)
+        scaled_qty = remaining_notional / price if price > 0 else d(0)
+        
+        # Round down to prevent float precision breakage
+        scaled_qty = scaled_qty.quantize(Decimal("0.00000001"))
+        
+        reason = f"CONCENTRATION_GUARD | Scaled from {proposed_qty} to {scaled_qty} (Cap: {self._max_cap:.0%})"
+        return scaled_qty, reason
+
 
 class CapitalAllocator:
     """

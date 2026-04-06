@@ -113,6 +113,7 @@ class OrderPayload(BaseModel):
     quantity: Decimal
     price: Decimal | None = None
     order_type: str = "MARKET"
+    session_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -150,6 +151,7 @@ class FillPayload(BaseModel):
     quantity: Decimal
     price: Decimal
     commission: Decimal = Decimal("0.0")
+    session_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -807,6 +809,26 @@ class FillEvent(BaseEvent):
     @property
     def order_id(self) -> str:
         return self.payload.order_id
+
+    @property
+    def symbol(self) -> str:
+        return self.payload.symbol
+
+    @property
+    def side(self) -> str:
+        return self.payload.side
+
+    @property
+    def quantity(self) -> Decimal:
+        return self.payload.quantity
+
+    @property
+    def price(self) -> Decimal:
+        return self.payload.price
+
+    @property
+    def commission(self) -> Decimal:
+        return self.payload.commission
 
 
 class SystemEvent(BaseEvent):

@@ -7,7 +7,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: production-core
     command: ["python", "live_trader.py"]
     env_file:
       - .env
@@ -19,8 +19,9 @@ services:
       - QTRADER_TESTNET=true
       - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
       - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
-      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       - ML_ENGINE_URL=http://qt-ml-engine:8001
+      - AUTONOMOUS_MODE=${AUTONOMOUS_MODE:-true}
+      - SIMULATE_MODE=${SIMULATE_MODE:-true}
     volumes:
       - hf_cache:/app/.cache/huggingface
     restart: always
@@ -29,6 +30,8 @@ services:
         condition: service_healthy
       mlflow:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f live_trader.py || exit 1"]
       interval: 30s
@@ -49,7 +52,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: production-core
     command: ["uvicorn", "qtrader.api.server:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
@@ -63,6 +66,8 @@ services:
       - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
       - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
       - QTRADER_TESTNET=true
+      - UI_ONLY_MODE=false
+      - REDIS_HOST=redis
     restart: always
     depends_on:
       timescaledb:
@@ -90,7 +95,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: production-ml
     command: ["python", "-m", "qtrader.ml.atomic_trio"]
     ports:
       - "8001:8001"
@@ -101,9 +106,7 @@ services:
       - SERVICE_TYPE=ML
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       - CHRONOS_MODEL_ID=${CHRONOS_MODEL_ID:-amazon/chronos-2}
-      - TABPFN_MODEL_ID=${TABPFN_MODEL_ID:-Prior-Labs/tabpfn_2_5}
-      - PHI2_MODEL_ID=${PHI2_MODEL_ID:-microsoft/phi-2}
-      - TABPFN_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiMjhmNGJlMGQtMTk1Yi00OGIzLWI4M2QtMDJlMzQxZDg3YTkxIiwiZXhwIjoxODA2ODYxMjY1fQ.23E_0s3YGBioYqpTBhRxplQMFHwLMJa3TiJKfzszulk
+      - TABPFN_MODEL_ID=xgboost
     volumes:
       - hf_cache:/app/.cache/huggingface
     restart: always
@@ -136,6 +139,7 @@ services:
       - POSTGRES_DB=${DATABASE_NAME:-qtrader}
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sanauto -d qtrader"]

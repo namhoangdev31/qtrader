@@ -43,6 +43,13 @@ class QTraderSettings(BaseSettings):
     database_read_url: str | None = None  # Read replica; falls back to database_url if unset
     database_max_connections: int = 100
     database_ssl_enabled: bool = False
+    
+    # Redis (Shared State)
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_password: str | None = None
+    redis_db: int = 0
+    redis_prefix: str = "qtrader"
 
     # Execution
     impact_daily_volume: float = 1_000_000.0
@@ -182,6 +189,14 @@ class QTraderSettings(BaseSettings):
     @property
     def DB_SSL(self) -> bool:
         return self.database_ssl_enabled
+
+    @property
+    def REDIS_HOST(self) -> str:
+        return self.redis_host
+
+    @property
+    def REDIS_PORT(self) -> int:
+        return self.redis_port
 
     @property
     def DB_PATH(self) -> str:
