@@ -238,6 +238,8 @@ class TradingSystem:
             "Strategy": {"status": "AWAITING"}
         }
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._start_time: float = time.time()
+        self._last_latency_ms: float = 0.0
 
     async def start(self) -> None:
         """Start the complete trading system."""
@@ -466,6 +468,12 @@ class TradingSystem:
 
         # 4. Latency Completion
         self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
+        
+        # Sync real-time latency to telemetry cache
+        # We take the duration of the pilot symbol to represent system pressure
+        pilot_trace = self.latency_enforcer.get_pipeline_data(f"pipeline-{symbol}")
+        if pilot_trace:
+            self._last_latency_ms = pilot_trace.total_duration_ms
 
         # 5. UNCONDITIONAL Pulse module traces for forensic awareness (Standash §14)
         # This ensures the Logic Matrix stays alive even during "HOLD" states.

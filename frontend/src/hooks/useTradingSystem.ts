@@ -69,10 +69,11 @@ export function useTradingSystem() {
   const connectAll = useCallback(() => {
     const wsUrl = getWsUrl();
     
-    // 1. Trading Socket
-    tradingWs.current = new WebSocket(`${wsUrl}/ws/trading`);
+    // 1. Simulation/Trading Socket
+    // In Simulator War Trading mode, we primarily track the simulation stream
+    tradingWs.current = new WebSocket(`${wsUrl}/ws/simulation`);
     tradingWs.current.onmessage = (e) => setPortfolio(JSON.parse(e.data));
-    tradingWs.current.onopen = () => addLog('Trading Stream: ONLINE', 'success');
+    tradingWs.current.onopen = () => addLog('Simulation Stream: ONLINE', 'success');
 
     // 2. Forensics Socket
     forensicWs.current = new WebSocket(`${wsUrl}/ws/forensics`);

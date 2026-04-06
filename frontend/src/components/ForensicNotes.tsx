@@ -14,15 +14,21 @@ export function ForensicNotes() {
   const [type, setType] = useState<Note['type']>('OBSERVATION');
   const [isSyncing, setIsSyncing] = useState(false);
 
+  const getBaseUrl = useCallback(() => {
+    return (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+      ? 'http://localhost:8000'
+      : 'http://api_dashboard:8000';
+  }, []);
+
   const fetchNotes = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/forensic_notes');
+      const res = await fetch(`${getBaseUrl()}/api/v1/forensic_notes`);
       const data = await res.json();
       setNotes(data);
     } catch (e) {
       console.error('Failed to fetch forensic notes', e);
     }
-  }, []);
+  }, [getBaseUrl]);
 
   useEffect(() => {
     fetchNotes();
@@ -33,7 +39,7 @@ export function ForensicNotes() {
     setIsSyncing(true);
     
     try {
-      const res = await fetch('http://localhost:8000/api/v1/forensic_notes', {
+      const res = await fetch(`${getBaseUrl()}/api/v1/forensic_notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: input, type })

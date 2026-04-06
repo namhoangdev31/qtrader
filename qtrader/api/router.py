@@ -486,13 +486,18 @@ async def telemetry_updates(websocket: WebSocket) -> None:
     
     async def get_snapshot():
         status = sys.get_status()
+        # Use the latency from the last execution cycle
+        # If no data, default to a safe 0.0
+        current_latency = getattr(sys, "_last_latency_ms", 0.0)
+        uptime = time.time() - getattr(sys, "_start_time", time.time())
+        
         return {
             "type": "telemetry_update",
             "timestamp": datetime.now().isoformat(),
             "status": status,
-            "latency_ms": random.randint(10, 50), # Mocked for now
+            "latency_ms": current_latency,
             "is_synced": True,
-            "uptime_seconds": time.time() - sys._start_time if hasattr(sys, "_start_time") else 0
+            "uptime_seconds": int(uptime)
         }
 
     await websocket.send_json(await get_snapshot())
