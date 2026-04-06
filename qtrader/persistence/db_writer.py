@@ -108,15 +108,14 @@ class TradeDBWriter:
             );
             """,
             """
-            CREATE TABLE IF NOT EXISTS trading_sessions (
-                session_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-                start_time       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                end_time         TIMESTAMPTZ,
-                initial_capital  NUMERIC(24, 8) NOT NULL DEFAULT 0,
-                final_capital    NUMERIC(24, 8),
-                metadata         JSONB        DEFAULT '{}',
-                summary          JSONB        DEFAULT '{}'
+            CREATE TABLE IF NOT EXISTS forensic_notes (
+                id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id       UUID,
+                note_text        TEXT NOT NULL,
+                note_type        VARCHAR(20) NOT NULL DEFAULT 'OBSERVATION',
+                embedding        FLOAT[],  -- Semantic embedding (Async)
+                timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                metadata         JSONB DEFAULT '{}'
             );
             """,
         ]
@@ -130,6 +129,7 @@ class TradeDBWriter:
             "ALTER TABLE ai_thinking_logs ADD COLUMN IF NOT EXISTS session_id UUID;",
             "ALTER TABLE trading_sessions ADD COLUMN IF NOT EXISTS initial_capital NUMERIC(24, 8) DEFAULT 0;",
             "ALTER TABLE trading_sessions ADD COLUMN IF NOT EXISTS final_capital NUMERIC(24, 8);",
+            "ALTER TABLE forensic_notes ADD COLUMN IF NOT EXISTS embedding FLOAT[];", # Ensure migration
         ]
 
         for query in queries + migrations:
@@ -473,6 +473,46 @@ class TradeDBWriter:
         except Exception as e:
             logger.error(f"[DB] Failed to fetch session history: {e}")
             return []
+
+    async def write_forensic_note(
+        self,
+        content: str,
+        note_type: str = "OBSERVATION",
+        session_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Persist a forensic note and return its UUID."""
+        if not self._initialized:
+            await self.initialize()
+
+        query = """
+            INSERT INTO forensic_notes (session_id, note_text, note_type, metadata)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+        """
+        try:
+            row = await DBClient.fetchrow(
+                query,
+                session_id,
+                content,
+                note_type,
+                json.dumps(metadata or {}, cls=TradingJSONEncoder),
+            )
+            note_id = str(row["id"])
+            logger.info(f"[DB] Forensic note persisted: {note_id}")
+            return note_id
+        except Exception as e:
+            logger.error(f"[DB] Failed to persist forensic note: {e}")
+            raise
+
+    async def update_note_embedding(self, note_id: str, embedding: list[float]) -> None:
+        """Update the semantic embedding for a specific note (Async worker)."""
+        query = "UPDATE forensic_notes SET embedding = $2 WHERE id = $1"
+        try:
+            await DBClient.execute(query, note_id, embedding)
+            logger.debug(f"[DB] Updated embedding for note {note_id}")
+        except Exception as e:
+            logger.error(f"[DB] Failed to update note embedding {note_id}: {e}")
 
     async def get_session_by_id(self, session_id: str) -> dict[str, Any] | None:
         """Get a specific session by ID."""

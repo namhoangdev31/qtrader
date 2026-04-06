@@ -214,7 +214,6 @@ class AtomicTrioPipeline:
                 
                 # RAG RETRIEVAL: Search for Elite Exemplars
                 # Construct market vector: [price_change, vol, risk_score, confidence_ema]
-                # (Simplified for now, can be expanded)
                 m_vector = [
                     float(market_context.get("price_change", 0.0)) if market_context else 0.0,
                     float(market_context.get("volatility", 0.0)) if market_context else 0.0,
@@ -222,7 +221,15 @@ class AtomicTrioPipeline:
                     float(self._run_count % 100) / 100.0 # Placeholder for time-of-day/seasonality
                 ]
                 
-                rag_context = memory_store.retrieve_similar(m_vector, top_k=3)
+                # Fetch the latest semantic sentiment context (Zero Latency)
+                from qtrader.ml.embedding_worker import embedding_manager
+                semantic_context = embedding_manager.current_sentiment_vector
+                
+                rag_context = memory_store.retrieve_similar(
+                    market_vector=m_vector, 
+                    semantic_embedding=semantic_context,
+                    top_k=3
+                )
                 
                 decision = await self._phi2.decide(
                     chronos_forecast=chronos_forecast,

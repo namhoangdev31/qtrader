@@ -54,6 +54,7 @@ from qtrader.features.technical.volatility import ATRFeature
 from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
 
 from qtrader.core.dynamic_config import config_manager
+from qtrader.ml.embedding_worker import embedding_manager
 
 # Note: Top-level constants (MIN_CONFIDENCE, etc.) removed in favor of config_manager.get()
 # to allow AI-driven Dynamic Control.
@@ -265,6 +266,7 @@ class TradingSystem:
             self.broker.add_product(symbol)
         await self.broker.start_websocket()
         await self.event_bus.start()
+        await embedding_manager.start()
 
         # Initialize Session
         try:
@@ -276,7 +278,8 @@ class TradingSystem:
             )
             # Start background loops
             self._tasks.add(asyncio.create_task(self._pnl_recording_loop()))
-            logger.info("[TS] Performance recording loop started")
+            self._tasks.add(asyncio.create_task(self._sentiment_refresh_loop()))
+            logger.info("[TS] Performance and Sentiment loops started")
             if self.config.simulate:
                 self.broker.paper_account.active_session_id = self.active_session_id
             logger.info(f"[SESSION] DB session started: {self.active_session_id}")
@@ -295,6 +298,7 @@ class TradingSystem:
         logger.info("TRADING SYSTEM — STOPPED")
         await self.event_bus.stop()
         await self.broker.close()
+        await embedding_manager.stop()
 
         if self.active_session_id:
             try:
@@ -306,6 +310,34 @@ class TradingSystem:
                 )
             except Exception as e:
                 logger.error(f"[DB] Session stop failed: {e}")
+
+    async def _sentiment_refresh_loop(self) -> None:
+        """Periodically refresh the global market sentiment embedding for semantic RAG."""
+        logger.info("[TS] Global Sentiment Refresh loop active (600s interval)")
+        while self._running:
+            try:
+                # 1. Gather recent context for the primary symbol
+                symbol = self.config.symbols[0] if self.config.symbols else "BTC-USD"
+                quote = self.broker._quotes.get(symbol, {})
+                price = float(quote.get("price") or 0.0)
+                
+                # 2. Construct a 'Market Narrative'
+                # This text will be embedded by phi3:mini to find similar past regimes
+                narrative = (
+                    f"Market context for {symbol} at {datetime.now().isoformat()}. "
+                    f"Current price is {price:.2f}. "
+                    f"Volatility is {config_manager.get('VOLATILITY_MULTIPLIER', 1.0):.2f}x. "
+                    f"System is searching for {self.config.simulate_mode} regime templates."
+                )
+                
+                # 3. Enqueue for Async Vectorization
+                embedding_manager.refresh_sentiment(narrative)
+                
+            except Exception as e:
+                logger.error(f"[TS] Sentiment refresh failed: {e}")
+            
+            # Refresh every 10 minutes (600 seconds) to avoid over-burdening Ollama
+            await asyncio.sleep(600)
 
     async def _pnl_recording_loop(self) -> None:
         """Periodically record PnL snapshots to DB."""

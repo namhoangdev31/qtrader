@@ -24,7 +24,7 @@ from qtrader.core.dynamic_config import config_manager
 from qtrader.core.events import EventType, MarketEvent, MarketPayload, OrderEvent, OrderPayload
 from qtrader.trading_system import TradingSystem, TradingSystemConfig
 from qtrader.persistence.db_writer import TradeDBWriter
-from qtrader.trading_system import TradingSystem  # noqa: TC001
+from qtrader.ml.embedding_worker import embedding_manager
 
 logger = logging.getLogger("qtrader.api.router")
 
@@ -243,6 +243,53 @@ async def health() -> dict[str, str]:
 async def get_status(sys: TradingSystem = Depends(get_system)) -> dict[str, Any]:  # noqa: B008
     """Get overall system status."""
     return sys.get_status()
+
+
+@router.get("/forensic_notes")
+async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, Any]]:
+    """Retrieve forensic notes for RAG/UI."""
+    from qtrader.core.db import DBClient
+    conn = await DBClient().get_connection()
+    try:
+        if session_id:
+            rows = await conn.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp DESC", session_id)
+        else:
+            rows = await conn.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes ORDER BY timestamp DESC LIMIT 100")
+        return [{"id": str(r["id"]), "content": r["note_text"], "type": r["note_type"], "timestamp": r["timestamp"].isoformat()} for r in rows]
+    except Exception as e:
+        logger.error(f"[API] Failed to fetch notes: {e}")
+        return []
+    finally:
+        await conn.close()
+
+
+@router.post("/forensic_notes")
+async def add_forensic_note(note: dict[str, Any], sys: TradingSystem = Depends(get_system)) -> dict[str, Any]:
+    """Persist a forensic note and ENQUEUE for async embedding (Zero Latency)."""
+    writer = TradeDBWriter()
+    try:
+        content = note.get("content", "")
+        note_type = note.get("type", "OBSERVATION")
+        session_id = sys.active_session_id
+        
+        # 1. Immediate Persistence (Sync-ish)
+        note_id = await writer.write_forensic_note(
+            content=content,
+            note_type=note_type,
+            session_id=session_id
+        )
+        
+        # 2. Async Enqueue for Language Embedding (Non-blocking)
+        embedding_manager.enqueue_note(note_id, content)
+        
+        # 3. If it's a high-priority forensic note, refresh the global sentiment context immediately
+        if note_type in ["ALERT", "TRIAL"]:
+            embedding_manager.refresh_sentiment(f"Manual Forensic Intervention: {content}")
+        
+        return {"status": "success", "note_id": note_id}
+    except Exception as e:
+        logger.error(f"[API] Failed to save note: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/positions", response_model=list[PositionRow])

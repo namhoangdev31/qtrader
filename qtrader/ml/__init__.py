@@ -11,6 +11,7 @@ except (ImportError, ModuleNotFoundError):
     RayCompute = None
     RayHyperparamTuner = None
 
+from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.ml.evaluation import ModelEvaluator, NestedCrossValidation
 from qtrader.ml.feedback_loop import FeedbackController, FeedbackSample
 from qtrader.ml.hmm_smoother import HMMRegimeSmoother

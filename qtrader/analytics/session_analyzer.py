@@ -84,14 +84,17 @@ class SessionAnalyzer:
         if report["metrics"]["win_rate"] >= 0.55 and report["metrics"].get("sharpe_ratio", 0.0) >= 2.0:
             logger.info(f"[ELITE_SESSION] Session {session_id} marked as ELITE. Saving to Memory Store.")
             try:
-                # Get expert notes for this session (Forensic Audit)
-                expert_note = await self._fetch_expert_notes(session_id)
+                # Get expert notes and pre-computed embeddings for this session
+                notes_data = await self._fetch_expert_notes_with_embeddings(session_id)
+                expert_note = notes_data["text"]
+                note_embedding = notes_data["embedding"]
                 
-                # Create Vectorized Exemplar
-                # We use phi3:mini to embed the expert notes for RAG
-                phi3 = OllamaDecisionAdapter()
-                note_embedding = await phi3.embed(expert_note)
-                
+                if not note_embedding:
+                    # Fallback: if background worker hasn't finished, trigger a small delay or skip
+                    # For Elite saving, we prefer to have the vector.
+                    logger.warning(f"[ELITE_SAVE] No embeddings found for session {session_id} yet. Skipping exemplar.")
+                    return report
+
                 exemplar = EliteExemplar(
                     session_id=session_id,
                     timestamp=start_time,
@@ -107,15 +110,29 @@ class SessionAnalyzer:
 
         return report
     
-    async def _fetch_expert_notes(self, session_id: str) -> str:
-        """Fetch all human annotations for this session."""
+    async def _fetch_expert_notes_with_embeddings(self, session_id: str) -> dict[str, Any]:
+        """Fetch all human annotations and their pre-computed embeddings."""
         conn = await DBClient().get_connection()
         try:
-            # Table: forensic_notes (uuid, session_id, note_text, timestamp)
-            rows = await conn.fetch("SELECT note_text FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp ASC", session_id)
-            return " | ".join([r["note_text"] for r in rows if r["note_text"]])
-        except Exception:
-            return "No specific expert notes found."
+            rows = await conn.fetch(
+                "SELECT note_text, embedding FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp ASC", 
+                session_id
+            )
+            
+            texts = [r["note_text"] for r in rows if r["note_text"]]
+            embeddings = [np.array(r["embedding"]) for r in rows if r["embedding"] is not None]
+            
+            avg_embedding = None
+            if embeddings:
+                avg_embedding = np.mean(embeddings, axis=0).tolist()
+                
+            return {
+                "text": " | ".join(texts) if texts else "No expert notes found.",
+                "embedding": avg_embedding
+            }
+        except Exception as e:
+            logger.error(f"[SESSION_ANALYZER] DB Fetch failed: {e}")
+            return {"text": "Error fetching notes.", "embedding": None}
         finally:
             await conn.close()
 
