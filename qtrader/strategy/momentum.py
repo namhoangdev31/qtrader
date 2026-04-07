@@ -7,7 +7,7 @@ import polars as pl
 from qtrader.alpha.base import BaseAlpha
 from qtrader.strategy.base import BaseStrategy
 
-__all__ = ["CrossSectionalMomentum", "MomentumAlpha", "TimeSeriesMomentum"]
+__all__ = ["CrossSectionalMomentum", "TimeSeriesMomentum", "ZScoreMomentumAlpha"]
 
 
 @dataclass(slots=True)
@@ -120,7 +120,7 @@ class TimeSeriesMomentum(BaseStrategy):
 
 
 @dataclass(slots=True)
-class MomentumAlpha(BaseAlpha):
+class ZScoreMomentumAlpha(BaseAlpha):
     """
     Momentum alpha factor: z-scored returns over a lookback window.
 
@@ -134,6 +134,10 @@ class MomentumAlpha(BaseAlpha):
     """
 
     lookback: int = 30
+    name: str = "zscore_momentum"
+
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=False)
 
     def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
         """

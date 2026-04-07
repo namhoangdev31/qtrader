@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import polars as pl
 
@@ -14,7 +15,7 @@ class OrderImbalanceAlpha(BaseAlpha):
     """Bid-ask volume imbalance as short-term directional signal."""
 
     window: int = 100
-    name: str = "order_imbalance"
+    name: ClassVar[str] = "order_imbalance"
 
     def __post_init__(self) -> None:
         super().__init__(name=self.name, standardize=True, standardize_window=self.window)
@@ -37,7 +38,7 @@ class AmihudIlliquidityAlpha(BaseAlpha):
     """Amihud (2002) illiquidity proxy. High illiq → mean reversion signal."""
 
     window: int = 20
-    name: str = "amihud"
+    name: ClassVar[str] = "amihud"
 
     def __post_init__(self) -> None:
         super().__init__(name=self.name, standardize=True, standardize_window=self.window)
@@ -60,7 +61,7 @@ class VPINAlpha(BaseAlpha):
     """Flow toxicity proxy (VPIN-style). High toxicity → adverse selection risk."""
 
     window: int = 50
-    name: str = "vpin"
+    name: ClassVar[str] = "vpin"
 
     def __post_init__(self) -> None:
         super().__init__(name=self.name, standardize=True, standardize_window=self.window)

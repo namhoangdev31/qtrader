@@ -20,7 +20,14 @@ from qtrader.api.schemas import (
     SimulationConfig,
     StatusResponse,
 )
-from qtrader.core.events import EventType, OrderEvent, OrderPayload
+from qtrader.core.events import (
+    EventType,
+    ForensicNoteEvent,
+    ForensicNotePayload,
+    OrderEvent,
+    OrderPayload,
+)
+
 from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.trading_system import TradingSystem
@@ -303,6 +310,21 @@ async def add_forensic_note(note: dict[str, Any], sys: TradingSystem = Depends(g
         if note_type in ["ALERT", "TRIAL"]:
             embedding_manager.refresh_sentiment(f"Manual Forensic Intervention: {content}")
         
+        # 4. Notify Audit WebSocket (Real-time update)
+        try:
+            await sys.event_bus.publish(
+                ForensicNoteEvent(
+                    source="api_dashboard",
+                    payload=ForensicNotePayload(
+                        content=content,
+                        note_type=note_type,
+                        session_id=session_id
+                    )
+                )
+            )
+        except Exception as e:
+            logger.warning(f"[API] Failed to publish forensic event: {e}")
+
         return {"status": "success", "note_id": note_id}
     except Exception as e:
         logger.error(f"[API] Failed to save note: {e}")
@@ -589,3 +611,87 @@ async def simulation_updates(websocket: WebSocket) -> None:
         logger.info(f"[WS/SIM] Client disconnected after {update_count} updates")
     except Exception as e:
         logger.error(f"[WS/SIM] Unexpected error: {e}", exc_info=True)
+
+
+@ws_router.websocket("/ws/audit")
+async def audit_updates(websocket: WebSocket) -> None:
+    """Dedicated Forensic WebSocket for Audit History, Notes, and Portfolio Inventory."""
+    await websocket.accept()
+    sys = get_system()
+    engine = get_sim_engine()
+
+    async def get_audit_snapshot():
+        # 1. Fetch recent notes
+        from qtrader.core.db import DBClient
+
+        try:
+            notes_rows = await DBClient.fetch(
+                "SELECT id, note_text, note_type, timestamp FROM forensic_notes ORDER BY timestamp DESC LIMIT 50"
+            )
+            notes = [
+                {
+                    "id": str(r["id"]),
+                    "content": r["note_text"],
+                    "type": r["note_type"],
+                    "timestamp": r["timestamp"].isoformat(),
+                }
+                for r in notes_rows
+            ]
+        except Exception:
+            notes = []
+
+        # 2. Fetch trade history
+        trades = engine.trade_history[-50:]
+
+        # 3. Fetch positions
+        positions_map = await sys.state_store.get_positions()
+        pos_list = []
+        for sym, pos in positions_map.items():
+            if pos.quantity != 0:
+                pos_list.append(
+                    {
+                        "symbol": sym,
+                        "quantity": float(pos.quantity),
+                        "average_price": float(pos.average_price),
+                        "unrealized_pnl": float(pos.unrealized_pnl),
+                        "side": "BUY" if pos.quantity > 0 else "SELL",
+                    }
+                )
+
+        return {
+            "type": "audit_update",
+            "timestamp": datetime.now().isoformat(),
+            "notes": notes,
+            "trades": trades,
+            "positions": pos_list,
+        }
+
+    queue: asyncio.Queue[bool] = asyncio.Queue()
+
+    async def handler(event: Any) -> None:
+        await queue.put(True)
+
+    # Audit stream reacts to fills, system signals, and new notes
+    sys.event_bus.subscribe(EventType.FILL, handler)
+    sys.event_bus.subscribe(EventType.SYSTEM, handler)
+    sys.event_bus.subscribe(EventType.FORENSIC_NOTE, handler)
+
+    # Also listen to simulation engine updates if running
+    engine.add_update_listener(lambda x: queue.put_nowait(True))
+
+    try:
+        # Send initial state
+        await websocket.send_json(await get_audit_snapshot())
+        while True:
+            await queue.get()
+            # De-bounce or throttle could be added here if needed
+            await websocket.send_json(await get_audit_snapshot())
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"[WS/AUDIT] Unexpected error: {e}")
+    finally:
+        sys.event_bus.unsubscribe(EventType.FILL, handler)
+        sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
+        sys.event_bus.unsubscribe(EventType.FORENSIC_NOTE, handler)
+

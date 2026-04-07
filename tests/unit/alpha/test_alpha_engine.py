@@ -18,6 +18,7 @@ def test_alpha_engine_compute_all():
         "timestamp": pl.datetime_range(datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 4), interval="1h", eager=True),
         "symbol": ["AAPL"] * 5,
         "close": [100.0, 101.0, 102.0, 101.5, 103.0],
+        "open": [100.0] * 5,
         "high": [105.0] * 5,
         "low": [95.0] * 5,
         "volume": [1000.0] * 5

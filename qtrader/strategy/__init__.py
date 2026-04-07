@@ -6,18 +6,22 @@ from qtrader.strategy.meta_strategy import (
     RegimeAwareMetaStrategy,
     WeightedMetaStrategy,
 )
-from qtrader.strategy.momentum import CrossSectionalMomentum, MomentumAlpha, TimeSeriesMomentum
+from qtrader.strategy.momentum import (
+    CrossSectionalMomentum,
+    TimeSeriesMomentum,
+    ZScoreMomentumAlpha,
+)
 from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 
 __all__ = [
     "BaseStrategy",
     "CrossSectionalMomentum",
     "MetaStrategy",
-    "MomentumAlpha",
     "ProbabilisticStrategy",
     "RegimeAwareMetaStrategy",
     "Strategy",
     "TimeSeriesMomentum",
     "WeightedMetaStrategy",
+    "ZScoreMomentumAlpha",
 ]
 

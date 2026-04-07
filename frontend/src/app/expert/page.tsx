@@ -33,6 +33,7 @@ export default function ExpertDashboard() {
   const { 
     portfolio,
     forensics,
+    audit,
     telemetry,
     activeSession,
     handleStartSession,
@@ -116,8 +117,8 @@ export default function ExpertDashboard() {
           ...portfolio,
           total_gross_pnl: portfolio.realized_pnl,
           current_price: portfolio.current_price || (portfolio as any).base_price || 0,
-          open_positions: portfolio.positions || [],
-          trade_history: portfolio.trade_history || [],
+          open_positions: audit.positions || [],
+          trade_history: audit.trades || [],
           position_value: portfolio.equity - portfolio.cash,
           adaptive: forensics?.module_traces?.RiskGuard || {},
           peak_equity: portfolio.equity,
@@ -141,7 +142,7 @@ export default function ExpertDashboard() {
                <Link href="/expert/history" className="text-[9px] font-bold text-blue-500/60 hover:text-blue-400 uppercase tracking-widest">View All</Link>
              </div>
              <div className="h-[180px] overflow-hidden">
-                <TradeHistory trades={portfolio?.trade_history || []} />
+                <TradeHistory trades={audit.trades || []} />
              </div>
            </div>
 
@@ -172,7 +173,7 @@ export default function ExpertDashboard() {
             <ThinkingTerminal history={forensics?.thinking_history || []} />
           </div>
           <div className="md:col-span-1 h-[400px]">
-            <ForensicPositions positions={portfolio?.positions || []} />
+            <ForensicPositions positions={audit.positions || []} />
           </div>
         </div>
       </div>

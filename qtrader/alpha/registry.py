@@ -1,16 +1,10 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
-
-from qtrader.alpha.microstructure import (
-    AmihudIlliquidityAlpha,
-    OrderImbalanceAlpha,
-    VPINAlpha,
-)
-from qtrader.alpha.technical import MeanReversionAlpha, MomentumAlpha, TrendAlpha
 
 if TYPE_CHECKING:
     from qtrader.alpha.base import Alpha
@@ -25,28 +19,40 @@ class AlphaRegistry:
 
     @classmethod
     def register(cls, alpha_cls: type[Alpha]) -> type[Alpha]:
-        """Decorator to register an alpha class."""
+        """Register an alpha class.
+
+        Args:
+            alpha_cls: The alpha class to register. Must have a string 'name' attribute.
+
+        Returns:
+            The registered class.
+        """
         name = getattr(alpha_cls, "name", None)
         if not isinstance(name, str):
             try:
-                name = getattr(alpha_cls(), "name", None)
+                instance = alpha_cls()
+                name = getattr(instance, "name", None)
             except Exception as e:
-                import logging
-
                 logging.getLogger("qtrader.alpha.registry").warning(
-                    f"Failed to instantiate alpha class to read name attribute: {e}"
+                    f"Failed to instantiate alpha class {alpha_cls.__name__} "
+                    f"to read name attribute: {e}"
                 )
+
         if not isinstance(name, str):
-            raise ValueError("Alpha class must define a string 'name' attribute.")
+            raise ValueError(
+                f"Alpha class {alpha_cls.__name__} must define a string 'name' attribute. "
+                f"Found {type(name).__name__}: {name}"
+            )
+
         cls._registry[name] = alpha_cls
         return alpha_cls
 
     @classmethod
-    def create(cls, name: str, **kwargs) -> Alpha:
+    def create(cls, name: str, **kwargs: Any) -> Alpha:
         """Instantiate alpha by name with kwargs."""
         alpha_cls = cls._registry.get(name)
         if alpha_cls is None:
-            raise KeyError(f"Alpha '{name}' not found.")
+            raise KeyError(f"Alpha '{name}' not found. Registered: {cls.list_alphas()}")
         return alpha_cls(**kwargs)  # type: ignore[call-arg]
 
     @classmethod
@@ -107,14 +113,6 @@ class AlphaEngine:
         ic_val = float(df.select(pl.corr("pred", "real")).item())
         self._ic[alpha_name] = ic_val
 
-
-# Auto-register known alphas.
-AlphaRegistry.register(MomentumAlpha)
-AlphaRegistry.register(MeanReversionAlpha)
-AlphaRegistry.register(TrendAlpha)
-AlphaRegistry.register(OrderImbalanceAlpha)
-AlphaRegistry.register(AmihudIlliquidityAlpha)
-AlphaRegistry.register(VPINAlpha)
 
 
 """

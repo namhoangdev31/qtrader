@@ -1,38 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { StickyNote, Plus, Send, X, Trash2, Cpu } from 'lucide-react';
-
-export interface Note {
-  id: string;
-  timestamp: string;
-  content: string;
-  type: 'OBSERVATION' | 'ALERT' | 'TRIAL';
-}
+import React, { useState, useCallback } from 'react';
+import { StickyNote, Plus, Send, Cpu } from 'lucide-react';
+import { useTradingSystem } from '@/hooks/useTradingSystem';
 
 export function ForensicNotes() {
-  const [notes, setNotes] = useState<Note[]>([]);
+  const { audit, getBaseUrl } = useTradingSystem();
   const [input, setInput] = useState('');
-  const [type, setType] = useState<Note['type']>('OBSERVATION');
+  const [type, setType] = useState<'OBSERVATION' | 'ALERT' | 'TRIAL'>('OBSERVATION');
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const getBaseUrl = useCallback(() => {
-    return (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-      ? 'http://localhost:8000'
-      : 'http://api_dashboard:8000';
-  }, []);
-
-  const fetchNotes = useCallback(async () => {
-    try {
-      const res = await fetch(`${getBaseUrl()}/api/v1/forensic_notes`);
-      const data = await res.json();
-      setNotes(data);
-    } catch (e) {
-      console.error('Failed to fetch forensic notes', e);
-    }
-  }, [getBaseUrl]);
-
-  useEffect(() => {
-    fetchNotes();
-  }, [fetchNotes]);
+  const notes = audit.notes || [];
 
   const addNote = async () => {
     if (!input.trim()) return;
@@ -46,7 +22,6 @@ export function ForensicNotes() {
       });
       
       if (res.ok) {
-        await fetchNotes();
         setInput('');
       }
     } catch (e) {
@@ -106,7 +81,7 @@ export function ForensicNotes() {
 
       {/* Notes List */}
       <div className="flex-1 overflow-y-auto p-1.5 space-y-2 scrollbar-hide bg-gradient-to-b from-transparent to-black/20">
-        {notes.map((note) => (
+        {notes.map((note: any) => (
           <div key={note.id} className="group animate-in fade-in slide-in-from-right-2 duration-300">
             <div className={`p-1.5 rounded border leading-tight text-[9px] shadow-sm ${
               note.type === 'ALERT' ? 'bg-rose-500/5 border-rose-500/20 text-rose-200' :

@@ -93,6 +93,7 @@ class EventType(str, Enum):
     EXECUTION_STATE_UPDATE = "EXECUTION_STATE_UPDATE"
     EXECUTION_COST_REPORT = "EXECUTION_COST_REPORT"
     META_DECISION = "META_DECISION"
+    FORENSIC_NOTE = "FORENSIC_NOTE"
 
 
 class MarketPayload(BaseModel):
@@ -651,6 +652,14 @@ class MetaDecisionPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ForensicNotePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    content: str
+    note_type: str
+    session_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 from qtrader.core.trace_authority import TraceAuthority
 
 
@@ -873,7 +882,7 @@ class GapFreeMarketEvent(BaseEvent):
 
     @property
     def ask(self) -> Decimal:
-        return self.payload.asks[0][0] if self.payload.asks else d(0)
+        return self.payload.asks[0][0] if self.payload.asks else Decimal("0.0")
 
 
 class FeatureEvent(BaseEvent):
@@ -1234,6 +1243,13 @@ class MetaDecisionEvent(BaseEvent):
     payload: MetaDecisionPayload
 
 
+class ForensicNoteEvent(BaseEvent):
+    """Event representing a manual or automated forensic annotation."""
+
+    event_type: EventType = EventType.FORENSIC_NOTE
+    payload: ForensicNotePayload
+
+
 # Hydration Registry for EventBus (Polymorphism)
 EVENT_TYPE_MAP: dict[EventType, type[BaseEvent]] = {
     EventType.MARKET_DATA: MarketEvent,
@@ -1243,4 +1259,5 @@ EVENT_TYPE_MAP: dict[EventType, type[BaseEvent]] = {
     EventType.FILL: FillEvent,
     EventType.SYSTEM: SystemEvent,
     EventType.ERROR: ErrorEvent,
+    EventType.FORENSIC_NOTE: ForensicNoteEvent,
 }

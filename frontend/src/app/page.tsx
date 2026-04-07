@@ -29,6 +29,7 @@ export default function Dashboard() {
   const {
     portfolio,
     forensics,
+    audit,
     telemetry,
     logs,
     activeSession,
@@ -202,7 +203,7 @@ export default function Dashboard() {
               <div className="relative">
                 <TradingChart />
               </div>
-              <SimPositionsTable positions={portfolio.positions} />
+              <SimPositionsTable positions={audit.positions || []} />
               
                {/* PREMIUM AI THINKING STREAM (CHAT STYLE) */}
                <div className="bg-[#161a25] border border-[#2962ff]/30 rounded-xl shadow-2xl relative overflow-hidden group flex flex-col h-[600px]">
@@ -290,7 +291,7 @@ export default function Dashboard() {
                </div>
             </>
           ) : (
-            <TradeHistory trades={[]} />
+            <TradeHistory trades={audit.trades || []} />
           )}
         </div>
 

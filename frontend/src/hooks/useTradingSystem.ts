@@ -44,9 +44,24 @@ export const defaultPortfolio: Portfolio = {
   live_config: {},
 };
 
+export interface AuditData {
+  notes: any[];
+  trades: any[];
+  positions: any[];
+  timestamp: string;
+}
+
+export const defaultAudit: AuditData = {
+  notes: [],
+  trades: [],
+  positions: [],
+  timestamp: '',
+};
+
 export function useTradingSystem() {
   const [portfolio, setPortfolio] = useState<Portfolio>(defaultPortfolio);
   const [forensics, setForensics] = useState<Forensics | null>(null);
+  const [audit, setAudit] = useState<AuditData>(defaultAudit);
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [logs, setLogs] = useState<{ time: string; msg: string; type: string }[]>([]);
@@ -54,6 +69,7 @@ export function useTradingSystem() {
   const tradingWs = useRef<WebSocket | null>(null);
   const forensicWs = useRef<WebSocket | null>(null);
   const telemetryWs = useRef<WebSocket | null>(null);
+  const auditWs = useRef<WebSocket | null>(null);
 
   const addLog = useCallback((msg: string, type: string = 'info') => {
     const time = new Date().toLocaleTimeString();
@@ -76,7 +92,6 @@ export function useTradingSystem() {
     const wsUrl = getWsUrl();
     
     // 1. Simulation/Trading Socket
-    // In Simulator War Trading mode, we primarily track the simulation stream
     tradingWs.current = new WebSocket(`${wsUrl}/ws/simulation`);
     tradingWs.current.onmessage = (e) => setPortfolio(JSON.parse(e.data));
     tradingWs.current.onopen = () => addLog('Simulation Stream: ONLINE', 'success');
@@ -91,10 +106,15 @@ export function useTradingSystem() {
     telemetryWs.current.onmessage = (e) => setTelemetry(JSON.parse(e.data));
     telemetryWs.current.onopen = () => addLog('Telemetry Stream: ONLINE', 'success');
 
+    // 4. Audit Socket (Dedicated)
+    auditWs.current = new WebSocket(`${wsUrl}/ws/audit`);
+    auditWs.current.onmessage = (e) => setAudit(JSON.parse(e.data));
+    auditWs.current.onopen = () => addLog('Audit Stream: ONLINE', 'success');
+
   }, [getWsUrl, addLog]);
 
   const disconnectAll = useCallback(() => {
-    [tradingWs, forensicWs, telemetryWs].forEach(ws => {
+    [tradingWs, forensicWs, telemetryWs, auditWs].forEach(ws => {
       if (ws.current) {
         ws.current.close();
         ws.current = null;
@@ -203,6 +223,7 @@ export function useTradingSystem() {
   return {
     portfolio,
     forensics,
+    audit,
     telemetry,
     activeSession,
     logs,

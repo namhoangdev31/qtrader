@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import polars as pl
 
@@ -15,7 +16,7 @@ class MomentumAlpha(BaseAlpha):
 
     lookback: int = 20
     zscore_window: int = 252
-    name: str = "momentum"
+    name: ClassVar[str] = "momentum"
 
     def __post_init__(self) -> None:
         super().__init__(name=self.name, standardize=True, standardize_window=self.zscore_window)
@@ -35,7 +36,7 @@ class MeanReversionAlpha(BaseAlpha):
 
     lookback: int = 5
     zscore_window: int = 60
-    name: str = "mean_reversion"
+    name: ClassVar[str] = "mean_reversion"
 
     def __post_init__(self) -> None:
         super().__init__(name=self.name, standardize=True, standardize_window=self.zscore_window)
@@ -56,7 +57,7 @@ class TrendAlpha(BaseAlpha):
     slow_window: int = 50
     atr_window: int = 14
     zscore_window: int = 100
-    name: str = "trend"
+    name: ClassVar[str] = "trend"
 
     def __post_init__(self) -> None:
         super().__init__(name=self.name, standardize=True, standardize_window=self.zscore_window)
