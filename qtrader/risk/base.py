@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from qtrader.core.events import OrderEvent, RiskEvent
 

@@ -132,7 +132,7 @@ export default function ExpertDashboard() {
           <div className="h-[450px]">
             <ForensicNotes />
           </div>
-          <div className="bg-[#161a25] border border-[#1e222d] p-5 rounded-lg shadow-inner">
+          <div className="bg-[#161a25] border border-[#1e222d] p-2 rounded-lg shadow-inner">
              <div className="flex items-center justify-between mb-4">
                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Audit History</h3>
                <Link href="/expert/history" className="text-[9px] font-bold text-blue-500/60 hover:text-blue-400 uppercase tracking-widest">View All</Link>

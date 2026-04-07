@@ -241,20 +241,26 @@ class PaperTradingEngine:
                 "Strategy": {"status": "AWAITING"}
             }
         }
+        self._listeners: list[Callable[[dict[str, Any]], None]] = []
 
         self.EXTERNAL_TICK_TIMEOUT = 2.0
 
-        self._on_update: Callable[[dict[str, Any]], None] | None = None
+    def add_update_listener(self, handler: Callable[[dict[str, Any]], None]) -> None:
+        """Register a new listener for real-time simulation updates."""
+        if handler not in self._listeners:
+            self._listeners.append(handler)
 
     def set_update_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
-        self._on_update = handler
+        """Legacy support for a single handler (maps to listener list)."""
+        self.add_update_listener(handler)
 
     def _emit(self, data: dict[str, Any]) -> None:
-        if self._on_update:
+        """Notify all registered listeners of a new simulation snapshot."""
+        for listener in self._listeners:
             try:
-                self._on_update(data)
+                listener(data)
             except Exception as e:
-                _LOG.error(f"[PAPER] Update handler error: {e}")
+                _LOG.error(f"[PAPER] Update listener error: {e}")
 
     @property
     def cash(self) -> float:
@@ -426,8 +432,8 @@ class PaperTradingEngine:
         }
         total_notional = 0.0
         for lots in self._open_positions.values():
-            for lot_data in lots:
-                total_notional += lot_data[0] * lot_data[1]
+            for lot in lots:
+                total_notional += lot.qty * lot.avg_price
 
         self._last_trace["module_traces"]["Portfolio"] = {
             "equity": float(self._cash + total_notional),

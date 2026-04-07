@@ -462,7 +462,7 @@ async def forensics_updates(websocket: WebSocket) -> None:
     # Forensics subscribes to more granular events
     sys.event_bus.subscribe(EventType.SIGNAL, handler)
     sys.event_bus.subscribe(EventType.DECISION_TRACE, handler)
-    engine.set_update_handler(lambda x: queue.put_nowait(True))
+    engine.add_update_listener(lambda x: queue.put_nowait(True))
 
     try:
         # Initial snapshot
@@ -537,7 +537,7 @@ async def simulation_updates(websocket: WebSocket) -> None:
         except Exception:
             pass
 
-    engine.set_update_handler(on_sim_update)
+    engine.add_update_listener(on_sim_update)
 
     try:
         snapshot = engine._build_snapshot()
