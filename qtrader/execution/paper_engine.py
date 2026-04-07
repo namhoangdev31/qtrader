@@ -599,7 +599,14 @@ class PaperTradingEngine:
         
         if not self._managed_positions[symbol]:
             self._managed_positions.pop(symbol)
-            self._open_positions.pop(symbol, None)
+        
+        # Remove the exact same position from _open_positions
+        if symbol in self._open_positions:
+            self._open_positions[symbol] = [
+                l for l in self._open_positions[symbol] if l.position_id != pos.position_id
+            ]
+            if not self._open_positions[symbol]:
+                self._open_positions.pop(symbol)
 
         if net_pnl > 0:
             self.adaptive.record_win(net_pnl)
@@ -783,7 +790,9 @@ class PaperTradingEngine:
             rem_qty = abs(curr_qty) - closing_qty
             sign = 1 if curr_qty > 0 else -1
             if rem_qty < self.EPSILON_QTY:
-                self._open_positions.pop(sym, None)
+                self._open_positions[sym].pop(0)
+                if not self._open_positions[sym]:
+                    self._open_positions.pop(sym, None)
             else:
                 self._open_positions[sym][0].qty = rem_qty * sign
 

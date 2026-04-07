@@ -98,9 +98,12 @@ export const ForensicPositions: React.FC<ForensicPositionsProps> = ({ positions 
                         {/* Simplified Logic: Assuming pos starts between SL and TP */}
                         {(() => {
                            const total = pos.take_profit - pos.stop_loss;
-                           if (total <= 0) return null;
+                           if (total <= 0) return (
+                             <div className="absolute inset-0 bg-slate-800/30 animate-pulse" />
+                           );
+                           
                            const progress = ((pos.current_price - pos.stop_loss) / total) * 100;
-                           const clampedProgress = Math.min(Math.max(progress, 0), 100);
+                           const clampedProgress = Math.min(Math.max(isNaN(progress) ? 50 : progress, 0), 100);
                            return (
                              <>
                                <div className="bg-slate-700/50 absolute top-0 bottom-0 left-[50%] w-[1px] z-10" />

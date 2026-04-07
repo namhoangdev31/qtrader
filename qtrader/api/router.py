@@ -61,6 +61,13 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
     # Sync base price and subscribe to real-time updates from EventBus
     if sys:
         try:
+            # UNIFY: Inject this simulation engine into the TradingSystem's broker
+            # This ensures that Audit History and positions are shared.
+            from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
+            if isinstance(sys.broker, CoinbaseBrokerAdapter):
+                sys.broker.sim_engine = engine
+                logger.info("[SIM] Injected PaperTradingEngine into CoinbaseBrokerAdapter for unify forensic stream")
+
             # 1. Initial manual sync
             symbol = "BTC-USD"
             quote = sys.broker._quotes.get(symbol, {})
@@ -223,6 +230,18 @@ async def get_active_session() -> dict[str, Any]:
 async def get_session_history(limit: int = 10) -> list[dict[str, Any]]:
     writer = TradeDBWriter()
     return await writer.get_session_history(limit)
+
+
+@session_router.post("/purge")
+async def purge_database_endpoint() -> dict[str, str]:
+    """NUCLEAR RESET: Purge all trading data and recreate schema."""
+    try:
+        writer = TradeDBWriter()
+        await writer.purge_database()
+        return {"status": "success", "message": "Database purged and re-initialized"}
+    except Exception as e:
+        logger.error(f"[API] Purge failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Purge failed: {str(e)}")
 
 
 @session_router.get("/{session_id}/report")
@@ -397,7 +416,24 @@ async def trading_updates(websocket: WebSocket) -> None:
     
     async def get_snapshot():
         balance = await sys.broker.get_paper_balance()
-        positions = await sys.state_store.get_positions()
+        positions_map = await sys.state_store.get_positions()
+        
+        # Collect positions with forensic detail
+        pos_list = []
+        for sym, pos in positions_map.items():
+            if pos.quantity != 0:
+                pos_list.append({
+                    "symbol": sym,
+                    "side": "BUY" if pos.quantity > 0 else "SELL",
+                    "quantity": float(pos.quantity),
+                    "average_price": float(pos.average_price),
+                    "unrealized_pnl": float(pos.unrealized_pnl),
+                    "unrealized_pnl_pct": 0.0, # Computed on frontend or updated later
+                    "stop_loss": 0.0, # Enhanced detail
+                    "take_profit": 0.0,
+                    "entry_time": datetime.now().isoformat()
+                })
+
         return {
             "type": "portfolio_update",
             "timestamp": datetime.now().isoformat(),
@@ -405,15 +441,8 @@ async def trading_updates(websocket: WebSocket) -> None:
             "cash": balance["cash"],
             "realized_pnl": balance["realized_pnl"],
             "total_commissions": balance["total_commissions"],
-            "positions": [
-                {
-                    "symbol": sym,
-                    "quantity": float(pos.quantity),
-                    "average_price": float(pos.average_price),
-                    "unrealized_pnl": float(pos.unrealized_pnl),
-                }
-                for sym, pos in positions.items() if pos.quantity != 0
-            ]
+            "positions": pos_list,
+            "trade_history": [] # Will be populated by simulation engine usually
         }
 
     await websocket.send_json(await get_snapshot())

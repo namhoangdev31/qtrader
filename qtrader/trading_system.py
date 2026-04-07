@@ -57,6 +57,7 @@ from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.portfolio.allocator import CapitalAllocationEngine
 from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
 from qtrader.risk.kill_switch import GlobalKillSwitch
+from qtrader.strategy.manager import StrategyManager
 
 # Note: Top-level constants (MIN_CONFIDENCE, etc.) removed in favor of config_manager.get()
 # to allow AI-driven Dynamic Control.
@@ -221,6 +222,7 @@ class TradingSystem:
         self.latency_enforcer = LatencyEnforcer(fail_on_breach=False)
         self.pnl_attribution = PnLAttributionEngine()
         self.db_writer = TradeDBWriter()
+        self.strategy_manager = StrategyManager(symbol=self.config.symbols[0] if self.config.symbols else "BTC-USD")
 
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -294,7 +296,6 @@ class TradingSystem:
         await self.event_bus.start()
         await embedding_manager.start()
 
-        # Initialize Session
         try:
             balance = await self.broker.get_paper_balance()
             capital = Decimal(str(balance["equity"]))
@@ -302,10 +303,11 @@ class TradingSystem:
                 initial_capital=capital,
                 metadata={"mode": "SIM" if self.config.simulate else "LIVE"},
             )
-            # Start background loops
+            config_manager.register_callback(self._on_config_change)
             self._tasks.add(asyncio.create_task(self._pnl_recording_loop()))
             self._tasks.add(asyncio.create_task(self._sentiment_refresh_loop()))
-            logger.info("[TS] Performance and Sentiment loops started")
+            self._tasks.add(asyncio.create_task(self._health_logging_loop()))
+            logger.info("[TS] Performance, Sentiment, and Health loops started")
             if self.config.simulate:
                 self.broker.paper_account.active_session_id = self.active_session_id
             logger.info(f"[SESSION] DB session started: {self.active_session_id}")
@@ -371,25 +373,55 @@ class TradingSystem:
             try:
                 if self.active_session_id:
                     balance = await self.broker.get_paper_balance()
-                    # Balance keys: equity, cash, realized_pnl, etc.
                     await self.db_writer.write_pnl_snapshot(
                         total_equity=Decimal(str(balance.get("equity", 0))),
                         cash=Decimal(str(balance.get("cash", 0))),
-                        realized_pnl=Decimal(
-                            str(balance.get("realized_pnl", 0))
-                        ),
-                        unrealized_pnl=Decimal(
-                            str(balance.get("unrealized_pnl", 0))
-                        ),
-                        total_commission=Decimal(
-                            str(balance.get("total_commissions", 0))
-                        ),
+                        realized_pnl=Decimal(str(balance.get("realized_pnl", 0))),
+                        unrealized_pnl=Decimal(str(balance.get("unrealized_pnl", 0))),
+                        total_commission=Decimal(str(balance.get("total_commissions", 0))),
                         session_id=self.active_session_id,
                     )
             except Exception as e:
                 logger.error(f"[PNL_REC] Failed to record snapshot: {e}")
             
-            await asyncio.sleep(5)  # Record every 5 seconds
+            await asyncio.sleep(5)
+
+    async def _health_logging_loop(self) -> None:
+        """Periodically record system health metrics to DB."""
+        import psutil
+        process = psutil.Process(os.getpid())
+        while self._running:
+            try:
+                if self.active_session_id:
+                    cpu_pct = process.cpu_percent()
+                    mem_info = process.memory_info()
+                    mem_pct = process.memory_percent()
+                    
+                    await self.db_writer.write_system_health(
+                        session_id=self.active_session_id,
+                        cpu_pct=cpu_pct,
+                        mem_pct=mem_pct,
+                        latency_ms=int(self._last_latency_ms),
+                        status="RUNNING" if self._running else "IDLE"
+                    )
+            except Exception as e:
+                logger.error(f"[HEALTH] Failed to log health: {e}")
+            
+            await asyncio.sleep(10)
+
+    def _on_config_change(self, key: str, old_val: Any, new_val: Any) -> None:
+        """Callback for DynamicConfig changes."""
+        if self.active_session_id:
+            # We wrap the async call in a task since the callback is sync
+            asyncio.create_task(
+                self.db_writer.write_config_change(
+                    session_id=self.active_session_id,
+                    parameter=key,
+                    old_value=old_val,
+                    new_value=new_val,
+                    changed_by="AI_STRATEGIST" # Policy: Assume AI driven unless proven otherwise
+                )
+            )
 
     def _on_shutdown_signal(self) -> None:
         logger.warning("Shutdown signal received")
@@ -402,6 +434,20 @@ class TradingSystem:
         price = Decimal(str(data.get("price", "0")))
         if price > 0:
             self.broker._quotes[symbol] = {"price": price}
+
+        # Session-Centric Raw Data Persistence
+        if self.active_session_id:
+            try:
+                await self.db_writer.write_raw_market_data(
+                    symbol=symbol,
+                    bid=Decimal(str(data.get("best_bid", "0"))),
+                    ask=Decimal(str(data.get("best_ask", "0"))),
+                    last_price=price,
+                    volume=Decimal(str(data.get("volume_24h", "0"))),
+                    session_id=self.active_session_id
+                )
+            except Exception as e:
+                logger.error(f"[DB] Market data persistence failed: {e}")
 
         event = MarketEvent(
             event_type=EventType.MARKET_DATA,
@@ -632,7 +678,31 @@ class TradingSystem:
                 )
                 return None
 
-            signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
+            # Use Active Strategy from StrategyManager for final signal logic
+            active_strategy = self.strategy_manager.active_strategy
+            
+            # Use the features from the most recent market data
+            df_features = pl.DataFrame(market_data.get("historical_ohlc", []))
+            if df_features.height > 0:
+                # Some strategies expect features dict
+                feats = {col: df_features[col] for col in df_features.columns}
+                strat_signal = active_strategy.compute_signals(feats)
+                
+                # Merge ML guidance with Strategy logic
+                # Strategy has override if signal_type != "HOLD"
+                if strat_signal.get("signal_type", "HOLD") != "HOLD":
+                    signal = {
+                        "side": strat_signal["signal_type"],
+                        "confidence": strat_signal.get("strength", 0.5),
+                        "reason": f"Methodology: {self.strategy_manager.active_strategy_name} | {strat_signal.get('metadata', {}).get('reason', 'Signal')}",
+                        "position_size_multiplier": strat_signal.get("strength", 1.0)
+                    }
+                else:
+                    # Fallback to ML Signal if methodology is HOLD
+                    signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
+            else:
+                signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
+
             if not signal:
                 return None
 

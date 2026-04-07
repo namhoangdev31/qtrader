@@ -40,6 +40,19 @@ class TradeDBWriter:
 
         queries = [
             """
+            CREATE TABLE IF NOT EXISTS trading_sessions (
+                session_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
+                mode             VARCHAR(20)  NOT NULL DEFAULT 'paper',
+                start_time       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                end_time         TIMESTAMPTZ,
+                initial_capital  NUMERIC(24, 8) DEFAULT 0,
+                final_capital    NUMERIC(24, 8),
+                summary          JSONB        DEFAULT '{}',
+                metadata         JSONB        DEFAULT '{}'
+            );
+            """,
+            """
             CREATE TABLE IF NOT EXISTS fills (
                 fill_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 order_id         VARCHAR(100) NOT NULL,
@@ -50,7 +63,7 @@ class TradeDBWriter:
                 commission       NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
-                session_id       UUID,
+                session_id       UUID REFERENCES trading_sessions(session_id),
                 metadata         JSONB        DEFAULT '{}'
             );
             """,
@@ -66,7 +79,7 @@ class TradeDBWriter:
                 status           VARCHAR(20)  NOT NULL DEFAULT 'SUBMITTED',
                 submitted_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
-                session_id       UUID,
+                session_id       UUID REFERENCES trading_sessions(session_id),
                 metadata         JSONB        DEFAULT '{}'
             );
             """,
@@ -78,7 +91,7 @@ class TradeDBWriter:
                 average_price    NUMERIC(24, 8) NOT NULL,
                 unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                session_id       UUID,
+                session_id       UUID REFERENCES trading_sessions(session_id),
                 UNIQUE (symbol, timestamp)
             );
             """,
@@ -91,7 +104,7 @@ class TradeDBWriter:
                 unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 total_commission NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                session_id       UUID
+                session_id       UUID REFERENCES trading_sessions(session_id)
             );
             """,
             """
@@ -103,36 +116,60 @@ class TradeDBWriter:
                 thinking         TEXT         NOT NULL,
                 explanation      TEXT,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                session_id       UUID,
+                session_id       UUID REFERENCES trading_sessions(session_id),
                 metadata         JSONB        DEFAULT '{}'
             );
             """,
             """
             CREATE TABLE IF NOT EXISTS forensic_notes (
                 id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                session_id       UUID,
+                session_id       UUID REFERENCES trading_sessions(session_id),
                 note_text        TEXT NOT NULL,
                 note_type        VARCHAR(20) NOT NULL DEFAULT 'OBSERVATION',
-                embedding        FLOAT[],  -- Semantic embedding (Async)
+                embedding        FLOAT[],
                 timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 metadata         JSONB DEFAULT '{}'
             );
             """,
+            """
+            CREATE TABLE IF NOT EXISTS market_data_raw (
+                id               BIGSERIAL,
+                symbol           VARCHAR(20)  NOT NULL,
+                bid              NUMERIC(24, 8),
+                ask              NUMERIC(24, 8),
+                last_price       NUMERIC(24, 8),
+                volume           NUMERIC(24, 8),
+                timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                session_id       UUID REFERENCES trading_sessions(session_id),
+                PRIMARY KEY (id, timestamp)
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS config_changes (
+                id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id       UUID REFERENCES trading_sessions(session_id),
+                parameter        VARCHAR(100) NOT NULL,
+                old_value        TEXT,
+                new_value        TEXT,
+                changed_by       VARCHAR(50) NOT NULL DEFAULT 'AI',
+                timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS system_health (
+                id               BIGSERIAL,
+                session_id       UUID REFERENCES trading_sessions(session_id),
+                cpu_pct          NUMERIC(5, 2),
+                mem_pct          NUMERIC(5, 2),
+                latency_ms       INTEGER,
+                status           VARCHAR(50),
+                timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (id, timestamp)
+            );
+            """,
         ]
 
-        # Migration: Add session_id to existing tables if missing
-        migrations = [
-            "ALTER TABLE fills ADD COLUMN IF NOT EXISTS session_id UUID;",
-            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_id UUID;",
-            "ALTER TABLE positions ADD COLUMN IF NOT EXISTS session_id UUID;",
-            "ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS session_id UUID;",
-            "ALTER TABLE ai_thinking_logs ADD COLUMN IF NOT EXISTS session_id UUID;",
-            "ALTER TABLE trading_sessions ADD COLUMN IF NOT EXISTS initial_capital NUMERIC(24, 8) DEFAULT 0;",
-            "ALTER TABLE trading_sessions ADD COLUMN IF NOT EXISTS final_capital NUMERIC(24, 8);",
-            "ALTER TABLE forensic_notes ADD COLUMN IF NOT EXISTS embedding FLOAT[];", # Ensure migration
-        ]
-
-        for query in queries + migrations:
+        for query in queries:
             try:
                 await DBClient.execute(query)
             except Exception as e:
@@ -145,16 +182,35 @@ class TradeDBWriter:
             "SELECT create_hypertable('positions', 'timestamp', if_not_exists => TRUE);",
             "SELECT create_hypertable('pnl_snapshots', 'timestamp', if_not_exists => TRUE);",
             "SELECT create_hypertable('ai_thinking_logs', 'timestamp', if_not_exists => TRUE);",
+            "SELECT create_hypertable('market_data_raw', 'timestamp', if_not_exists => TRUE);",
+            "SELECT create_hypertable('system_health', 'timestamp', if_not_exists => TRUE);",
         ]
         for query in hypertable_queries:
             try:
                 await DBClient.execute(query)
             except Exception as e:
-                # TimescaleDB extension may not be available or hypertable already exists
                 logger.debug(f"[DB] Hypertable creation skipped: {e}")
 
         self._initialized = True
-        logger.info("[DB] Persistence layer initialized")
+        logger.info("[DB] Persistence layer initialized (Session-Centric)")
+
+    async def purge_database(self) -> None:
+        """NUCLEAR RESET: Drop all tables and re-initialize."""
+        tables = [
+            "system_health", "config_changes", "market_data_raw", 
+            "forensic_notes", "ai_thinking_logs", "pnl_snapshots", 
+            "positions", "fills", "orders", "trading_sessions"
+        ]
+        for table in tables:
+            try:
+                await DBClient.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
+                logger.warning(f"[DB] Purged table: {table}")
+            except Exception as e:
+                logger.error(f"[DB] Failed to purge table {table}: {e}")
+
+        self._initialized = False
+        await self.initialize()
+        logger.info("[DB] Database fully reconstructed.")
 
     async def write_fill(
         self,
@@ -513,6 +569,86 @@ class TradeDBWriter:
             logger.debug(f"[DB] Updated embedding for note {note_id}")
         except Exception as e:
             logger.error(f"[DB] Failed to update note embedding {note_id}: {e}")
+
+    async def write_raw_market_data(
+        self,
+        symbol: str,
+        bid: Decimal | None = None,
+        ask: Decimal | None = None,
+        last_price: Decimal | None = None,
+        volume: Decimal | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        """Persist raw market data (ticks)."""
+        if not self._initialized:
+            await self.initialize()
+
+        query = """
+            INSERT INTO market_data_raw (symbol, bid, ask, last_price, volume, session_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        """
+        try:
+            await DBClient.execute(
+                query, 
+                symbol, 
+                str(bid) if bid else None, 
+                str(ask) if ask else None, 
+                str(last_price) if last_price else None, 
+                str(volume) if volume else None, 
+                session_id
+            )
+        except Exception as e:
+            logger.error(f"[DB] Failed to persist raw market data: {e}")
+
+    async def write_config_change(
+        self,
+        session_id: str | None,
+        parameter: str,
+        old_value: Any,
+        new_value: Any,
+        changed_by: str = "AI",
+    ) -> None:
+        """Persist a dynamic configuration change."""
+        if not self._initialized:
+            await self.initialize()
+
+        query = """
+            INSERT INTO config_changes (session_id, parameter, old_value, new_value, changed_by)
+            VALUES ($1, $2, $3, $4, $5)
+        """
+        try:
+            await DBClient.execute(
+                query,
+                session_id,
+                parameter,
+                str(old_value),
+                str(new_value),
+                changed_by,
+            )
+            logger.info(f"[DB] Config change logged: {parameter} -> {new_value}")
+        except Exception as e:
+            logger.error(f"[DB] Failed to log config change: {e}")
+
+    async def write_system_health(
+        self,
+        session_id: str | None,
+        cpu_pct: float,
+        mem_pct: float,
+        latency_ms: int,
+        status: str = "OK",
+    ) -> None:
+        """Persist system health metrics."""
+        if not self._initialized:
+            await self.initialize()
+
+        query = """
+            INSERT INTO system_health (session_id, cpu_pct, mem_pct, latency_ms, status)
+            VALUES ($1, $2, $3, $4, $5)
+        """
+        try:
+            await DBClient.execute(query, session_id, cpu_pct, mem_pct, latency_ms, status)
+        except Exception as e:
+            logger.error(f"[DB] Failed to persist system health: {e}")
 
     async def get_session_by_id(self, session_id: str) -> dict[str, Any] | None:
         """Get a specific session by ID."""

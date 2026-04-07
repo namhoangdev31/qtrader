@@ -49,9 +49,8 @@ class BaseStrategy:
             symbol, side, qty, price, pnl, timestamp.
     """
 
-    DEFAULT_MIN_FILLS: int = 10
-
     symbol: str
+    DEFAULT_MIN_FILLS: int = 10
     capital: float = 100_000.0
     _position: dict[str, float] = field(default_factory=dict, init=False)
     fills_log: pl.DataFrame = field(

@@ -165,6 +165,8 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         kill_switch: GlobalKillSwitch | None = None,
         # Order signing (Standash §5.3)
         order_signer: OrderSigner | None = None,
+        # Shared simulation engine (unifies engine/UI)
+        sim_engine: Any | None = None,
     ) -> None:
         self.api_key = api_key or Config.COINBASE_API_KEY
         self.api_secret = api_secret or Config.COINBASE_API_SECRET
@@ -180,6 +182,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         self._session: aiohttp.ClientSession | None = None
         self.kill_switch = kill_switch
         self.order_signer = order_signer
+        self.sim_engine = sim_engine
 
         # Initialize paper account with adaptive strategy
         self.paper_account = PaperAccount()
@@ -261,7 +264,19 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             self._quotes[symbol] = {"bid": bids[0][0], "ask": asks[0][0]}
 
     async def get_paper_balance(self) -> dict[str, Any]:
-        """Get current paper trading account state (synced with Redis)."""
+        """Get current paper trading account state (synced with Redis or Sim Engine)."""
+        if self.sim_engine:
+            # High-fidelity shared state
+            return {
+                "cash": float(self.sim_engine._cash),
+                "positions": {k: sum(l.qty for l in v) for k, v in self.sim_engine._open_positions.items()},
+                "equity": float(self.sim_engine.equity),
+                "realized_pnl": float(self.sim_engine.realized_pnl),
+                "total_commissions": float(self.sim_engine._total_commissions),
+                "order_count": len(self.sim_engine.closed_trades),
+                "fill_count": len(self.sim_engine.closed_trades),
+            }
+
         if self._redis:
             try:
                 cash_val = await self._redis.get(f"{settings.redis_prefix}:paper_cash")
@@ -438,6 +453,21 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         )
 
         if True:  # Forced simulate mode
+            # 1. Use high-fidelity shared engine if available
+            if self.sim_engine:
+                # Mock market state for fill simulation
+                ref_symbol = order.symbol
+                quote = self._quotes.get(ref_symbol, {})
+                market_state = {
+                    "bid": float(quote.get("bid", 0.0)),
+                    "ask": float(quote.get("ask", 0.0)),
+                    "top_depth": 10.0,
+                    "venue": "SIMULATED_COINBASE"
+                }
+                fill = self.sim_engine.simulate_fill(order, market_state)
+                return fill.payload.order_id
+
+            # 2. Fallback to basic internal simulation
             # Simulate network latency
             if self.paper_latency_ms > 0:
                 await asyncio.sleep(self.paper_latency_ms / 1000.0)

@@ -145,23 +145,13 @@ class MomentumAlpha(BaseAlpha):
         Returns:
             A pl.Series of dtype Float64 representing the returns.
         """
-        # Calculate simple returns: (close_t / close_{t-1}) - 1
         returns_expr = pl.col("close").pct_change()
-
-        # Compute rolling mean and standard deviation of returns
         rolling_mean_expr = returns_expr.rolling_mean(window_size=self.lookback)
         rolling_std_expr = returns_expr.rolling_std(window_size=self.lookback)
-
-        # Avoid division by zero: when rolling_std is 0, set z_score to 0
-        # Otherwise, compute z-score = (returns - rolling_mean) / rolling_std
         z_score_expr = pl.when(rolling_std_expr == 0).then(0.0).otherwise(
             (returns_expr - rolling_mean_expr) / rolling_std_expr
         )
-
-        # Fill any remaining nulls (from insufficient data for rolling operations) with 0.0
         z_score_expr = z_score_expr.fill_null(0.0)
-
-        # Evaluate the expression on the DataFrame to get a Series
         result_series = df.select(z_score_expr.alias("momentum_alpha")).to_series()
 
         return result_series

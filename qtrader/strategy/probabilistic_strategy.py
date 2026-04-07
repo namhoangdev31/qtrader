@@ -57,22 +57,18 @@ class ProbabilisticStrategy(BaseStrategy):
         Returns:
             List of OrderEvent objects to be submitted
         """
-        # Extract probabilities from signal metadata
         buy_prob = event.metadata.get("buy_prob", 0.33)
         sell_prob = event.metadata.get("sell_prob", 0.33)
         hold_prob = event.metadata.get("hold_prob", 0.33)
 
-        # Normalize probabilities to ensure they sum to 1.0
         total_prob = buy_prob + sell_prob + hold_prob
         if total_prob > 0:
             buy_prob /= total_prob
             sell_prob /= total_prob
             hold_prob /= total_prob
         else:
-            # Uniform distribution if no valid probabilities
             buy_prob = sell_prob = hold_prob = 1.0 / 3.0
 
-        # Determine signal type based on highest probability
         if buy_prob > sell_prob and buy_prob > hold_prob:
             signal_type = "BUY"
             probability = buy_prob
@@ -83,28 +79,15 @@ class ProbabilisticStrategy(BaseStrategy):
             signal_type = "HOLD"
             probability = hold_prob
 
-        # Calculate signal strength as deviation from uniform distribution
         uniform_prob = 1.0 / 3.0
         strength = max(0.0, probability - uniform_prob) * 1.5  # Scale to [0, 1]
-
-        # Apply model confidence
         strength = strength * self.model_confidence
-
-        # Only generate orders for non-HOLD signals with sufficient strength
         if signal_type == "HOLD" or strength < 0.1:
             _LOG.debug(f"Holding position for {self.symbol} (strength: {strength:.3f})")
             return []
-
-        # Calculate order size based on signal strength and strategy capital
-        # More aggressive sizing for higher conviction signals
         position_size = self.capital * strength * 0.1  # Max 10% of capital per signal
-
-        # Determine order side based on signal type
         side = "BUY" if signal_type == "BUY" else "SELL"
-
-        # Create and return the order
         order = self.create_order(quantity=position_size, side=side, order_type="MARKET")
-
         _LOG.info(
             f"Generated {signal_type} signal for {self.symbol} "
             f"(prob: {probability:.3f}, strength: {strength:.3f}, size: {position_size:.2f})"
@@ -221,7 +204,6 @@ class ProbabilisticStrategy(BaseStrategy):
         Returns:
             SignalEvent containing the trading signal
         """
-        # Convert validated_features.features (Dict[str, Decimal]) to a dict of pl.Series of length 1
         features_dict = {}
         for name, value in validated_features.features.items():
             features_dict[name] = pl.Series([value])  # length 1 series

@@ -25,9 +25,11 @@ interface TradeHistoryProps {
 }
 
 export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades }) => {
-  const sorted = [...trades].sort((a, b) => 
-    new Date(b.exit_time).getTime() - new Date(a.exit_time).getTime()
-  );
+  const sorted = [...trades].sort((a, b) => {
+    const timeA = new Date(a.exit_time || 0).getTime();
+    const timeB = new Date(b.exit_time || 0).getTime();
+    return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+  });
 
   const totalPnl = trades.reduce((sum, t) => sum + t.pnl, 0);
   const wins = trades.filter(t => t.pnl > 0).length;
