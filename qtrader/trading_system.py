@@ -59,63 +59,42 @@ from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.strategy.manager import StrategyManager
 
-# Note: Top-level constants (MIN_CONFIDENCE, etc.) removed in favor of config_manager.get()
-# to allow AI-driven Dynamic Control.
-
-
-# Constants migrated to config_manager (Dynamic Control)
-
 @dataclass
 class TradingSystemConfig:
     """Complete configuration for the Trading System."""
-
-    # Trading mode
     simulate: bool = True
     symbols: list[str] = field(default_factory=lambda: ["BTC-USD"])
-
-    # Risk limits
     max_position_usd: float = 100_000.0
     max_drawdown_pct: float = 0.20
     max_order_qty: float = 1.0
     max_order_notional: float = 50_000.0
     max_orders_per_second: float = 5.0
-
-    # ML config (HuggingFace models)
     chronos_model_id: str = "amazon/chronos-2"
     tabpfn_model_id: str = "Prior-Labs/tabpfn_2_5"
     phi2_model_id: str = "microsoft/phi-2"
-    # ML weights (Migrated to dynamic control)
     ml_weight: float | None = None
     traditional_weight: float | None = None
 
-    # Reconciliation
     recon_interval_s: float = 60.0
 
-    # Heartbeat
     heartbeat_interval_s: float = 10.0
 
-    # Signal processing interval
     signal_interval_s: float | None = None
 
-    # Alerting
     slack_webhook_url: str | None = None
     pagerduty_routing_key: str | None = None
 
-    # Latency
     max_latency_ms: float = 100.0
 
-    # Shadow mode
     shadow_mode: bool = True
     shadow_min_days: int = 7
 
-    # Dynamic Risk Parameters
     atr_window: int = 14
     atr_multiplier: float = 2.0
     forecast_multiplier: float = 1.5
     min_sl_pct: float = 0.005
     max_sl_pct: float = 0.05
 
-    # Operational Parameters (Migrated from magic numbers)
     price_jump_threshold: float = 0.05
     retrain_win_rate_threshold: float = 0.35
     win_history_window: int = 10
@@ -133,7 +112,6 @@ class TradingSystem:
     ) -> None:
         self.config = config or TradingSystemConfig()
         self.state_store = StateStore()
-        # Distributed Event Bridge (Redis)
         host, port, db = settings.redis_host, settings.redis_port, settings.redis_db
         redis_url = f"redis://{host}:{port}/{db}" if host else None
         if os.getenv("REDIS_URL"):
@@ -141,8 +119,6 @@ class TradingSystem:
         
         logger.info(f"[TS] Initializing EventBus with redis_url={redis_url}, ENV_VAR={os.getenv('REDIS_URL')}")
         self.event_bus = EventBus(redis_url=redis_url)
-
-        # === 1. ML Alpha Engine (Atomic Trio) ===
         if ml_pipeline is not None:
             self.ml_pipeline = ml_pipeline
         else:
@@ -161,14 +137,14 @@ class TradingSystem:
         self._consecutive_losses: int = 0
         self._last_signal_direction: dict[str, str] = {}
         self._signal_streak: dict[str, int] = {}
-        self._loss_cooldown: dict[str, int] = {}  # Cooldown ticks after loss
-        self._peak_equity: float = 1000.0  # Track peak for trailing stop
-        self._position_opened_at: dict[str, float] = {}  # Entry timestamps
-        self._confidence_ema: dict[str, float] = {}  # Smoothed signal confidence
-        self._last_exit_at: dict[str, float] = {}  # Exit timestamps for cooldown
+        self._loss_cooldown: dict[str, int] = {}
+        self._peak_equity: float = 1000.0 
+        self._position_opened_at: dict[str, float] = {} 
+        self._confidence_ema: dict[str, float] = {} 
+        self._last_exit_at: dict[str, float] = {} 
 
         self.retrain_system = RetrainSystem(psi_threshold=0.20, performance_drop_delta=0.15)
-        self._win_history: deque[int] = deque(maxlen=50)  # Binary wins for win-rate tracking
+        self._win_history: deque[int] = deque(maxlen=50) 
 
         self.kill_switch = GlobalKillSwitch(
             dd_limit=self.config.max_drawdown_pct,
@@ -243,7 +219,7 @@ class TradingSystem:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._start_time: float = time.time()
         self._last_latency_ms: float = 0.0
-        self.active_session_id: str = "44a76d31-6b87-4c10-88ed-e0c62716de83" # Persistence placeholder
+        self.active_session_id: str | None = None
         self._last_pnl_report: dict[str, Any] = {}
         self._last_module_traces: dict[str, Any] = {
             "AlphaEngine": {"status": "AWAITING"},
@@ -258,6 +234,7 @@ class TradingSystem:
         """Return the overall status of the trading system."""
         return {
             "status": "RUNNING" if self._running else "IDLE",
+            "mode": "PAPER" if self.config.simulate else "LIVE",
             "session_id": self.active_session_id,
             "latency_ms": round(self._last_latency_ms, 2),
             "stats": self._stats,
@@ -279,7 +256,6 @@ class TradingSystem:
         self._stats["start_time"] = time.time()
         await self.state_store.sync_from_remote()
 
-        # Register signal handlers
         try:
             loop = asyncio.get_running_loop()
             for sig_name in ("SIGTERM", "SIGINT"):
@@ -289,7 +265,6 @@ class TradingSystem:
         except (NotImplementedError, RuntimeError):
             pass
 
-        # Configure broker
         for symbol in self.config.symbols:
             self.broker.add_product(symbol)
         await self.broker.start_websocket()
@@ -349,8 +324,6 @@ class TradingSystem:
                 quote = self.broker._quotes.get(symbol, {})
                 price = float(quote.get("price") or 0.0)
                 
-                # 2. Construct a 'Market Narrative'
-                # This text will be embedded by phi3:mini to find similar past regimes
                 narrative = (
                     f"Market context for {symbol} at {datetime.now().isoformat()}. "
                     f"Current price is {price:.2f}. "
@@ -358,13 +331,11 @@ class TradingSystem:
                     f"System is searching for {self.config.simulate} regime templates."
                 )
                 
-                # 3. Enqueue for Async Vectorization
                 embedding_manager.refresh_sentiment(narrative)
                 
             except Exception as e:
                 logger.error(f"[TS] Sentiment refresh failed: {e}")
             
-            # Refresh every 10 minutes (600 seconds) to avoid over-burdening Ollama
             await asyncio.sleep(600)
 
     async def _pnl_recording_loop(self) -> None:
@@ -477,14 +448,11 @@ class TradingSystem:
                 tasks = [self._process_symbol(symbol) for symbol in self.config.symbols]
                 await asyncio.gather(*tasks)
 
-                # Rate limiting: wait between signal checks to reduce whipsaw
                 interval = config_manager.get("SIGNAL_INTERVAL_S", 1.0)
                 await asyncio.sleep(interval)
 
-                # 2. Periodic Reconciliation
                 await self._periodic_reconciliation()
 
-                # 3. Heartbeat & PnL Snapshot
                 self._stats["last_heartbeat"] = time.time()
                 try:
                     balance = await self.broker.get_paper_balance()
@@ -520,32 +488,21 @@ class TradingSystem:
         """Modular processing for a single symbol."""
         self.latency_enforcer.start_pipeline(f"pipeline-{symbol}")
 
-        # 1. Market Data
         market_data = await self._get_market_data(symbol)
         if market_data is None:
             return
-
-        # 2. Alpha Engine
         ml_result = await self._run_ml_alpha(symbol, market_data)
         if ml_result is None:
             return
-
-        # 3. Signal & Risk Pipeline
         signal = await self._validate_and_generate_signal(symbol, ml_result)
         if signal:
             await self._execute_full_workflow(symbol, signal)
-
-        # 4. Latency Completion
         self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
         
-        # Sync real-time latency to telemetry cache
-        # We take the duration of the pilot symbol to represent system pressure
         pilot_trace = self.latency_enforcer.get_pipeline_data(f"pipeline-{symbol}")
         if pilot_trace:
             self._last_latency_ms = pilot_trace.total_latency_ms
 
-        # 5. UNCONDITIONAL Pulse module traces for forensic awareness (Standash §14)
-        # This ensures the Logic Matrix stays alive even during "HOLD" states.
         self._last_module_traces = self._get_module_traces(symbol, ml_result)
 
     async def _validate_and_generate_signal(
@@ -584,7 +541,6 @@ class TradingSystem:
             if not market_data:
                 return None
 
-            # Bid-Ask Spread Filter: Prevent EV- cannibalization
             bid = float(market_data.get("bid", 0))
             ask = float(market_data.get("ask", 0))
             spread_pct = (ask - bid) / current_price if current_price > 0 else 0
@@ -608,13 +564,10 @@ class TradingSystem:
                     self._last_exit_at[symbol] = time.time()
                     return None
 
-                # 2. Dynamic Exits (ML-based) - Signal Hysteresis
                 hold_time = time.time() - self._position_opened_at.get(symbol, 0)
                 if hold_time < config_manager.get("MIN_HOLD_TIME_S", 60.0):
-                    # Skip dynamic checks if trade is too young
                     return None
 
-                # Update Confidence EMA for exit
                 ml_result = ml_result or {}
                 raw_confidence = float(ml_result.get("confidence", 0.0))
                 last_ema = self._confidence_ema.get(symbol, raw_confidence)
@@ -623,7 +576,6 @@ class TradingSystem:
                     (1 - ema_alpha) * last_ema
                 )
 
-                # Check for ML reversal signal using EMA smoothed confidence
                 ml_result["confidence"] = self._confidence_ema[symbol]
                 exit_signal = self._generate_signal(symbol, ml_result, is_exit_check=True)
                 
@@ -641,14 +593,11 @@ class TradingSystem:
                     return new_signal
                 return None
 
-            # 3. New Entry Pipeline
-            # Position Cooldown check
             since_last_exit = time.time() - self._last_exit_at.get(symbol, 0)
             if since_last_exit < config_manager.get("POSITION_COOLDOWN_S", 300.0):
                 logger.debug(f"[COOLDOWN] {symbol} (Exit {since_last_exit:.1f}s ago) - Waiting for cooldown")
                 return None
 
-            # Update Confidence EMA for entry
             ml_result = ml_result or {}
             raw_confidence = float(ml_result.get("confidence", 0.0))
             last_ema = self._confidence_ema.get(symbol, raw_confidence)
@@ -657,10 +606,8 @@ class TradingSystem:
                 (1 - ema_alpha) * last_ema
             )
             
-            # Use smoothed confidence for entry signal
             ml_result["confidence"] = self._confidence_ema[symbol]
             
-            # Extract predicted move from Chronos-2
             chronos = ml_result.get("chronos") or {}
             forecast_mean = (chronos or {}).get("mean", [])
             predicted_move_pct = 0.0
@@ -670,7 +617,6 @@ class TradingSystem:
                 except ZeroDivisionError:
                     predicted_move_pct = 0.0
 
-            # Spread Gateway: Entry only if Alpha > 2.5 * Spread
             min_reward_ratio = config_manager.get("MIN_REWARD_TO_SPREAD_RATIO", 2.5)
             if predicted_move_pct < (spread_pct * min_reward_ratio):
                 logger.info(
@@ -678,18 +624,13 @@ class TradingSystem:
                 )
                 return None
 
-            # Use Active Strategy from StrategyManager for final signal logic
             active_strategy = self.strategy_manager.active_strategy
             
-            # Use the features from the most recent market data
             df_features = pl.DataFrame(market_data.get("historical_ohlc", []))
             if df_features.height > 0:
-                # Some strategies expect features dict
                 feats = {col: df_features[col] for col in df_features.columns}
                 strat_signal = active_strategy.compute_signals(feats)
                 
-                # Merge ML guidance with Strategy logic
-                # Strategy has override if signal_type != "HOLD"
                 if strat_signal.get("signal_type", "HOLD") != "HOLD":
                     signal = {
                         "side": strat_signal["signal_type"],
@@ -698,7 +639,6 @@ class TradingSystem:
                         "position_size_multiplier": strat_signal.get("strength", 1.0)
                     }
                 else:
-                    # Fallback to ML Signal if methodology is HOLD
                     signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
             else:
                 signal = self._generate_signal(symbol, ml_result, is_exit_check=False)
@@ -706,7 +646,6 @@ class TradingSystem:
             if not signal:
                 return None
 
-            # Trend confirmation: check if price is moving in signal direction
             trend_confirmed = self._check_trend_confirmation(symbol, signal["side"])
             if not trend_confirmed:
                 logger.info(
@@ -716,7 +655,6 @@ class TradingSystem:
 
             direction = signal["side"]
 
-            # Require consecutive signals before entry
             min_consecutive = config_manager.get("MIN_CONSECUTIVE_SIGNALS", 2)
             if symbol in self._last_signal_direction:
                 if direction == self._last_signal_direction[symbol]:
@@ -725,7 +663,6 @@ class TradingSystem:
                     self._signal_streak[symbol] = 0
                     self._last_signal_direction[symbol] = direction
 
-                # Require MIN_CONSECUTIVE_SIGNALS before acting
                 if self._signal_streak.get(symbol, 0) < min_consecutive:
                     logger.info(
                         f"[STREAK_FILTER] {symbol} waiting: {self._signal_streak.get(symbol, 0)}/{min_consecutive}"
@@ -767,7 +704,6 @@ class TradingSystem:
 
                 signal["position_size_multiplier"] = float(approved_qty)
                 
-                # Dynamic SL/TP Calculation
                 ohlc_list = market_data.get("historical_ohlc", [])
                 atr_val = 0.0
                 if len(ohlc_list) >= self.config.atr_window:
@@ -954,16 +890,12 @@ class TradingSystem:
         self, symbol: str, current_qty: float, current_price: float
     ) -> dict[str, Any] | None:
         """Check if current position hits stop loss or take profit."""
-        # AGGRESSIVE MODE: Iterate through all independent trades (lots)
         lots = self.broker.paper_account.get_positions().get(symbol, [])
         if not lots:
             return None
-
-        # Dynamic Thresholds
         sl_pct = config_manager.get("STOP_LOSS_PCT")
         tp_pct = config_manager.get("TAKE_PROFIT_PCT")
 
-        # Fixed Indentation & Multi-Trade Isolation
         for lot in lots:
             avg_entry = float(lot.avg_price)
             pnl_pct = (current_price - avg_entry) / avg_entry if avg_entry > 0 else 0
@@ -976,7 +908,6 @@ class TradingSystem:
                     logger.info(f"[LOT_TP] {symbol} lot {lot.trade_id} exit at {current_price} (TP)")
                     return {"symbol": symbol, "side": "SELL", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
             elif lot.side == "SELL":
-                # For SHORTS, pnl_pct is negative if price went up
                 if pnl_pct >= sl_pct:
                     return {"symbol": symbol, "side": "BUY", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
                 if pnl_pct <= -tp_pct:
@@ -994,7 +925,20 @@ class TradingSystem:
         )
         confidence = float(decision.confidence)
 
-        # Pull thresholds from DynamicConfig
+        if self.active_session_id:
+            task = asyncio.create_task(
+                self.db_writer.write_thinking_log(
+                    symbol=symbol,
+                    action=action,
+                    confidence=confidence,
+                    thinking=str(decision.reasoning),
+                    explanation=str(decision.explanation or ""),
+                    session_id=self.active_session_id,
+                )
+            )
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+
         min_conf = config_manager.get("MIN_CONFIDENCE")
         exit_conf = config_manager.get("EXIT_CONFIDENCE")
         threshold = exit_conf if is_exit_check else min_conf
@@ -1003,21 +947,7 @@ class TradingSystem:
             return None
 
         position_size = float(getattr(decision, "position_size_multiplier", 0.1))
-        # Cap position size based on dynamic config
         position_size = min(position_size, config_manager.get("POSITION_SIZE_PCT"))
-
-        task = asyncio.create_task(
-            self.db_writer.write_thinking_log(
-                symbol=symbol,
-                action=action,
-                confidence=confidence,
-                thinking=str(decision.reasoning),
-                explanation=str(decision.explanation),
-                session_id=self.active_session_id,
-            )
-        )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
 
         return {
             "symbol": symbol,
@@ -1035,15 +965,12 @@ class TradingSystem:
 
         prices = [x["close"] for x in self._market_data[symbol][-lookback:]]
 
-        # Calculate simple moving average difference
         ma_short = sum(prices[-3:]) / 3
         ma_long = sum(prices) / len(prices)
 
         if side == "BUY":
-            # For BUY signal, price should be trending up (short MA > long MA)
             return ma_short >= ma_long
         else:
-            # For SELL signal, price should be trending down (short MA < long MA)
             return ma_short <= ma_long
 
     def _check_risk(self, signal: dict[str, Any]) -> bool:
@@ -1097,14 +1024,13 @@ class TradingSystem:
         )
         try:
             await self.broker.submit_order(order)
-            self._consecutive_losses = 0  # Logic for streak tracking could be added here
+            self._consecutive_losses = 0
             logger.info(f"[EXIT] {symbol} {side} ({reason})")
         except Exception as e:
             logger.error(f"[EXIT] Failed: {e}")
 
     async def _process_fills(self, signal: dict[str, Any]) -> None:
         """Process fills and update local tracking."""
-        # This is typically handled by the event loop, but we can poll for feedback
         history = self.broker.paper_account.fill_history
         if len(history) <= self._last_fill_count:
             return
@@ -1146,12 +1072,11 @@ class TradingSystem:
             else:
                 self._win_history.append(0)
 
-            # Check for MLOps retraining (Self-Learning)
             if len(self._win_history) >= self.config.win_history_window:
                 current_wr = sum(self._win_history) / len(self._win_history)
-                if current_wr < self.config.retrain_win_rate_threshold: # Performance decay trigger
+                if current_wr < self.config.retrain_win_rate_threshold:
                     decision = self.retrain_system.evaluate(
-                        expected_dist=np.array([0.5, 0.5]), # Mock dist for now
+                        expected_dist=np.array([0.5, 0.5]),
                         actual_dist=np.array([current_wr, 1-current_wr]),
                         current_perf=current_wr,
                         baseline_perf=0.55

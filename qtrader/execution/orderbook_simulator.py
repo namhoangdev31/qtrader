@@ -88,28 +88,19 @@ class OrderbookSimulator:
         best_ask = orderbook['asks'][0][0]
         mid_price = (best_bid + best_ask) / 2.0
         
-        # Calculate price limits based on slippage constraints
         max_slippage_abs = mid_price * self.max_slippage_pct
         max_price = mid_price + max_slippage_abs   # maximum price we'll pay for a buy
         min_price = mid_price - max_slippage_abs   # minimum price we'll accept for a sell
         
-        # Initialize tracking variables
         filled_size = 0.0
         total_cost = 0.0  # for buys: cash spent, for sells: cash received
         
-        # Determine which side of the book to walk and effective price limits
         if side == 'buy':
-            book_side = orderbook['asks']  # we consume asks when buying
-            # For buys: limit price is maximum we're willing to pay
-            # Market order: no limit (infinity) but capped by max_slippage
-            # Limit order: must be <= limit_price and <= max_price
+            book_side = orderbook['asks']  # we consume asks when buy
             price_limit = limit_price if order_type == 'limit' else float('inf')
             effective_limit = min(price_limit, max_price)
         else:  # sell
-            book_side = orderbook['bids']  # we consume bids when selling
-            # For sells: limit price is minimum we're willing to accept
-            # Market order: no limit (zero) but floored by min_slippage
-            # Limit order: must be >= limit_price and >= min_price
+            book_side = orderbook['bids']  # we consume bids when s
             price_limit = limit_price if order_type == 'limit' else 0.0
             effective_limit = max(price_limit, min_price)
         

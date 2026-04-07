@@ -721,7 +721,6 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
                 connector = aiohttp.TCPConnector(force_close=True)
                 async with aiohttp.ClientSession(connector=connector) as session:
                     async with session.ws_connect(self._ws_base_url) as ws:
-                        # TCP_NODELAY: Disable Nagle's algorithm for low-latency (Standash §5.1)
                         transport = ws._response.connection.transport
                         if transport and hasattr(transport, "get_extra_info"):
                             sock = transport.get_extra_info("socket")
@@ -731,7 +730,6 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
 
                         logger.info(f"[COINBASE_WS] Connected to {self._ws_base_url}")
 
-                        # Subscribe to Standard Exchange Feed (ws-feed)
                         subscribe_msg = {
                             "type": "subscribe",
                             "product_ids": self._ws_product_ids,

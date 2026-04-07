@@ -65,15 +65,23 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
     global _simulation_task, _is_subscribed
     engine = get_sim_engine()
 
-    # Sync base price and subscribe to real-time updates from EventBus
     if sys:
+        # 1. Ensure TradingSystem is started (to get session_id and activate DB persistence)
+        if not sys._running:
+            await sys.start()
+            logger.info(f"[SIM] Started TradingSystem Orchestrator (Session: {sys.active_session_id})")
+
+        # 2. UNIFY Persistence: Share the same DB writer and Session ID
+        if sys.db_writer and sys.active_session_id:
+            engine.set_db_writer(sys.db_writer, sys.active_session_id)
+            logger.info(f"[SIM] Unified Persistence Layer for Session {sys.active_session_id}")
+
         try:
-            # UNIFY: Inject this simulation engine into the TradingSystem's broker
-            # This ensures that Audit History and positions are shared.
+            # 3. UNIFY Broker: Inject this simulation engine into the TradingSystem's broker
             from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
             if isinstance(sys.broker, CoinbaseBrokerAdapter):
                 sys.broker.sim_engine = engine
-                logger.info("[SIM] Injected PaperTradingEngine into CoinbaseBrokerAdapter for unify forensic stream")
+                logger.info("[SIM] Injected PaperTradingEngine into CoinbaseBrokerAdapter")
 
             # 1. Initial manual sync
             symbol = "BTC-USD"
@@ -435,26 +443,53 @@ async def trading_updates(websocket: WebSocket) -> None:
     """Concentrated WebSocket for Portfolio: Positions, Cash, PnL."""
     await websocket.accept()
     sys = get_system()
+    engine = get_sim_engine()
     
     async def get_snapshot():
         balance = await sys.broker.get_paper_balance()
-        positions_map = await sys.state_store.get_positions()
         
-        # Collect positions with forensic detail
+        # Read positions from sim engine (primary source of truth)
         pos_list = []
-        for sym, pos in positions_map.items():
-            if pos.quantity != 0:
+        for sym, lots in engine._open_positions.items():
+            for lot in lots:
+                unrealized = (
+                    (engine._current_price - lot.avg_price) * abs(lot.qty)
+                    if lot.side == "BUY"
+                    else (lot.avg_price - engine._current_price) * abs(lot.qty)
+                )
                 pos_list.append({
                     "symbol": sym,
-                    "side": "BUY" if pos.quantity > 0 else "SELL",
-                    "quantity": float(pos.quantity),
-                    "average_price": float(pos.average_price),
-                    "unrealized_pnl": float(pos.unrealized_pnl),
-                    "unrealized_pnl_pct": 0.0, # Computed on frontend or updated later
-                    "stop_loss": 0.0, # Enhanced detail
-                    "take_profit": 0.0,
-                    "entry_time": datetime.now().isoformat()
+                    "side": lot.side,
+                    "quantity": abs(lot.qty),
+                    "average_price": lot.avg_price,
+                    "unrealized_pnl": round(unrealized, 2),
+                    "unrealized_pnl_pct": round(
+                        (engine._current_price - lot.avg_price) / lot.avg_price * 100
+                        if lot.avg_price > 0 else 0, 2
+                    ),
+                    "stop_loss": lot.stop_loss,
+                    "take_profit": lot.take_profit,
+                    "entry_time": lot.entry_time,
                 })
+
+        # Read trade history from sim engine
+        trade_history = [
+            {
+                "trade_id": t.trade_id or f"trade-{i}",
+                "symbol": t.symbol,
+                "side": t.side,
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "quantity": t.qty,
+                "pnl": round(t.pnl, 2),
+                "pnl_pct": round(t.pnl_pct * 100, 2),
+                "commission": round(t.commission, 4),
+                "reason": t.reason,
+                "entry_time": t.entry_time or "",
+                "exit_time": t.exit_time or "",
+            }
+            for i, t in enumerate(engine.closed_trades[-50:])
+        ]
 
         return {
             "type": "portfolio_update",
@@ -464,12 +499,14 @@ async def trading_updates(websocket: WebSocket) -> None:
             "realized_pnl": balance["realized_pnl"],
             "total_commissions": balance["total_commissions"],
             "positions": pos_list,
-            "trade_history": [] # Will be populated by simulation engine usually
+            "trade_history": trade_history,
         }
 
     await websocket.send_json(await get_snapshot())
     queue: asyncio.Queue[bool] = asyncio.Queue()
     
+    # Subscribe to sim engine updates (primary) and EventBus (secondary)
+    engine.add_update_listener(lambda x: queue.put_nowait(True))
     async def handler(event): await queue.put(True)
     sys.event_bus.subscribe(EventType.FILL, handler)
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
@@ -535,29 +572,44 @@ async def telemetry_updates(websocket: WebSocket) -> None:
     """System Health WebSocket: Latency, Heartbeats, Clock Sync."""
     await websocket.accept()
     sys = get_system()
+    engine = get_sim_engine()
     
     async def get_snapshot():
         status = sys.get_status()
-        # Use the latency from the last execution cycle
-        # If no data, default to a safe 0.0
-        current_latency = getattr(sys, "_last_latency_ms", 0.0)
-        uptime = time.time() - getattr(sys, "_start_time", time.time())
+        
+        # 1. Prioritize simulation metrics if engine is active (fixes Bug 2)
+        if engine._running:
+            status["status"] = "RUNNING"
+            status["session_id"] = engine._session_id or status.get("session_id")
+            status["stats"]["orders"] = len(engine.closed_trades)
+            status["stats"]["fills"] = len(engine.closed_trades)
+            status["stats"]["signals"] = len(engine._thinking_history)
+            status["peak_equity"] = engine._peak_equity
+            status["module_traces"] = engine._last_trace.get("module_traces", status.get("module_traces", {}))
+            
+            uptime = time.time() - getattr(engine, "_start_time", time.time())
+            latency = getattr(engine, "_last_latency_ms", 0.0)
+        else:
+            uptime = time.time() - getattr(sys, "_start_time", time.time())
+            latency = getattr(sys, "_last_latency_ms", 0.0)
         
         return {
             "type": "telemetry_update",
             "timestamp": datetime.now().isoformat(),
             "status": status,
-            "latency_ms": current_latency,
+            "latency_ms": round(latency, 2),
             "is_synced": True,
             "uptime_seconds": int(uptime)
         }
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
+    
+    # Subscribe to sim engine updates (fires every tick) instead of MARKET_DATA
+    engine.add_update_listener(lambda x: queue.put_nowait(True))
     async def handler(event): await queue.put(True)
-    sys.event_bus.subscribe(EventType.MARKET_DATA, handler) # Pulse on every market tick
+    sys.event_bus.subscribe(EventType.SYSTEM, handler)
 
     try:
-        # Initial snapshot
         await websocket.send_json(await get_snapshot())
         while True:
             await queue.get()
@@ -567,7 +619,7 @@ async def telemetry_updates(websocket: WebSocket) -> None:
     except Exception as e:
         logger.error(f"[WS/TELEMETRY] Unexpected error: {e}")
     finally:
-        sys.event_bus.unsubscribe(EventType.MARKET_DATA, handler)
+        sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
 
 
 @ws_router.websocket("/ws/simulation")
@@ -621,7 +673,7 @@ async def audit_updates(websocket: WebSocket) -> None:
     engine = get_sim_engine()
 
     async def get_audit_snapshot():
-        # 1. Fetch recent notes
+        # 1. Fetch recent notes from DB
         from qtrader.core.db import DBClient
 
         try:
@@ -640,23 +692,50 @@ async def audit_updates(websocket: WebSocket) -> None:
         except Exception:
             notes = []
 
-        # 2. Fetch trade history
-        trades = engine.trade_history[-50:]
+        # 2. Fetch trade history from sim engine (primary source)
+        trades = [
+            {
+                "trade_id": t.trade_id or f"trade-{i}",
+                "symbol": t.symbol,
+                "side": t.side,
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "quantity": t.qty,
+                "pnl": round(t.pnl, 2),
+                "pnl_pct": round(t.pnl_pct * 100, 2),
+                "commission": round(t.commission, 4),
+                "reason": t.reason,
+                "entry_time": t.entry_time or "",
+                "exit_time": t.exit_time or "",
+            }
+            for i, t in enumerate(engine.closed_trades[-50:])
+        ]
 
-        # 3. Fetch positions
-        positions_map = await sys.state_store.get_positions()
+        # 3. Fetch positions from sim engine (primary source)
         pos_list = []
-        for sym, pos in positions_map.items():
-            if pos.quantity != 0:
-                pos_list.append(
-                    {
-                        "symbol": sym,
-                        "quantity": float(pos.quantity),
-                        "average_price": float(pos.average_price),
-                        "unrealized_pnl": float(pos.unrealized_pnl),
-                        "side": "BUY" if pos.quantity > 0 else "SELL",
-                    }
+        for sym, lots in engine._open_positions.items():
+            for lot in lots:
+                unrealized = (
+                    (engine._current_price - lot.avg_price) * abs(lot.qty)
+                    if lot.side == "BUY"
+                    else (lot.avg_price - engine._current_price) * abs(lot.qty)
                 )
+                unrealized_pct = (
+                    ((engine._current_price - lot.avg_price) / lot.avg_price * 100)
+                    if lot.avg_price > 0 else 0
+                )
+                pos_list.append({
+                    "symbol": sym,
+                    "quantity": abs(lot.qty),
+                    "entry_price": lot.avg_price,
+                    "current_price": engine._current_price,
+                    "unrealized_pnl": round(unrealized, 2),
+                    "unrealized_pnl_pct": round(unrealized_pct, 2),
+                    "side": lot.side,
+                    "stop_loss": lot.stop_loss,
+                    "take_profit": lot.take_profit,
+                    "entry_time": lot.entry_time,
+                })
 
         return {
             "type": "audit_update",
@@ -680,11 +759,9 @@ async def audit_updates(websocket: WebSocket) -> None:
     engine.add_update_listener(lambda x: queue.put_nowait(True))
 
     try:
-        # Send initial state
         await websocket.send_json(await get_audit_snapshot())
         while True:
             await queue.get()
-            # De-bounce or throttle could be added here if needed
             await websocket.send_json(await get_audit_snapshot())
     except WebSocketDisconnect:
         pass

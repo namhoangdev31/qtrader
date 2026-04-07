@@ -29,34 +29,69 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"API Dashboard lifespan: UI_ONLY_MODE={ui_only}, SIMULATION_MODE={sim_mode}")
 
     bg_task = None
-    sim_task = None
-    if not ui_only:
-        logger.info("FULL_MODE: Waiting for manual session activation")
-        await system.event_bus.start()
-        try:
-            await asyncio.wait_for(system.state_store.sync_from_remote(), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.warning("STATE_STORE | Remote sync timed out during startup")
-    else:
-        await system.event_bus.start()
-        try:
-            await asyncio.wait_for(system.state_store.sync_from_remote(), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.warning("STATE_STORE | Remote sync timed out during startup")
-        
+
+    # Always start EventBus and sync state
+    await system.event_bus.start()
+    try:
+        await asyncio.wait_for(system.state_store.sync_from_remote(), timeout=5.0)
+    except asyncio.TimeoutError:
+        logger.warning("STATE_STORE | Remote sync timed out during startup")
+
+    if ui_only:
         logger.info(
             f"UI_ONLY_MODE: EventBus started, running={system.event_bus._running}, "
             f"workers={len(system.event_bus._worker_tasks)}"
         )
         bg_task = asyncio.create_task(_ui_heartbeat(system))
         logger.info("UI_ONLY_MODE: Heartbeat loop started")
+    else:
+        logger.info("FULL_MODE: Waiting for manual session activation")
 
+    # Initialize DB persistence and create a session for the sim engine
+    session_id = None
     if sim_mode:
-        from qtrader.api.router import start_simulation
+        try:
+            from decimal import Decimal
+            await system.db_writer.initialize()
+            balance = await system.broker.get_paper_balance()
+            session_id = await system.db_writer.start_session(
+                initial_capital=Decimal(str(balance["equity"])),
+                metadata={"mode": "SIM_DASHBOARD", "ui_only": ui_only},
+            )
+            system.active_session_id = session_id
+            system._running = True
+            logger.info(f"[SIM] DB session created: {session_id}")
+        except Exception as e:
+            logger.error(f"[SIM] Failed to create DB session: {e}")
+
+        # Start simulation with DB bridge injected
+        from qtrader.api.router import start_simulation, get_sim_engine
         await start_simulation(system)
+        engine = get_sim_engine()
+
+        # Inject DB writer into sim engine AFTER start so it persists everything
+        if session_id:
+            engine.set_db_writer(system.db_writer, session_id)
+            logger.info("[SIM] DB persistence bridge injected into PaperTradingEngine")
+
         logger.info("[SIM] Simulation Engine auto-started in lifespan")
 
     yield
+
+    # Graceful shutdown
+    if session_id:
+        try:
+            from decimal import Decimal
+            from qtrader.api.router import get_sim_engine
+            engine = get_sim_engine()
+            await system.db_writer.stop_session(
+                session_id=session_id,
+                final_capital=Decimal(str(engine.equity)),
+                summary={"trades": len(engine.closed_trades), "mode": "SIM_DASHBOARD"},
+            )
+        except Exception as e:
+            logger.error(f"[SIM] Failed to close DB session: {e}")
+
     await system.stop()
     if bg_task:
         bg_task.cancel()

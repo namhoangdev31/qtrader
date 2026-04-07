@@ -192,6 +192,7 @@ class TradeDBWriter:
                 logger.debug(f"[DB] Hypertable creation skipped: {e}")
 
         self._initialized = True
+        await self.cleanup_stale_sessions()
         logger.info("[DB] Persistence layer initialized (Session-Centric)")
 
     async def purge_database(self) -> None:
@@ -211,6 +212,22 @@ class TradeDBWriter:
         self._initialized = False
         await self.initialize()
         logger.info("[DB] Database fully reconstructed.")
+
+    async def cleanup_stale_sessions(self) -> None:
+        """Mark all orphaned 'ACTIVE' sessions as 'ABORTED' on startup."""
+        query = """
+            UPDATE trading_sessions
+            SET status = 'ABORTED', end_time = NOW()
+            WHERE status = 'ACTIVE'
+        """
+        try:
+            res = await DBClient.execute(query)
+            # res is usually a string like "UPDATE 1"
+            count = res.split(" ")[-1] if res else "0"
+            if count != "0":
+                logger.warning(f"[DB] Cleaned up {count} stale 'ACTIVE' sessions.")
+        except Exception as e:
+            logger.error(f"[DB] Stale session cleanup failed: {e}")
 
     async def write_fill(
         self,
