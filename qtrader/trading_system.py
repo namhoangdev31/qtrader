@@ -17,6 +17,7 @@ import os
 import signal
 import sys
 import time
+import traceback
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -25,10 +26,12 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+import polars as pl
 from loguru import logger
 
 from qtrader.analytics.pnl_attribution import PnLAttributionEngine
 from qtrader.core.config import settings
+from qtrader.core.dynamic_config import config_manager
 from qtrader.core.event_bus import EventBus
 from qtrader.core.events import (
     EventType,
@@ -37,25 +40,23 @@ from qtrader.core.events import (
     OrderEvent,
     OrderPayload,
 )
-from qtrader.core.latency_enforcer import LatencyEnforcer
+from qtrader.core.latency_enforcer import LatencyEnforcer, latency_enforcer
 from qtrader.core.state_store import Position, StateStore
 from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
 from qtrader.execution.pre_trade_risk import PreTradeRiskConfig, PreTradeRiskValidator
 from qtrader.execution.reconciliation_engine import ReconciliationEngine
 from qtrader.execution.shadow_engine import ShadowEngine
+from qtrader.features.technical.volatility import ATRFeature
 from qtrader.ml.atomic_trio import AtomicTrioPipeline
+from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.ml.remote_client import RemoteAtomicTrioPipeline
 from qtrader.ml.retrain_system import RetrainSystem
 from qtrader.monitoring.alert_engine import AlertEngine, AlertMessage, AlertSeverity
 from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.portfolio.allocator import CapitalAllocationEngine
-from qtrader.risk.kill_switch import GlobalKillSwitch
-from qtrader.features.technical.volatility import ATRFeature
 from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
-
-from qtrader.core.dynamic_config import config_manager
-from qtrader.ml.embedding_worker import embedding_manager
+from qtrader.risk.kill_switch import GlobalKillSwitch
 
 # Note: Top-level constants (MIN_CONFIDENCE, etc.) removed in favor of config_manager.get()
 # to allow AI-driven Dynamic Control.
@@ -113,6 +114,15 @@ class TradingSystemConfig:
     min_sl_pct: float = 0.005
     max_sl_pct: float = 0.05
 
+    # Operational Parameters (Migrated from magic numbers)
+    price_jump_threshold: float = 0.05
+    retrain_win_rate_threshold: float = 0.35
+    win_history_window: int = 10
+    min_forecast_points: int = 2
+    streak_reduction_threshold: int = 3
+    anomaly_loss_threshold: int = 3
+    reference_price: float = 50000.0
+
 
 class TradingSystem:
     """Unified Trading System — Complete End-to-End Pipeline."""
@@ -122,9 +132,13 @@ class TradingSystem:
     ) -> None:
         self.config = config or TradingSystemConfig()
         self.state_store = StateStore()
+        # Distributed Event Bridge (Redis)
+        host, port, db = settings.redis_host, settings.redis_port, settings.redis_db
+        redis_url = f"redis://{host}:{port}/{db}" if host else None
+        if os.getenv("REDIS_URL"):
+            redis_url = os.getenv("REDIS_URL")
         
-        # Redis URL for distributed EventBus synchronization
-        redis_url = f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}" if settings.redis_host else None
+        logger.info(f"[TS] Initializing EventBus with redis_url={redis_url}, ENV_VAR={os.getenv('REDIS_URL')}")
         self.event_bus = EventBus(redis_url=redis_url)
 
         # === 1. ML Alpha Engine (Atomic Trio) ===
@@ -143,7 +157,6 @@ class TradingSystem:
                 )
                 logger.info("[TRADING_SYSTEM] Using Local ML Engine")
 
-        # Consecutive loss tracking for circuit breaker
         self._consecutive_losses: int = 0
         self._last_signal_direction: dict[str, str] = {}
         self._signal_streak: dict[str, int] = {}
@@ -153,11 +166,9 @@ class TradingSystem:
         self._confidence_ema: dict[str, float] = {}  # Smoothed signal confidence
         self._last_exit_at: dict[str, float] = {}  # Exit timestamps for cooldown
 
-        # === 2. MLOps Self-Learning ===
         self.retrain_system = RetrainSystem(psi_threshold=0.20, performance_drop_delta=0.15)
         self._win_history: deque[int] = deque(maxlen=50)  # Binary wins for win-rate tracking
 
-        # === 2. Risk Management ===
         self.kill_switch = GlobalKillSwitch(
             dd_limit=self.config.max_drawdown_pct,
             loss_limit=self.config.max_position_usd * 2,
@@ -167,19 +178,16 @@ class TradingSystem:
             PreTradeRiskConfig(
                 max_order_quantity=Decimal(str(self.config.max_order_qty)),
                 max_order_notional=Decimal(str(self.config.max_order_notional)),
-                max_position_per_symbol=Decimal(str(self.config.max_position_usd / (config_manager.get("REFERENCE_PRICE") or 50000.0))),
-                max_orders_per_second=self.config.max_orders_per_second,
+                max_position_per_symbol=Decimal(str(self.config.max_position_usd / (config_manager.get("REFERENCE_PRICE") or self.config.reference_price))),
+                max_orders_per_second=int(self.config.max_orders_per_second),
             )
         )
-
-        # === 3. Execution (Broker) ===
         self.broker = CoinbaseBrokerAdapter(
             simulate=self.config.simulate,
             kill_switch=self.kill_switch,
         )
         self.broker.set_market_data_handler(self._on_market_data_update)
 
-        # === 4. Portfolio & Risk Management ===
         self.allocator = CapitalAllocationEngine(max_cap=Decimal("0.2"))
         self.guardrail_manager = DynamicGuardrailManager(
             atr_multiplier=self.config.atr_multiplier,
@@ -189,7 +197,6 @@ class TradingSystem:
         )
         self.atr_indicator = ATRFeature(window=self.config.atr_window)
 
-        # === 5. Shadow Validation ===
         self.shadow_engine = ShadowEngine(
             {
                 "shadow_mode": self.config.shadow_mode or self.config.simulate,
@@ -197,7 +204,6 @@ class TradingSystem:
             }
         )
 
-        # === 6. OMS & Reconciliation ===
         self.oms = UnifiedOMS(state_store=self.state_store, event_bus=self.event_bus)
         self.oms.add_venue("coinbase", self.broker)
         self.recon = ReconciliationEngine(
@@ -208,7 +214,6 @@ class TradingSystem:
             kill_switch=self.kill_switch,
         )
 
-        # === 7. Monitoring ===
         self.alert_engine = AlertEngine(
             slack_webhook_url=self.config.slack_webhook_url,
             pagerduty_routing_key=self.config.pagerduty_routing_key,
@@ -217,7 +222,6 @@ class TradingSystem:
         self.pnl_attribution = PnLAttributionEngine()
         self.db_writer = TradeDBWriter()
 
-        # === 8. State ===
         self._running = False
         self._shutdown_event = asyncio.Event()
         self._market_data: dict[str, list[dict[str, float]]] = {s: [] for s in self.config.symbols}
@@ -234,7 +238,10 @@ class TradingSystem:
         }
         self._last_fill_count: int = 0
         self.last_thinking: dict[str, dict[str, str]] = {}
-        self.active_session_id: str | None = None
+        self._tasks: set[asyncio.Task[Any]] = set()
+        self._start_time: float = time.time()
+        self._last_latency_ms: float = 0.0
+        self.active_session_id: str = "44a76d31-6b87-4c10-88ed-e0c62716de83" # Persistence placeholder
         self._last_pnl_report: dict[str, Any] = {}
         self._last_module_traces: dict[str, Any] = {
             "AlphaEngine": {"status": "AWAITING"},
@@ -244,9 +251,19 @@ class TradingSystem:
             "Reconciliation": {"status": "AWAITING"},
             "Strategy": {"status": "AWAITING"}
         }
-        self._tasks: set[asyncio.Task[Any]] = set()
-        self._start_time: float = time.time()
-        self._last_latency_ms: float = 0.0
+
+    def get_status(self) -> dict[str, Any]:
+        """Return the overall status of the trading system."""
+        return {
+            "status": "RUNNING" if self._running else "IDLE",
+            "session_id": self.active_session_id,
+            "latency_ms": round(self._last_latency_ms, 2),
+            "stats": self._stats,
+            "module_traces": self._last_module_traces,
+            "uptime": round(time.time() - self._start_time, 2) if self._running else 0.0,
+            "consecutive_losses": getattr(self, "_consecutive_losses", 0),
+            "peak_equity": getattr(self, "_peak_equity", 1000.0),
+        }
 
     async def start(self) -> None:
         """Start the complete trading system."""
@@ -448,7 +465,6 @@ class TradingSystem:
 
             except Exception as e:
                 self._stats["errors"] += 1
-                import traceback
                 logger.error(f"Pipeline error: {e}\n{traceback.format_exc()}")
                 await asyncio.sleep(1)
 
@@ -480,7 +496,7 @@ class TradingSystem:
         # We take the duration of the pilot symbol to represent system pressure
         pilot_trace = self.latency_enforcer.get_pipeline_data(f"pipeline-{symbol}")
         if pilot_trace:
-            self._last_latency_ms = pilot_trace.total_duration_ms
+            self._last_latency_ms = pilot_trace.total_latency_ms
 
         # 5. UNCONDITIONAL Pulse module traces for forensic awareness (Standash §14)
         # This ensures the Logic Matrix stays alive even during "HOLD" states.
@@ -513,7 +529,9 @@ class TradingSystem:
             symbol_key = symbol.split("-", 1)[0]
             current_qty = float(balance.get(symbol_key, 0.0))
             current_price = (
-                self._market_data[symbol][-1]["close"] if self._market_data[symbol] else (config_manager.get("REFERENCE_PRICE") or 50000.0)
+                self._market_data[symbol][-1]["close"]
+                if self._market_data[symbol]
+                else (config_manager.get("REFERENCE_PRICE") or self.config.reference_price)
             )
 
             market_data = await self._get_market_data(symbol)
@@ -551,6 +569,7 @@ class TradingSystem:
                     return None
 
                 # Update Confidence EMA for exit
+                ml_result = ml_result or {}
                 raw_confidence = float(ml_result.get("confidence", 0.0))
                 last_ema = self._confidence_ema.get(symbol, raw_confidence)
                 ema_alpha = config_manager.get("EMA_ALPHA", 0.3)
@@ -584,6 +603,7 @@ class TradingSystem:
                 return None
 
             # Update Confidence EMA for entry
+            ml_result = ml_result or {}
             raw_confidence = float(ml_result.get("confidence", 0.0))
             last_ema = self._confidence_ema.get(symbol, raw_confidence)
             ema_alpha = config_manager.get("EMA_ALPHA", 0.3)
@@ -595,11 +615,14 @@ class TradingSystem:
             ml_result["confidence"] = self._confidence_ema[symbol]
             
             # Extract predicted move from Chronos-2
-            chronos = ml_result.get("chronos", {})
-            forecast_mean = chronos.get("mean", [])
+            chronos = ml_result.get("chronos") or {}
+            forecast_mean = (chronos or {}).get("mean", [])
             predicted_move_pct = 0.0
-            if len(forecast_mean) >= 2:
-                predicted_move_pct = abs((forecast_mean[-1] - forecast_mean[0]) / forecast_mean[0])
+            if forecast_mean and len(forecast_mean) >= self.config.min_forecast_points:
+                try:
+                    predicted_move_pct = abs((forecast_mean[-1] - forecast_mean[0]) / forecast_mean[0])
+                except ZeroDivisionError:
+                    predicted_move_pct = 0.0
 
             # Spread Gateway: Entry only if Alpha > 2.5 * Spread
             min_reward_ratio = config_manager.get("MIN_REWARD_TO_SPREAD_RATIO", 2.5)
@@ -639,7 +662,7 @@ class TradingSystem:
                     )
                     return None
 
-                if self._signal_streak.get(symbol, 0) >= 3:
+                if self._signal_streak.get(symbol, 0) >= self.config.streak_reduction_threshold:
                     logger.debug(
                         f"[SIGNAL_FILTER] {symbol} same-direction streak {self._signal_streak[symbol]}, reducing size"
                     )
@@ -681,9 +704,11 @@ class TradingSystem:
                     df_ohlc = pl.DataFrame(ohlc_list)
                     atr_val = float(self.atr_indicator.compute(df_ohlc).tail(1)[0] or 0)
 
-                chronos = ml_result.get("chronos", {})
-                f_95 = float(chronos.get("quantile_95", [0])[-1])
-                f_05 = float(chronos.get("quantile_05", [0])[-1])
+                chronos = ml_result.get("chronos") or {}
+                q95_list = chronos.get("quantile_95", [0]) or [0]
+                q05_list = chronos.get("quantile_05", [0]) or [0]
+                f_95 = float(q95_list[-1]) if q95_list else 0.0
+                f_05 = float(q05_list[-1]) if q05_list else 0.0
                 f_range = f_95 - f_05 if f_95 > 0 else 0.0
 
                 risk_levels = self.guardrail_manager.evaluate(
@@ -707,8 +732,6 @@ class TradingSystem:
 
     def _get_module_traces(self, symbol: str, ml_result: dict[str, Any]) -> dict[str, Any]:
         """Aggregate forensic traces from all sub-engines with deep diagnostics."""
-        from qtrader.core.latency_enforcer import latency_enforcer
-        
         latencies = latency_enforcer.get_current_measurements()
         recon_audit = self.recon.get_last_audit() if hasattr(self, "recon") else {}
 
@@ -741,8 +764,8 @@ class TradingSystem:
                 "streak": self._signal_streak.get(symbol, 0),
                 "last_direction": self._last_signal_direction.get(symbol, "NONE"),
                 "cooldown": self._loss_cooldown.get(symbol, 0),
-                "is_circuit_broken": self._consecutive_losses >= config_manager.get("MAX_CONSECUTIVE_LOSSES"),
-                "is_anomaly": self._consecutive_losses >= 3  # Simple anomaly flag
+                "is_circuit_broken": self._consecutive_losses >= config_manager.get("MAX_CONSECUTIVE_LOSSES", 5),
+                "is_anomaly": self._consecutive_losses >= self.config.anomaly_loss_threshold  # Simple anomaly flag
             }
         }
 
@@ -786,7 +809,7 @@ class TradingSystem:
             last_price = last_entry["close"] if isinstance(last_entry, dict) else last_entry
             
             price_change = (price - last_price) / last_price if last_price > 0 else 0
-            if abs(price_change) > 0.05:
+            if abs(price_change) > self.config.price_jump_threshold:
                 logger.warning(
                     f"[MARKET_DATA] {symbol} price jump {price_change:.2%}, using last known"
                 )
@@ -1054,9 +1077,9 @@ class TradingSystem:
                 self._win_history.append(0)
 
             # Check for MLOps retraining (Self-Learning)
-            if len(self._win_history) >= 10:
+            if len(self._win_history) >= self.config.win_history_window:
                 current_wr = sum(self._win_history) / len(self._win_history)
-                if current_wr < 0.35: # Performance decay trigger
+                if current_wr < self.config.retrain_win_rate_threshold: # Performance decay trigger
                     decision = self.retrain_system.evaluate(
                         expected_dist=np.array([0.5, 0.5]), # Mock dist for now
                         actual_dist=np.array([current_wr, 1-current_wr]),

@@ -13,7 +13,6 @@ import polars as pl
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.core.db import DBClient
 from qtrader.ml.vector_store import EliteExemplar, memory_store
-from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
 
 logger = logging.getLogger("qtrader.analytics.session")
 

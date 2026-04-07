@@ -12,9 +12,10 @@ while ! ollama list > /dev/null 2>&1; do
 done
 
 # Pull models (Idempotent: doesn't re-download if already exists)
-echo "[OLLAMA] Pulling models (phi3:mini, qwen2:1.5b)..."
-ollama pull phi3:mini
-ollama pull qwen2:1.5b
+echo "[OLLAMA] Pulling Focused Models (Llama 3.2 1B, Qwen 3 Embedding 0.6B, Qwen 3.5 2B)..."
+ollama pull llama3.2:1b
+ollama pull qwen3-embedding:0.6b
+ollama pull qwen3.5:2b
 
 echo "[OLLAMA] All models ready!"
 

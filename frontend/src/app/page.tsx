@@ -164,9 +164,9 @@ export default function Dashboard() {
 
       {/* STATS STRIP */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Equity" value={`$${portfolio.equity.toFixed(2)}`} accent={totalSessionPnl >= 0 ? "blue" : "rose"} />
-        <StatCard label="Session PnL" value={`${totalSessionPnl >= 0 ? '+' : ''}$${totalSessionPnl.toFixed(2)}`} accent={totalSessionPnl >= 0 ? "blue" : "rose"} />
-        <StatCard label="Win Rate" value={`${forensics?.module_traces?.Strategy?.win_rate * 100 || 0}%`} accent="slate" />
+        <StatCard label="Total Equity" value={`$${(portfolio?.equity || 0).toFixed(2)}`} accent={(totalSessionPnl || 0) >= 0 ? "blue" : "rose"} />
+        <StatCard label="Session PnL" value={`${(totalSessionPnl || 0) >= 0 ? '+' : ''}${(totalSessionPnl || 0).toFixed(2)}`} accent={(totalSessionPnl || 0) >= 0 ? "blue" : "rose"} />
+        <StatCard label="Win Rate" value={`${(forensics?.module_traces?.Strategy?.win_rate || 0) * 100}%`} accent="slate" />
         <StatCard label="Latency" value={`${telemetry?.latency_ms || 0}ms`} accent="slate" />
       </div>
 

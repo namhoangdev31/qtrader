@@ -31,14 +31,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     bg_task = None
     sim_task = None
     if not ui_only:
-        # DO NOT auto-start the system. Wait for manual trigger via API.
         logger.info("FULL_MODE: Waiting for manual session activation")
-        # Initialize EventBus and storage but don't start the loop yet
-        await system.state_store.sync_from_remote()
         await system.event_bus.start()
+        try:
+            await asyncio.wait_for(system.state_store.sync_from_remote(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("STATE_STORE | Remote sync timed out during startup")
     else:
-        await system.state_store.sync_from_remote()
         await system.event_bus.start()
+        try:
+            await asyncio.wait_for(system.state_store.sync_from_remote(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("STATE_STORE | Remote sync timed out during startup")
+        
         logger.info(
             f"UI_ONLY_MODE: EventBus started, running={system.event_bus._running}, "
             f"workers={len(system.event_bus._worker_tasks)}"
@@ -46,17 +51,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bg_task = asyncio.create_task(_ui_heartbeat(system))
         logger.info("UI_ONLY_MODE: Heartbeat loop started")
 
-    # SIM_MODE auto-start removed. Process is now manual.
+    if sim_mode:
+        from qtrader.api.router import start_simulation
+        await start_simulation(system)
+        logger.info("[SIM] Simulation Engine auto-started in lifespan")
+
     yield
     await system.stop()
     if bg_task:
         bg_task.cancel()
-    if sim_task:
-        sim_task.cancel()
-        try:
-            await sim_task
-        except asyncio.CancelledError:
-            pass
+    from qtrader.api.router import stop_simulation
+    await stop_simulation()
 
 
 async def _ui_heartbeat(system: Any) -> None:

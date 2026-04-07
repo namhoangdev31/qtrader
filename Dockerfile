@@ -60,7 +60,8 @@ RUN pip install --no-cache-dir \
     "fastapi>=0.111" \
     "uvicorn[standard]>=0.30" \
     "statsmodels>=0.14.6" \
-    "hmmlearn>=0.3"
+    "hmmlearn>=0.3" \
+    "redis>=5.0.0"
 
 # ------------------------------------------------------------
 # Stage 3: ML_BUILDER — Heavy dependencies for ML Engine

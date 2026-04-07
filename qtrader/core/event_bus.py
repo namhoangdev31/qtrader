@@ -214,9 +214,22 @@ class EventBus:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message and message["type"] == "message":
                     data_json = message["data"]
-                    # Re-hydrate the event
-                    from qtrader.core.events import BaseEvent
-                    event = BaseEvent.model_validate_json(data_json)
+                    # Re-hydrate the event with correct polymorphic class
+                    from qtrader.core.events import EVENT_TYPE_MAP, BaseEvent, EventType
+                    
+                    # 1. Peek at event_type
+                    try:
+                        import json
+                        raw_data = json.loads(data_json)
+                        et_str = raw_data.get("event_type")
+                        et = EventType(et_str) if et_str else None
+                        
+                        # 2. Map to class or fallback to BaseEvent
+                        event_cls = EVENT_TYPE_MAP.get(et, BaseEvent)
+                        event = event_cls.model_validate_json(data_json)
+                    except Exception as e:
+                        logger.error(f"[EVENT_BUS] Deserialization failed for type {et_str if 'et_str' in locals() else 'unknown'}: {e}")
+                        continue
                     
                     # Mark as remote to prevent circular loops
                     event = event.model_copy(update={"is_remote": True})

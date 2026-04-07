@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from typing import Any
 
 _LOG = logging.getLogger("qtrader.security.order_signing")
+MIN_SECRET_KEY_LEN = 16
+MAX_ORDER_AGE_S = 30.0
 
 
 @dataclass(slots=True)
@@ -52,8 +54,8 @@ class OrderSigner:
             secret_key: HMAC secret key (minimum 32 bytes recommended).
             key_id: Identifier for the signing key (for key rotation).
         """
-        if len(secret_key) < 16:
-            raise ValueError("Secret key must be at least 16 bytes")
+        if len(secret_key) < MIN_SECRET_KEY_LEN:
+            raise ValueError(f"Secret key must be at least {MIN_SECRET_KEY_LEN} bytes")
         self._secret_key = secret_key
         self._key_id = key_id
         self._nonce_counter: int = 0
@@ -118,8 +120,8 @@ class OrderSigner:
 
         # Check timestamp freshness (reject orders older than 30 seconds)
         age = time.time() - signed_order.timestamp
-        if age > 30.0:
-            return False, f"Order too old: {age:.1f}s (max 30s)"
+        if age > MAX_ORDER_AGE_S:
+            return False, f"Order too old: {age:.1f}s (max {MAX_ORDER_AGE_S}s)"
 
         # Recompute signature
         canonical = self._canonicalize(signed_order.order_payload)
@@ -139,7 +141,7 @@ class OrderSigner:
         self, signed_order: SignedOrder, secret_key: bytes
     ) -> tuple[bool, str]:
         """Verify a signed order using a specific key (for key rotation scenarios)."""
-        if len(secret_key) < 16:
+        if len(secret_key) < MIN_SECRET_KEY_LEN:
             return False, "Invalid key length"
 
         canonical = self._canonicalize(signed_order.order_payload)
@@ -172,8 +174,8 @@ class OrderSigner:
 
     def rotate_key(self, new_secret_key: bytes, new_key_id: str) -> None:
         """Rotate to a new signing key."""
-        if len(new_secret_key) < 16:
-            raise ValueError("New secret key must be at least 16 bytes")
+        if len(new_secret_key) < MIN_SECRET_KEY_LEN:
+            raise ValueError(f"New secret key must be at least {MIN_SECRET_KEY_LEN} bytes")
         old_key_id = self._key_id
         self._secret_key = new_secret_key
         self._key_id = new_key_id

@@ -49,11 +49,11 @@ export default function ExpertDashboard() {
   };
 
   return (
-    <main className="h-screen bg-[#080a0f] text-slate-300 font-sans selection:bg-blue-500/30 overflow-hidden flex flex-col">
+    <main className="h-screen bg-[#080a0f] text-slate-300 font-sans selection:bg-blue-500/30 overflow-hidden flex flex-col institutional-gradient">
       {/* SCROLLABLE CONTENT WRAPPER */}
       <div className="flex-1 overflow-y-auto p-1.5 lg:p-2 scroll-smooth scrollbar-thin">
       {/* HUD HEADER */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-[#1e222d] pb-2 mb-2">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-[#1e222d] pb-2 mb-2 glass px-3 rounded-t-lg">
         <div className="flex items-center gap-2">
           <div className="bg-[#2962ff] p-1.5 rounded shadow-2xl shadow-blue-900/40 group cursor-pointer hover:rotate-12 transition-all duration-300">
             <Cpu className="text-white fill-white" size={16} />
@@ -132,16 +132,36 @@ export default function ExpertDashboard() {
           <div className="h-[450px]">
             <ForensicNotes />
           </div>
-          <div className="bg-[#161a25] border border-[#1e222d] p-5 rounded-lg">
-             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-4">Clock Sync & Latency</h3>
+          <div className="bg-[#161a25] border border-[#1e222d] p-5 rounded-lg shadow-inner">
              <div className="flex items-center justify-between mb-4">
-               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Audit History</h3>
-               <Link href="/expert/history" className="text-[10px] font-bold text-blue-500 hover:underline">View All</Link>
+               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Audit History</h3>
+               <Link href="/expert/history" className="text-[9px] font-bold text-blue-500/60 hover:text-blue-400 uppercase tracking-widest">View All</Link>
              </div>
-             <div className="flex-1">
+             <div className="h-[200px] overflow-hidden">
                <TradeHistory trades={[]} />
              </div>
            </div>
+        </div>
+
+        {/* RIGHT COLUMN: Logic & Flows */}
+        <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6 leading-tight">
+          <div className="md:col-span-2 min-h-[300px]">
+            <LogicMatrix moduleTraces={forensics?.module_traces || {}} />
+          </div>
+          <div className="md:col-span-2 min-h-[150px]">
+             <FlowVisualizer 
+               lastTickTimestamp={telemetry?.timestamp}
+               lastSignal={forensics?.thinking_history?.[forensics.thinking_history.length - 1]}
+               simRunning={telemetry?.status.running || false}
+               liveTrace={forensics?.module_traces}
+             />
+          </div>
+          <div className="md:col-span-1 h-[400px]">
+            <ThinkingTerminal history={forensics?.thinking_history || []} />
+          </div>
+          <div className="md:col-span-1 h-[400px]">
+            <SimPositionsTable positions={portfolio?.positions || []} />
+          </div>
         </div>
       </div>
       

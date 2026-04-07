@@ -8,7 +8,7 @@ class RiskModule(ABC):
     """Abstract base class for all risk management modules."""
 
     @abstractmethod
-    def evaluate(self, *args, **kwargs) -> dict:
+    def evaluate(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Evaluate risk and return metrics/actions."""
         ...
 

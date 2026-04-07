@@ -20,11 +20,10 @@ from qtrader.api.schemas import (
     SimulationConfig,
     StatusResponse,
 )
-from qtrader.core.dynamic_config import config_manager
-from qtrader.core.events import EventType, MarketEvent, MarketPayload, OrderEvent, OrderPayload
-from qtrader.trading_system import TradingSystem, TradingSystemConfig
-from qtrader.persistence.db_writer import TradeDBWriter
+from qtrader.core.events import EventType, OrderEvent, OrderPayload
 from qtrader.ml.embedding_worker import embedding_manager
+from qtrader.persistence.db_writer import TradeDBWriter
+from qtrader.trading_system import TradingSystem
 
 logger = logging.getLogger("qtrader.api.router")
 
@@ -251,18 +250,15 @@ async def get_status(sys: TradingSystem = Depends(get_system)) -> dict[str, Any]
 async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, Any]]:
     """Retrieve forensic notes for RAG/UI."""
     from qtrader.core.db import DBClient
-    conn = await DBClient().get_connection()
     try:
         if session_id:
-            rows = await conn.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp DESC", session_id)
+            rows = await DBClient.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp DESC", session_id)
         else:
-            rows = await conn.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes ORDER BY timestamp DESC LIMIT 100")
+            rows = await DBClient.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes ORDER BY timestamp DESC LIMIT 100")
         return [{"id": str(r["id"]), "content": r["note_text"], "type": r["note_type"], "timestamp": r["timestamp"].isoformat()} for r in rows]
     except Exception as e:
         logger.error(f"[API] Failed to fetch notes: {e}")
         return []
-    finally:
-        await conn.close()
 
 
 @router.post("/forensic_notes")
@@ -460,21 +456,24 @@ async def forensics_updates(websocket: WebSocket) -> None:
             "thinking_history": engine._thinking_history if engine._running else []
         }
 
-    await websocket.send_json(await get_snapshot())
     queue: asyncio.Queue[bool] = asyncio.Queue()
-    
     async def handler(event): await queue.put(True)
+    
     # Forensics subscribes to more granular events
     sys.event_bus.subscribe(EventType.SIGNAL, handler)
     sys.event_bus.subscribe(EventType.DECISION_TRACE, handler)
     engine.set_update_handler(lambda x: queue.put_nowait(True))
 
     try:
+        # Initial snapshot
+        await websocket.send_json(await get_snapshot())
         while True:
             await queue.get()
             await websocket.send_json(await get_snapshot())
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logger.error(f"[WS/FORENSICS] Unexpected error: {e}")
     finally:
         sys.event_bus.unsubscribe(EventType.SIGNAL, handler)
         sys.event_bus.unsubscribe(EventType.DECISION_TRACE, handler)
@@ -502,19 +501,22 @@ async def telemetry_updates(websocket: WebSocket) -> None:
             "uptime_seconds": int(uptime)
         }
 
-    await websocket.send_json(await get_snapshot())
     queue: asyncio.Queue[bool] = asyncio.Queue()
     async def handler(event): await queue.put(True)
-    sys.event_bus.subscribe(EventType.MARKET, handler) # Pulse on every market tick
+    sys.event_bus.subscribe(EventType.MARKET_DATA, handler) # Pulse on every market tick
 
     try:
+        # Initial snapshot
+        await websocket.send_json(await get_snapshot())
         while True:
             await queue.get()
             await websocket.send_json(await get_snapshot())
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logger.error(f"[WS/TELEMETRY] Unexpected error: {e}")
     finally:
-        sys.event_bus.unsubscribe(EventType.MARKET, handler)
+        sys.event_bus.unsubscribe(EventType.MARKET_DATA, handler)
 
 
 @ws_router.websocket("/ws/simulation")

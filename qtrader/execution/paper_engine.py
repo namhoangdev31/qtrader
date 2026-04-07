@@ -404,7 +404,6 @@ class PaperTradingEngine:
             "reasoning": self._last_explanation
         }
         
-        # Register in module traces for the Logic Matrix
         self._last_trace["module_traces"]["AlphaEngine"] = self._last_trace["alpha"]
         self._last_trace["module_traces"]["Execution"] = {
             "name": "PaperEngine_Sim",
@@ -419,18 +418,15 @@ class PaperTradingEngine:
             "status": "ACTIVE"
         }
         
-        # AGGRESSIVE MODE: Register missing modules for Logic Matrix
         self._last_trace["module_traces"]["RiskEngine"] = {
             "is_halted": False,
             "reason": "OK",
             "dd_limit": self.adaptive.max_sl_adjustment,
             "status": "HEALTHY"
         }
-        # CORRECTED: Sum notional across ALL lots for ALL symbols
         total_notional = 0.0
         for lots in self._open_positions.values():
             for lot_data in lots:
-                # lot_data is (qty * sign, price, comm_per_unit)
                 total_notional += lot_data[0] * lot_data[1]
 
         self._last_trace["module_traces"]["Portfolio"] = {
@@ -449,8 +445,6 @@ class PaperTradingEngine:
             "win_rate": round(self.adaptive.win_rate, 4),
             "status": "ACTIVE"
         }
-
-        # Add to history
         self._thinking_history.append({
             "timestamp": time.time(),
             "thinking": self._last_thinking,
@@ -460,13 +454,20 @@ class PaperTradingEngine:
             self._thinking_history = self._thinking_history[-self.THINKING_HISTORY_LIMIT:]
 
         return res
+    def _open_managed_position(self, side: str, strength: float) -> OpenPosition | None:
+        """Execute an adaptive entry with institutional fidelity simulation."""
+        pos_pct = self.adaptive.current_position_size_pct * strength
+        notional = self._cash * pos_pct
 
-        # High-Fidelity Execution: Inject Latency & Error Probability
+        if notional < self.MIN_TRADE_NOTIONAL:
+            return None
+
+        sym = "BTC-USD"
+        
         if random.random() < self.ERROR_PROBABILITY:
             _LOG.warning(f"[PAPER] Execution Error Injection: Simulated Timeout for {side} {sym}")
             return None
 
-        # Dynamic Slippage based on volatility
         slippage_pct = (self._volatility * self.SLIPPAGE_VOL_MULT) * (1 + random.random())
         price = self._current_price * (1 + (slippage_pct if side == "BUY" else -slippage_pct))
         
@@ -486,7 +487,6 @@ class PaperTradingEngine:
         commission_per_unit = entry_fee / qty
         
         sign = 1 if side == "BUY" else -1
-        sym = "BTC-USD"
         
         if sym not in self._open_positions:
             self._open_positions[sym] = []
@@ -498,7 +498,7 @@ class PaperTradingEngine:
             side=side,
             qty=qty,
             avg_price=price,
-            avg_comm_per_unit=commission_per_unit, # Fix: Match OpenPosition dataclass
+            avg_comm_per_unit=commission_per_unit,
             stop_loss=sl,
             take_profit=tp,
             entry_time=datetime.now(timezone.utc).isoformat(),
@@ -509,43 +509,29 @@ class PaperTradingEngine:
             self._managed_positions[sym] = []
         self._managed_positions[sym].append(pos)
         
-        return pos
-
         _LOG.info(
             f"[PAPER] OPEN {side} {sym} qty={qty:.6f} @ {price:.2f} | "
             f"SL={sl:.2f} TP={tp:.2f} | Notional=${notional:.2f}"
         )
-
-        # Capture Risk Trace
-        self._last_trace["risk"] = {
-            "initial_stop_loss": sl,
-            "initial_take_profit": tp,
-            "adjusted_stop_loss": sl,
-            "adjusted_take_profit": tp,
-            "position_size_pct": pos_pct,
-            "notional_usd": notional,
-            "risk_score": strength
-        }
-        self._last_trace["module_traces"]["Portfolio"] = self._last_trace["risk"]
-
         return pos
 
     def _check_exit_conditions(self) -> TradeRecord | None:
-        for sym, pos in list(self._managed_positions.items()):
-            price = self._current_price
-            reason = None
-            if pos.side == "BUY":
-                if price <= pos.stop_loss:
+        for sym, positions in list(self._managed_positions.items()):
+            for pos in list(positions):
+                price = self._current_price
+                reason = None
+                if pos.side == "BUY":
+                    if price <= pos.stop_loss:
+                        reason = "STOP_LOSS"
+                    elif price >= pos.take_profit:
+                        reason = "TAKE_PROFIT"
+                elif price >= pos.stop_loss:
                     reason = "STOP_LOSS"
-                elif price >= pos.take_profit:
+                elif price <= pos.take_profit:
                     reason = "TAKE_PROFIT"
-            elif price >= pos.stop_loss:
-                reason = "STOP_LOSS"
-            elif price <= pos.take_profit:
-                reason = "TAKE_PROFIT"
-            
-            if reason:
-                return self._close_managed_position(sym, reason, price)
+                
+                if reason:
+                    return self._close_managed_position(sym, reason, price)
         return None
 
     def _check_dynamic_exit(self, signal: dict[str, Any] | None) -> TradeRecord | None:
@@ -553,25 +539,26 @@ class PaperTradingEngine:
         if not signal or not self._managed_positions:
             return None
         
-        for sym, pos in list(self._managed_positions.items()):
-            action = signal.get("action")
-            strength = signal.get("strength", 0.0)
-            
-            # Reversal Detection: Exit if signal contradicts current position
-            should_exit = False
-            if (pos.side == "BUY" and action == "SELL" and 
-                strength >= self.REVERSAL_THRESHOLD):
-                should_exit = True
-            elif (pos.side == "SELL" and action == "BUY" and 
-                  strength >= self.REVERSAL_THRESHOLD):
-                should_exit = True
+        for sym, positions in list(self._managed_positions.items()):
+            for pos in list(positions):
+                action = signal.get("action")
+                strength = signal.get("strength", 0.0)
                 
-            if should_exit:
-                _LOG.info(
-                    f"[PAPER] DYNAMIC_EXIT triggered for {sym} | "
-                    f"Signal={action} strength={strength:.2f}"
-                )
-                return self._close_managed_position(sym, "DYNAMIC_EXIT", self._current_price)
+                # Reversal Detection: Exit if signal contradicts current position
+                should_exit = False
+                if (pos.side == "BUY" and action == "SELL" and 
+                    strength >= self.REVERSAL_THRESHOLD):
+                    should_exit = True
+                elif (pos.side == "SELL" and action == "BUY" and 
+                      strength >= self.REVERSAL_THRESHOLD):
+                    should_exit = True
+                    
+                if should_exit:
+                    _LOG.info(
+                        f"[PAPER] DYNAMIC_EXIT triggered for {sym} | "
+                        f"Signal={action} strength={strength:.2f}"
+                    )
+                    return self._close_managed_position(sym, "DYNAMIC_EXIT", self._current_price)
         
         return None
 
@@ -733,9 +720,12 @@ class PaperTradingEngine:
 
         curr_qty, curr_price, curr_comm_per_unit = self._open_positions.get(sym, (0.0, 0.0, 0.0))
 
-        if curr_qty == 0:
+        if sym not in self._open_positions or not isinstance(self._open_positions[sym], list):
+            self._open_positions[sym] = []
+            
+        if not self._open_positions[sym]:
             sign = 1 if side == "BUY" else -1
-            self._open_positions[sym] = (qty * sign, price, comm_per_unit)
+            self._open_positions[sym].append((qty * sign, price, comm_per_unit))
         elif (curr_qty > 0 and side == "BUY") or (curr_qty < 0 and side == "SELL"):
             sign = 1 if side == "BUY" else -1
             total_qty = abs(curr_qty) + qty
@@ -777,12 +767,12 @@ class PaperTradingEngine:
             if rem_qty < self.EPSILON_QTY:
                 self._open_positions.pop(sym, None)
             else:
-                self._open_positions[sym] = (rem_qty * sign, curr_price, curr_comm_per_unit)
+                self._open_positions[sym] = [(rem_qty * sign, curr_price, curr_comm_per_unit)]
 
             if qty > closing_qty:
                 flipped_qty = qty - closing_qty
                 flipped_sign = 1 if side == "BUY" else -1
-                self._open_positions[sym] = (flipped_qty * flipped_sign, price, comm_per_unit)
+                self._open_positions[sym] = [(flipped_qty * flipped_sign, price, comm_per_unit)]
 
     def _build_snapshot(self) -> dict[str, Any]:
         eq = self.equity
@@ -804,19 +794,19 @@ class PaperTradingEngine:
             "open_positions": [
                 {
                     "symbol": sym,
-                    "side": "BUY" if qty > 0 else "SELL",
-                    "quantity": abs(qty),
-                    "entry_price": avg_price,
+                    "side": "BUY" if lot[0] > 0 else "SELL",
+                    "quantity": abs(lot[0]),
+                    "entry_price": lot[1],
                     "current_price": self._current_price,
                     "unrealized_pnl": round(
-                        (self._current_price - avg_price) * qty
-                        if qty > 0
-                        else (avg_price - self._current_price) * abs(qty),
+                        (self._current_price - lot[1]) * lot[0]
+                        if lot[0] > 0
+                        else (lot[1] - self._current_price) * abs(lot[0]),
                         2,
                     ),
                     "unrealized_pnl_pct": round(
-                        ((self._current_price - avg_price) / avg_price * 100)
-                        if avg_price > 0
+                        ((self._current_price - lot[1]) / lot[1] * 100)
+                        if lot[1] > 0
                         else 0,
                         2,
                     ),
@@ -824,7 +814,8 @@ class PaperTradingEngine:
                     "take_profit": 0.0,
                     "entry_time": "",
                 }
-                for sym, (qty, avg_price, _) in self._open_positions.items()
+                for sym, lots in self._open_positions.items()
+                for lot in lots
             ],
             "trade_history": [
                 {

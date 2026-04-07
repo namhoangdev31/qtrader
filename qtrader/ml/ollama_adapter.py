@@ -32,11 +32,11 @@ class OllamaDecisionAdapter:
 
     def __init__(
         self,
-        model_id: str = "phi3:mini",
+        model_id: str | None = None,
         base_url: str | None = None,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = 60,
     ) -> None:
-        self.model_id = model_id
+        self.model_id = model_id or os.getenv("OLLAMA_MODEL_DECISION", "llama3.2:1b")
         self.base_url = base_url or os.getenv("OLLAMA_URL", "http://ollama:11434")
         self.timeout_seconds = timeout_seconds
         self._is_loaded = False
@@ -81,19 +81,17 @@ class OllamaDecisionAdapter:
             response_text = await self._generate(prompt)
             decision = self._parse_response(response_text, chronos_forecast, tabpfn_risk)
         except Exception as e:
-            logger.error(f"[OLLAMA] Inference failed: {e}")
-            # Fallback will be handled by AtomicTrio if this raises,
-            # but we return a safe HOLD here.
+            logger.error(f"[OLLAMA] Decision inference failed: {e}")
             decision = TradingDecision(
                 action=DecisionAction.HOLD,
                 confidence=0.0,
-                reasoning=f"Ollama error: {e}",
+                reasoning=f"Ollama failure: {e}",
                 risk_adjustment=1.0,
                 position_size_multiplier=0.0,
                 stop_loss_pct=2.0,
                 take_profit_pct=5.0,
                 time_horizon="short",
-                explanation="Decision defaulted to HOLD due to Ollama API error",
+                explanation=f"Emergency fallback (Timeout/Error in AI Engine: {e})",
                 inference_time_ms=0.0,
             )
 

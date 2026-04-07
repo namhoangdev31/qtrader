@@ -1,19 +1,28 @@
-"""Extended AnalystSession – role-aware notebook workflow helpers for QTrader.
+"""Extended AnalystSession - role-aware notebook workflow helpers for QTrader.
 
 Roles
 -----
-RoleContext.ANALYST     – EDA, backtest reports, risk summaries, HTML export
-RoleContext.RESEARCHER  – feature engineering, regime detection, ML experiments
-RoleContext.TRADER      – live bot monitoring, execution audit, slippage analysis
+RoleContext.ANALYST     - EDA, backtest reports, risk summaries, HTML export
+RoleContext.RESEARCHER  - feature engineering, regime detection, ML experiments
+RoleContext.TRADER      - live bot monitoring, execution audit, slippage analysis
 """
 from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import httpx
+    from qtrader.analytics.ev_calculator import EVCalculator
+    from qtrader.execution.paper_engine import PaperTradingEngine
+    from qtrader.research.report import ReportBuilder
+    from qtrader.features.store import FeatureStore
+    from scripts.generate_test_data import generate_synthetic_data
 
 import numpy as np
 import polars as pl
+from datetime import datetime, timedelta
 from loguru import logger
 
 from qtrader.analytics.performance import PerformanceAnalytics
@@ -22,6 +31,8 @@ from qtrader.backtest.tearsheet import TearsheetGenerator
 from qtrader.data.datalake import DataLake
 from qtrader.data.datalake_universal import UniversalDataLake
 from qtrader.data.duckdb_client import DuckDBClient
+from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
+from qtrader.core.config import Config
 
 
 class RoleContext(str, Enum):
@@ -38,7 +49,7 @@ class AnalystSession:
 
         session = AnalystSession(role=RoleContext.ANALYST)
 
-    All methods are useable regardless of role – the role is mainly used for
+    All methods are useable regardless of role - the role is mainly used for
     ``info()`` guidance and future notebook auto-navigation.
     """
 
@@ -97,9 +108,6 @@ class AnalystSession:
 
     async def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
         """Load real Coinbase REST API data and persist it to the DataLake."""
-        from datetime import datetime, timedelta
-
-        from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
         
         self._log.info(f"Requesting {days} days of live data for {symbol}...")
         
@@ -110,7 +118,6 @@ class AnalystSession:
         }
         granularity = tf_map.get(timeframe, "ONE_HOUR")
         
-        from qtrader.core.config import Config
         client = CoinbaseMarketDataClient()
         end_dt = datetime.now(Config.tz)
         start_dt = end_dt - timedelta(days=days)
@@ -120,7 +127,6 @@ class AnalystSession:
             
             # Persist to datalake
             try:
-                from qtrader.data.datalake_universal import UniversalDataLake
                 lake = UniversalDataLake()
                 lake.save_data(df, symbol, timeframe)
             except Exception as e:
@@ -133,7 +139,6 @@ class AnalystSession:
 
     async def get_live_orderbook(self, symbol: str, limit: int = 20) -> dict[str, Any]:
         """Fetch the live L2 orderbook from Coinbase."""
-        from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
         client = CoinbaseMarketDataClient()
         return await client.get_product_book(symbol, limit)
 
@@ -162,7 +167,7 @@ class AnalystSession:
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
         """Load pre-computed features from the FeatureStore.
-
+        
         Returns an empty DataFrame if no features are stored yet.
         """
         from qtrader.features.store import FeatureStore
@@ -171,7 +176,7 @@ class AnalystSession:
         df = store.load_features(symbol=symbol, timeframe=timeframe)
         if df.is_empty():
             self._log.warning(
-                "No features found for %s/%s – run feature engine first.", symbol, timeframe
+                "No features found for %s/%s - run feature engine first.", symbol, timeframe
             )
         return df
 
@@ -388,7 +393,7 @@ class AnalystSession:
         Returns a new DataFrame with additional ``fwd_ret_{n}`` columns (forward
         returns over *n* periods) plus a composite ``alpha_score``.
 
-        This is a standalone scoring helper – it does NOT require a fitted model.
+        This is a standalone scoring helper - it does NOT require a fitted model.
         Use the Researcher notebooks to train and register actual alpha models via MLflow.
         """
         forward_periods = forward_periods or [1, 5, 10]
@@ -439,19 +444,13 @@ class AnalystSession:
         RuntimeError
             If the API is unreachable.
         """
-        try:
-            import httpx
-        except ImportError as exc:
-            raise RuntimeError(
-                "httpx is required for connect_live_api. Install with: pip install httpx"
-            ) from exc
 
         url = f"http://{host}:{port}/status"
         try:
             resp = httpx.get(url, timeout=timeout)
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
-            self._log.info("Live API connected – status: %s", data.get("engine_status"))
+            self._log.info("Live API connected - status: %s", data.get("engine_status"))
             return data
         except Exception as exc:
             raise RuntimeError(
@@ -488,10 +487,10 @@ class AnalystSession:
         sections:
             Ordered dict mapping section heading → content.
             Content can be:
-            * ``str`` – rendered as text paragraph
-            * ``pl.DataFrame`` – rendered as HTML table
-            * ``dict`` – flat metric dict (key → numeric value), rendered as 2-col table
-            * matplotlib ``Figure`` – embedded as base64 PNG
+            * ``str`` - rendered as text paragraph
+            * ``pl.DataFrame`` - rendered as HTML table
+            * ``dict`` - flat metric dict (key → numeric value), rendered as 2-col table
+            * matplotlib ``Figure`` - embedded as base64 PNG
 
         Returns
         -------

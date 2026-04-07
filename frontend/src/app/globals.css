@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0c10;
+  --background: #080a0f;
   --foreground: #f8fafc;
   --accent-blue: #2962ff;
-  --accent-green: #26a69a;
-  --accent-red: #ef5350;
+  --accent-green: #10b981;
+  --accent-red: #f43f5e;
   --border-color: #1e222d;
 }
 
@@ -14,11 +14,36 @@ body {
   color: var(--foreground);
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.glass {
+  background: rgba(22, 26, 37, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(41, 98, 255, 0.1);
+}
+
+.premium-glow {
+  box-shadow: 0 0 30px -10px rgba(41, 98, 255, 0.3);
+}
+
+.institutional-gradient {
+  background: radial-gradient(circle at top right, rgba(41, 98, 255, 0.08), transparent 40%);
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-thumb {

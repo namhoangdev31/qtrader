@@ -38,7 +38,6 @@ async def run_live_trader(args: argparse.Namespace) -> None:
     simulate_mode = os.getenv("SIMULATE_MODE", "true").lower() == "true"
     
     # === 1. Khởi tạo TradingSystem (Bộ não) ===
-    # Tự động nhận diện ML_ENGINE_URL từ môi trường
     system = create_trading_system(
         simulate=simulate_mode,
         symbols=symbols

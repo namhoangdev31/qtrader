@@ -20,51 +20,51 @@ export const SystemHealthHUD: React.FC<SystemHealthHUDProps> = ({ moduleTraces =
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-1.5 mb-2">
       {/* SLA COMPLIANCE */}
-      <div className="bg-[#161a25] border border-[#1e222d] rounded p-1 flex items-center justify-between shadow-lg">
+      <div className="bg-[#161a25]/60 border border-[#1e222d] rounded p-1.5 flex items-center justify-between shadow-lg glass">
         <div className="flex flex-col">
           <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">SLA-C</span>
-          <span className={`text-[12px] font-black ${slaCompliance < 90 ? 'text-rose-500' : 'text-emerald-500'}`}>
+          <span className={`text-[12px] font-black tracking-tighter ${slaCompliance < 90 ? 'text-rose-500' : 'text-emerald-500'}`}>
             {slaCompliance.toFixed(1)}%
           </span>
         </div>
-        <Timer size={16} className={slaCompliance < 90 ? 'text-rose-900/50' : 'text-emerald-900/50'} />
+        <Timer size={14} className={slaCompliance < 90 ? 'text-rose-500/30' : 'text-emerald-500/30'} />
       </div>
 
       {/* RECONCILIATION RADAR */}
-      <div className="bg-[#161a25] border border-[#1e222d] rounded p-1 flex items-center justify-between shadow-lg">
+      <div className="bg-[#161a25]/60 border border-[#1e222d] rounded p-1.5 flex items-center justify-between shadow-lg glass">
         <div className="flex flex-col">
           <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">RECON</span>
-          <span className={`text-[10px] font-black uppercase ${isReconOk ? 'text-emerald-400' : 'text-rose-500 animate-pulse'}`}>
+          <span className={`text-[10px] font-black uppercase tracking-tighter ${isReconOk ? 'text-emerald-400' : 'text-rose-500 animate-pulse'}`}>
              {isReconOk ? 'SYNC' : 'MISMATCH'}
           </span>
-          <span className="text-[7px] font-bold text-slate-600">D: {recon.mismatch_count || 0} Sym</span>
+          <span className="text-[7px] font-bold text-slate-600">DIFF: {recon.mismatch_count || 0}</span>
         </div>
-        <RotateCcw className={isReconOk ? 'text-emerald-900/50' : 'text-rose-900/50'} size={16} />
+        <RotateCcw className={isReconOk ? 'text-emerald-500/30' : 'text-rose-500/30'} size={14} />
       </div>
 
       {/* ANOMALY COUNTER */}
-      <div className="bg-[#161a25] border border-[#1e222d] rounded p-1 flex items-center justify-between shadow-lg">
+      <div className="bg-[#161a25]/60 border border-[#1e222d] rounded p-1.5 flex items-center justify-between shadow-lg glass">
         <div className="flex flex-col">
           <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">ANOMALY</span>
-          <span className={`text-[12px] font-black ${anomalies.length > 0 ? 'text-rose-500 animate-bounce-slow' : 'text-slate-400'}`}>
+          <span className={`text-[12px] font-black tracking-tighter ${anomalies.length > 0 ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}>
             {anomalies.length}
           </span>
         </div>
-        <AlertOctagon size={16} className={anomalies.length > 0 ? 'text-rose-900/50' : 'text-slate-900/50'} />
+        <AlertOctagon size={14} className={anomalies.length > 0 ? 'text-rose-500/30' : 'text-slate-500/20'} />
       </div>
 
       {/* SYSTEM INTEGRITY */}
-      <div className="bg-[#161a25] border border-[#1e222d] rounded p-1 flex items-center justify-between shadow-lg">
+      <div className="bg-[#161a25]/60 border border-[#1e222d] rounded p-1.5 flex items-center justify-between shadow-lg glass">
         <div className="flex flex-col">
           <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">INTEGRITY</span>
           <div className="flex items-center gap-1">
-            <span className={`text-[10px] font-black uppercase ${overallStatus === 'OK' ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <span className={`text-[10px] font-black uppercase tracking-tighter ${overallStatus === 'OK' ? 'text-emerald-400' : 'text-rose-400'}`}>
               {overallStatus}
             </span>
             {overallStatus === 'OK' ? <CheckCircle2 size={10} className="text-emerald-500" /> : <ShieldAlert size={10} className="text-rose-500" />}
           </div>
         </div>
-        <Activity size={16} className="text-blue-900/30" />
+        <Activity size={14} className="text-blue-500/20" />
       </div>
     </div>
   );

@@ -22,6 +22,8 @@ services:
       - ML_ENGINE_URL=http://qt-ml-engine:8001
       - AUTONOMOUS_MODE=${AUTONOMOUS_MODE:-true}
       - SIMULATE_MODE=${SIMULATE_MODE:-true}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_PREFIX=qtrader_core
     volumes:
       - hf_cache:/app/.cache/huggingface
     restart: always
@@ -66,8 +68,10 @@ services:
       - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
       - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
       - QTRADER_TESTNET=true
-      - UI_ONLY_MODE=false
+      - UI_ONLY_MODE=true
       - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_PREFIX=qtrader_ui
     restart: always
     depends_on:
       timescaledb:
@@ -108,6 +112,8 @@ services:
       - CHRONOS_MODEL_ID=${CHRONOS_MODEL_ID:-amazon/chronos-2}
       - TABPFN_MODEL_ID=Prior-Labs/tabpfn_2_5
       - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL_DECISION=llama3.2:1b
+      - OLLAMA_MODEL_RISK=qwen3-embedding:0.6b
     volumes:
       - hf_cache:/app/.cache/huggingface
     restart: always

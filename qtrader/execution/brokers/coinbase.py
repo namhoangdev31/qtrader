@@ -736,18 +736,24 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
 
         # Market data updates (Ticker)
         if msg_type == "ticker":
+            product_id = data.get("product_id", "")
+            bid = d(str(data.get("best_bid", "0")))
+            ask = d(str(data.get("best_ask", "0")))
+            
+            # Ensure price is present for TradingSystem handler
+            price = d(str(data.get("price", "0")))
+            if price <= 0 and bid > 0 and ask > 0:
+                price = (bid + ask) / d(2)
+                data["price"] = str(price)
+            
+            if bid > 0 and ask > 0:
+                self.update_quote(product_id, bid, ask)
+
             if self._on_market_data:
                 if asyncio.iscoroutinefunction(self._on_market_data):
                     await self._on_market_data(data)
                 else:
                     self._on_market_data(data)
-
-            product_id = data.get("product_id", "")
-            bid = d(str(data.get("best_bid", "0")))
-            ask = d(str(data.get("best_ask", "0")))
-
-            if bid > 0 and ask > 0:
-                self.update_quote(product_id, bid, ask)
 
         # Level 2 updates (Orderbook)
         elif msg_type in ("l2update", "snapshot"):

@@ -32,11 +32,11 @@ class OllamaRiskAdapter:
 
     def __init__(
         self,
-        model_id: str = "phi3:mini",
+        model_id: str | None = None,
         base_url: str | None = None,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = 60,
     ) -> None:
-        self.model_id = model_id
+        self.model_id = model_id or os.getenv("OLLAMA_MODEL_RISK", "qwen3-embedding:0.6b")
         self.base_url = base_url or os.getenv("OLLAMA_URL", "http://ollama:11434")
         self.timeout_seconds = timeout_seconds
         self._is_loaded = False

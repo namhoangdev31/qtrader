@@ -22,7 +22,7 @@ export const ExpertStats: React.FC<ExpertStatsProps> = ({ snapshot }) => {
   const unrealizedPnL = snapshot.position_value !== 0 ? snapshot.equity - snapshot.cash - snapshot.realized_pnl : 0;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-[#1e222d] border border-[#1e222d] rounded-lg overflow-hidden shadow-2xl">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-[#1e222d] border border-[#1e222d] rounded-lg overflow-hidden shadow-2xl glass">
       <StatItem 
         label="BTC Price" 
         value={`$${snapshot.current_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 

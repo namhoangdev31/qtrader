@@ -1232,3 +1232,15 @@ class MetaDecisionEvent(BaseEvent):
 
     event_type: EventType = EventType.META_DECISION
     payload: MetaDecisionPayload
+
+
+# Hydration Registry for EventBus (Polymorphism)
+EVENT_TYPE_MAP: dict[EventType, type[BaseEvent]] = {
+    EventType.MARKET_DATA: MarketEvent,
+    EventType.ORDER: OrderEvent,
+    EventType.SIGNAL: SignalEvent,
+    EventType.RISK: RiskEvent,
+    EventType.FILL: FillEvent,
+    EventType.SYSTEM: SystemEvent,
+    EventType.ERROR: ErrorEvent,
+}
