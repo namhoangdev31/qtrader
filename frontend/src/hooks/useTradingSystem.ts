@@ -6,7 +6,10 @@ export interface Portfolio {
   realized_pnl: number;
   total_commissions: number;
   positions: any[];
+  trade_history: any[];
+  current_price: number;
   timestamp: string;
+  live_config: Record<string, any>;
 }
 
 export interface Forensics {
@@ -35,7 +38,10 @@ export const defaultPortfolio: Portfolio = {
   realized_pnl: 0,
   total_commissions: 0,
   positions: [],
+  trade_history: [],
+  current_price: 0,
   timestamp: '',
+  live_config: {},
 };
 
 export function useTradingSystem() {

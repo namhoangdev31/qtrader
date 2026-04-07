@@ -5,11 +5,13 @@ import { useTradingSystem } from '@/hooks/useTradingSystem';
 import { ExpertStats } from '@/components/ExpertStats';
 import { FlowVisualizer } from '@/components/FlowVisualizer';
 import { ThinkingTerminal } from '@/components/ThinkingTerminal';
-import { SimPositionsTable } from '@/components/SimPositionsTable';
+import { ForensicPositions } from '@/components/ForensicPositions';
 import { TradeHistory } from '@/components/TradeHistory';
 import { LogicMatrix } from '@/components/LogicMatrix';
 import { SystemHealthHUD } from '@/components/SystemHealthHUD';
 import { ForensicNotes } from '@/components/ForensicNotes';
+import { TradingChart } from '@/components/TradingChart';
+import { AIControlPanel } from '@/components/AIControlPanel';
 import { 
   Zap, 
   Activity, 
@@ -113,9 +115,9 @@ export default function ExpertDashboard() {
       <ExpertStats snapshot={{
           ...portfolio,
           total_gross_pnl: portfolio.realized_pnl,
-          current_price: 0,
-          open_positions: portfolio.positions,
-          trade_history: [],
+          current_price: portfolio.current_price || (portfolio as any).base_price || 0,
+          open_positions: portfolio.positions || [],
+          trade_history: portfolio.trade_history || [],
           position_value: portfolio.equity - portfolio.cash,
           adaptive: forensics?.module_traces?.RiskGuard || {},
           peak_equity: portfolio.equity,
@@ -129,25 +131,35 @@ export default function ExpertDashboard() {
             moduleTraces={forensics?.module_traces || {}} 
             overallStatus={isSessionActive ? 'OK' : 'OFFLINE'}
           />
-          <div className="h-[450px]">
+          <div className="h-[430px]">
             <ForensicNotes />
           </div>
-          <div className="bg-[#161a25] border border-[#1e222d] p-2 rounded-lg shadow-inner">
+
+          <div className="bg-[#161a25] border border-[#1e222d] p-2 rounded shadow-inner">
              <div className="flex items-center justify-between mb-4">
                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Audit History</h3>
                <Link href="/expert/history" className="text-[9px] font-bold text-blue-500/60 hover:text-blue-400 uppercase tracking-widest">View All</Link>
              </div>
-             <div className="h-[200px] overflow-hidden">
-               <TradeHistory trades={[]} />
+             <div className="h-[180px] overflow-hidden">
+                <TradeHistory trades={portfolio?.trade_history || []} />
              </div>
+           </div>
+
+           <div className="h-[250px]">
+                <AIControlPanel config={portfolio?.live_config || {}} />
            </div>
         </div>
 
         {/* RIGHT COLUMN: Logic & Flows */}
-        <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6 leading-tight">
+         <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6 leading-tight">
+          <div className="md:col-span-2">
+            <TradingChart />
+          </div>
+
           <div className="md:col-span-2 min-h-[300px]">
             <LogicMatrix moduleTraces={forensics?.module_traces || {}} />
           </div>
+          
           <div className="md:col-span-2 min-h-[150px]">
              <FlowVisualizer 
                lastTickTimestamp={telemetry?.timestamp}
@@ -160,7 +172,7 @@ export default function ExpertDashboard() {
             <ThinkingTerminal history={forensics?.thinking_history || []} />
           </div>
           <div className="md:col-span-1 h-[400px]">
-            <SimPositionsTable positions={portfolio?.positions || []} />
+            <ForensicPositions positions={portfolio?.positions || []} />
           </div>
         </div>
       </div>

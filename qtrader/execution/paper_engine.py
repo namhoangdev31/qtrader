@@ -11,7 +11,8 @@ import asyncio
 import logging
 import random
 import time
-import uuid
+from uuid import uuid4
+from qtrader.core.dynamic_config import config_manager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -811,6 +812,7 @@ class PaperTradingEngine:
         return {
             "type": "simulation_update",
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "live_config": config_manager.get_all_live(),
             "equity": round(eq, 2),
             "cash": round(self._cash, 2),
             "realized_pnl": round(realized, 2),
@@ -822,7 +824,7 @@ class PaperTradingEngine:
             "thinking_history": self._thinking_history,
             "live_trace": self._last_trace,
             "base_price": self._base_price,
-            "open_positions": [
+            "positions": [
                 {
                     "symbol": sym,
                     "side": lot.side,
