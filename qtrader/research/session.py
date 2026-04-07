@@ -58,10 +58,6 @@ class AnalystSession:
         self.role = RoleContext(role) if isinstance(role, str) else role
         self._log.info("AnalystSession initialised | role=%s", self.role.value)
 
-    # ──────────────────────────────────────────────────────────────────
-    # Data Loading
-    # ──────────────────────────────────────────────────────────────────
-
     async def load_ohlcv(
         self,
         symbol: str,
@@ -89,8 +85,6 @@ class AnalystSession:
                 return self._load_from_local_datalake(symbol, timeframe)
             except FileNotFoundError:
                 self._log.warning("DataLake missing. Falling back to Live API.")
-                
-                # Determine how many days to fetch if not specified
                 if days is None:
                     days = 365 if self.role == RoleContext.RESEARCHER else 7
                 
@@ -124,8 +118,6 @@ class AnalystSession:
         df = await client.get_candles(symbol, granularity, start=start_dt, end=end_dt)
         if not df.is_empty():
             self._log.info(f"Loaded {len(df)} live candles for {symbol} ({granularity})")
-            
-            # Persist to datalake
             try:
                 lake = UniversalDataLake()
                 lake.save_data(df, symbol, timeframe)
@@ -150,7 +142,6 @@ class AnalystSession:
         df = await self.load_live_ohlcv(symbol, timeframe, days)
         engine = PaperTradingEngine(starting_capital=10000.0)
         
-        # applying strategy
         for row in df.iter_rows(named=True):
             market_state = {
                 "bid": float(row["close"]) * 0.9999,
@@ -180,10 +171,6 @@ class AnalystSession:
             )
         return df
 
-    # ──────────────────────────────────────────────────────────────────
-    # Feature Engineering Helpers
-    # ──────────────────────────────────────────────────────────────────
-
     def make_returns(self, df: pl.DataFrame, price_col: str = "close") -> pl.DataFrame:
         """Add *returns* column (pct_change of price_col) to DataFrame."""
         if price_col not in df.columns:
@@ -210,7 +197,6 @@ class AnalystSession:
         for w in windows:
             cols.append(pl.col(price_col).rolling_mean(w).alias(f"sma_{w}"))
             cols.append(pl.col(price_col).rolling_std(w).alias(f"vol_{w}"))
-        # Simple RSI (default 14)
         if "returns" not in df.columns:
             df = self.make_returns(df, price_col)
         w = 14
@@ -233,11 +219,6 @@ class AnalystSession:
             ).alias("rsi_14")
         )
         return df
-
-    # ──────────────────────────────────────────────────────────────────
-    # EDA / Statistics
-    # ──────────────────────────────────────────────────────────────────
-
     def describe(self, df: pl.DataFrame) -> dict[str, Any]:
         """Lightweight describe helper for notebooks."""
         return {
@@ -290,11 +271,6 @@ class AnalystSession:
             row = {"column": col, **metrics}
             rows.append(row)
         return pl.DataFrame(rows) if rows else pl.DataFrame()
-
-    # ──────────────────────────────────────────────────────────────────
-    # Backtest
-    # ──────────────────────────────────────────────────────────────────
-
     def run_vector_backtest(
         self,
         df: pl.DataFrame,
@@ -320,11 +296,6 @@ class AnalystSession:
             backtest_df["equity_curve"],
             backtest_df["timestamp"],
         )
-
-    # ──────────────────────────────────────────────────────────────────
-    # Performance Metrics
-    # ──────────────────────────────────────────────────────────────────
-
     def performance_metrics(self, equity_curve: pl.Series | pl.DataFrame) -> dict[str, float]:
         """Compute core performance metrics (Sharpe, total return, max drawdown, vol)."""
         series = self._resolve_equity_series(equity_curve)
@@ -347,26 +318,19 @@ class AnalystSession:
 
         returns = series.pct_change().drop_nulls().to_numpy()
         ann = float(periods_per_year)
-
-        # Sortino
         downside = returns[returns < 0]
         downside_vol = float(np.std(downside) * np.sqrt(ann)) if len(downside) > 0 else 1e-10
         ann_ret = float(returns.mean() * ann)
         sortino = ann_ret / downside_vol if downside_vol > 0 else 0.0
 
-        # Calmar
         max_dd = abs(base["max_drawdown"])
         calmar = ann_ret / max_dd if max_dd > 0 else 0.0
 
-        # Win Rate
         win_rate = float((returns > 0).mean())
 
-        # Profit Factor = sum(gains) / abs(sum(losses))
         gains = returns[returns > 0].sum()
         losses = abs(returns[returns < 0].sum())
         profit_factor = gains / losses if losses > 0 else float("inf")
-
-        # Omega Ratio (threshold = 0)
         omega = gains / losses if losses > 0 else float("inf")
 
         return {
@@ -378,10 +342,6 @@ class AnalystSession:
             "omega_ratio": round(omega, 4),
             "periods_per_year": periods_per_year,
         }
-
-    # ──────────────────────────────────────────────────────────────────
-    # Alpha Scoring (Researcher)
-    # ──────────────────────────────────────────────────────────────────
 
     def run_alpha_score(
         self,
@@ -403,7 +363,6 @@ class AnalystSession:
         for n in forward_periods:
             cols.append(pl.col("returns").shift(-n).alias(f"fwd_ret_{n}"))
         df = df.with_columns(cols)
-        # Simple composite: equal-weighted average of available forward returns
         fwd_cols = [f"fwd_ret_{n}" for n in forward_periods]
         df = df.with_columns(
             pl.concat_list([pl.col(c) for c in fwd_cols])
@@ -411,10 +370,6 @@ class AnalystSession:
             .alias("alpha_score")
         )
         return df
-
-    # ──────────────────────────────────────────────────────────────────
-    # Live API (Trader)
-    # ──────────────────────────────────────────────────────────────────
 
     def connect_live_api(
         self,
@@ -468,10 +423,6 @@ class AnalystSession:
         except Exception:
             return False
 
-    # ──────────────────────────────────────────────────────────────────
-    # Report Export
-    # ──────────────────────────────────────────────────────────────────
-
     def export_report(
         self,
         title: str,
@@ -524,17 +475,12 @@ class AnalystSession:
             elif isinstance(content, pl.Series):
                 rb.add_polars_plot(heading, content)
             else:
-                # Assume matplotlib Figure
                 try:
                     rb.add_figure(heading, content)
                 except Exception as exc:
                     self._log.warning("Skipping section %r: %s", heading, exc)
         saved = rb.save(path)
         return str(saved)
-
-    # ──────────────────────────────────────────────────────────────────
-    # Utility / Guidance
-    # ──────────────────────────────────────────────────────────────────
 
     def info(self) -> None:
         """Print role-specific workflow guidance to stdout."""
@@ -570,10 +516,6 @@ class AnalystSession:
 
     def __repr__(self) -> str:
         return f"AnalystSession(role={self.role.value!r})"
-
-    # ──────────────────────────────────────────────────────────────────
-    # Private helpers
-    # ──────────────────────────────────────────────────────────────────
 
     def _resolve_equity_series(self, equity_curve: pl.Series | pl.DataFrame) -> pl.Series:
         if isinstance(equity_curve, pl.DataFrame):
