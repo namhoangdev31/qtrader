@@ -79,12 +79,16 @@ from qtrader.ml.meta_online import OnlineMetaLearner
 from qtrader.monitoring.feedback.feedback_engine import FeedbackEngine
 from qtrader.oms.oms_adapter import OMSAdapter
 from qtrader.portfolio.allocator import AllocatorBase
-from qtrader.portfolio.cash_ledger import CashLedger
 from qtrader.portfolio.drawdown_controller import LiveDrawdownController
-from qtrader.portfolio.funding_engine import FundingEngine
 from qtrader.portfolio.nav_engine import NAVEngine
 from qtrader.portfolio.position_sizing import PositionSizer as PortfolioPositionSizer
 from qtrader.portfolio.risk_monitor import RealTimeRiskMonitor
+
+try:
+    from qtrader_core import LedgerEngine, LedgerEntry
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.monitoring_engine import MonitoringEngine
 from qtrader.risk.network_kill_switch import NetworkKillSwitch
@@ -230,9 +234,13 @@ class TradingOrchestrator:
         self.risk_monitoring_engine = MonitoringEngine()
 
         # === RESTORED MODULES: Portfolio Layer ===
-        self.cash_ledger = CashLedger(event_store=self.event_store)
+        if _HAS_RUST:
+            self.ledger_engine = LedgerEngine()
+        else:
+            self.ledger_engine = None  # Degraded state
+            logger.warning("ORCHESTRATOR | Rust LedgerEngine unavailable.")
+
         self.nav_engine = NAVEngine()
-        self.funding_engine = FundingEngine()
         self.portfolio_risk_monitor = RealTimeRiskMonitor()
         self.drawdown_controller = LiveDrawdownController()
         self.portfolio_position_sizer = PortfolioPositionSizer()
@@ -971,6 +979,35 @@ class TradingOrchestrator:
 
         if self.state_store:
             await self.state_store.update_performance_metrics(symbol, quantity_dec, price_dec)
+
+        if self.ledger_engine:
+            # Institutional Double-Entry: Fill Amount + Contra-Account Offset
+            fill_amount = float(-quantity_dec * price_dec)
+            fee_amount = float(fill_event.payload.fee or 0)
+            
+            # Asset Entry (e.g., USD Balance change)
+            entry_cash = LedgerEntry(
+                tx_id=str(trace_id),
+                asset="USD",
+                amount=fill_amount - fee_amount,
+                entry_type="TRADE",
+            )
+            # Contra Entry (Internal Settlement Offset to satisfy Double-Entry sum=0)
+            entry_contra = LedgerEntry(
+                tx_id=str(trace_id),
+                asset="SETTLEMENT",
+                amount=-(fill_amount - fee_amount),
+                entry_type="CONTRA",
+            )
+            
+            from qtrader_core import Transaction
+            tx = Transaction(entries=[entry_cash, entry_contra])
+            
+            try:
+                self.ledger_engine.record_transaction(tx)
+                logger.debug(f"ORCHESTRATOR_LEDGER | Recorded ATOMIC transaction | Trace: {trace_id}")
+            except Exception as e:
+                logger.error(f"ORCHESTRATOR_LEDGER_FAILURE | Transaction rejected: {e}")
 
         await self.feedback_engine.process_fill(fill_event)
 

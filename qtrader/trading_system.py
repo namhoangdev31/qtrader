@@ -56,6 +56,8 @@ from qtrader.risk.dynamic_guardrail import DynamicGuardrailManager
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.strategy.manager import StrategyManager
 from qtrader.strategy.signal_engine import SignalEngine
+from qtrader.oms.oms_adapter import ExecutionOMSAdapter
+from qtrader.core.types import AllocationWeights, RiskMetrics
 
 @dataclass
 class TradingSystemConfig:
@@ -118,11 +120,18 @@ class TradingSystem:
         self.broker = CoinbaseBrokerAdapter(simulate=self.config.simulate, kill_switch=self.kill_switch)
         self.broker.set_market_data_handler(self._on_market_data_update)
 
+        self.oms = UnifiedOMS(state_store=self.state_store, event_bus=self.event_bus)
+        
+        self.oms_adapter = ExecutionOMSAdapter(
+            exchange_adapters={"coinbase": self.broker},
+            oms=self.oms,
+            routing_mode="smart",
+            name="MainExecutionOMSAdapter"
+        )
+        
         self.allocator = CapitalAllocationEngine(max_cap=Decimal("0.2"))
         self.guardrail_manager = DynamicGuardrailManager()
         self.atr_indicator = ATRFeature(window=settings.ts_atr_window)
-        self.oms = UnifiedOMS(state_store=self.state_store, event_bus=self.event_bus)
-        self.oms.add_venue("coinbase", self.broker)
         
         self.recon = ReconciliationEngine(
             event_bus=self.event_bus, oms=self.oms, state_store=self.state_store,
@@ -166,6 +175,7 @@ class TradingSystem:
         await self.broker.start_websocket()
         await self.event_bus.start()
         await embedding_manager.start()
+        await self.oms_adapter.start()
         
         balance = await self.broker.get_paper_balance()
         self.session_state.session_id = await self.db_writer.start_session(
@@ -188,6 +198,7 @@ class TradingSystem:
         await self.event_bus.stop()
         await self.broker.close()
         await embedding_manager.stop()
+        await self.oms_adapter.stop()
         
         if self.active_session_id:
             balance = await self.broker.get_paper_balance()
@@ -264,11 +275,31 @@ class TradingSystem:
         return {"decision": res.decision, "chronos": res.chronos_forecast, "tabpfn": res.tabpfn_risk}
 
     async def _execute_order(self, signal: dict[str, Any]) -> None:
-        order = OrderEvent(source="TS", event_type=EventType.ORDER, payload=OrderPayload(
-            order_id=str(uuid4()), symbol=signal["symbol"], action=signal["side"],
-            quantity=Decimal(str(signal["position_size_multiplier"])), session_id=self.active_session_id
-        ))
-        await self.broker.submit_order(order)
+        symbol = signal["symbol"]
+        qty = Decimal(str(signal["position_size_multiplier"]))
+        
+        account = await self.broker.get_paper_balance()
+        equity = Decimal(str(account.get("equity", self.config.max_position_usd)))
+        
+        weight = qty / equity if equity > 0 else Decimal("0")
+        
+        weights = AllocationWeights(
+            timestamp=datetime.now(),
+            weights={symbol: weight},
+            trace_id=str(uuid4())
+        )
+        
+        risk = RiskMetrics(
+            timestamp=datetime.now(),
+            portfolio_var=Decimal("0.02"), 
+            portfolio_volatility=Decimal("0.01"),
+            max_drawdown=Decimal(str(self.config.max_drawdown_pct)),
+            leverage=Decimal("1.0"),
+            trace_id=weights.trace_id
+        )
+
+        await self.oms_adapter.create_order(weights, risk)
+        
         self._stats["orders"] += 1
 
     async def _execute_exit(self, symbol: str, signal: dict[str, Any]) -> None:

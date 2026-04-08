@@ -45,6 +45,29 @@ class OMSAdapter(ABC):
         """
         pass
 
+    def _get_highest_weight(self, allocation_weights: AllocationWeights) -> tuple[str | None, Decimal]:
+        """Helper to find the symbol with the highest allocation weight."""
+        symbol = None
+        max_weight = Decimal('0')
+        for sym, w in allocation_weights.weights.items():
+            if w > max_weight:
+                symbol = sym
+                max_weight = w
+        return symbol, max_weight
+
+    def _create_empty_order(self, timestamp: Any) -> OrderEvent:
+        """Helper to create a zero-quantity order event."""
+        from typing import Any
+        return OrderEvent(
+            order_id="NO_TRADE",
+            symbol="",
+            timestamp=timestamp,
+            order_type="MARKET",
+            side="BUY",
+            quantity=Decimal('0'),
+            metadata={"reason": "no_allocation"}
+        )
+
 
 # Simple implementation that creates market orders based on allocation
 class SimpleOMSAdapter(OMSAdapter):
@@ -58,50 +81,13 @@ class SimpleOMSAdapter(OMSAdapter):
         allocation_weights: AllocationWeights, 
         risk_metrics: RiskMetrics
     ) -> OrderEvent:
-        """Create market orders based on allocation weights (simple implementation).
-        
-        Args:
-            allocation_weights: Portfolio allocation weights
-            risk_metrics: Current risk metrics
-            
-        Returns:
-            OrderEvent to be submitted to the OMS
-        """
-        # In a real implementation, this would:
-        # 1. Check risk limits
-        # 2. Convert weights to target positions
-        # 3. Calculate order sizes based on current positions
-        # 4. Apply execution algorithms (TWAP, VWAP, etc.)
-        # 5. Handle fractional shares, minimum order sizes, etc.
-        
-        # For now, we just create a simple market order for the first symbol
-        # with weight > 0
-        symbol = None
-        weight = Decimal('0')
-        
-        for sym, w in allocation_weights.weights.items():
-            if w > weight:
-                symbol = sym
-                weight = w
+        """Create market orders based on allocation weights."""
+        symbol, weight = self._get_highest_weight(allocation_weights)
         
         if symbol is None or weight <= Decimal('0'):
-            # No allocation to trade
-            return OrderEvent(
-                order_id="NO_TRADE",
-                symbol="",
-                timestamp=allocation_weights.timestamp,
-                order_type="MARKET",
-                side="BUY",  # Default, but quantity will be 0
-                quantity=Decimal('0'),
-                metadata={"reason": "no_allocation"}
-            )
+            return self._create_empty_order(allocation_weights.timestamp)
         
-        # Simple order sizing: use weight as percentage of portfolio
-        # In reality, this would be based on portfolio value and risk limits
-        order_size = weight  # Simplified
-        
-        # Determine side based on signal (this would come from strategy in reality)
-        # For now, assume long positions only
+        # Determine side assuming long-only for Simple implementation
         side = "BUY"
         
         return OrderEvent(
@@ -110,21 +96,20 @@ class SimpleOMSAdapter(OMSAdapter):
             timestamp=allocation_weights.timestamp,
             order_type="MARKET",
             side=side,
-            quantity=order_size,
-        metadata={
-            "allocated_weight": float(weight),
-            "risk_metrics": {
-                "portfolio_var": float(risk_metrics.portfolio_var),
-                "portfolio_volatility": float(risk_metrics.portfolio_volatility),
+            quantity=weight,  # Using weight as simplified size
+            metadata={
+                "allocated_weight": float(weight),
+                "risk_metrics": {
+                    "portfolio_var": float(risk_metrics.portfolio_var),
+                    "portfolio_volatility": float(risk_metrics.portfolio_volatility),
+                }
             }
-        }
-    )
+        )
 
     async def cancel_all_orders(self) -> None:
         """Cancel all open orders (simple implementation)."""
         self.logger.info("Cancelling all open orders (simple implementation)")
         # In a real implementation, we would call the OMS to cancel all orders
-        # For now, we just log the action
         pass
 
 
@@ -220,30 +205,13 @@ class ExecutionOMSAdapter(OMSAdapter):
             await self.start()
 
         # Find the symbol with the highest weight
-        symbol = None
-        weight = Decimal('0')
-        for sym, w in allocation_weights.weights.items():
-            if w > weight:
-                symbol = sym
-                weight = w
+        symbol, weight = self._get_highest_weight(allocation_weights)
 
         if symbol is None or weight <= Decimal('0'):
-            # No allocation to trade
-            return OrderEvent(
-                order_id="NO_TRADE",
-                symbol="",
-                timestamp=allocation_weights.timestamp,
-                order_type="MARKET",
-                side="BUY",
-                quantity=Decimal('0'),
-                metadata={"reason": "no_allocation"}
-            )
+            return self._create_empty_order(allocation_weights.timestamp)
 
-        # Simple order sizing: use weight as percentage of portfolio
-        order_size = weight  # Simplified
-
-        # Determine side based on signal (this would come from strategy in reality)
-        # For now, assume long positions only
+        # Simple order sizing and side (assuming long-only)
+        order_size = weight
         side = "BUY"
 
         # Create the OrderEvent
@@ -264,7 +232,7 @@ class ExecutionOMSAdapter(OMSAdapter):
             }
         )
 
-        # [OMS_STATE_CENTRALIZATION]: Persist order to central OMS
+        # [OMS_STATE_CENTRALIZATION]: Persist order to central OMS (delegated to Rust)
         await self.oms.create_order(order_event)
 
         self.logger.debug(f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}")
@@ -287,18 +255,15 @@ class ExecutionOMSAdapter(OMSAdapter):
                 self.logger.warning(f"Order {order_event.order_id} submission failed: {result}")
         except Exception as e:
             self.logger.error(f"Error submitting order {order_event.order_id}: {e}", exc_info=True)
-            # Update status to error for future recovery
-            await self.state_store.update_order(order_event.order_id, lambda x: setattr(x, "status", "ERROR"))
+            # Standardize on REJECTED for failed submissions in Rust FSM
+            await self.oms.on_reject(order_event.order_id, f"Submission Error: {str(e)}")
 
     async def cancel_all_orders(self) -> None:
-        """Cancel all open orders (delegated to execution engine)."""
+        """Cancel all open orders via UnifiedOMS."""
         self.logger.info("Cancelling all open orders via ExecutionOMSAdapter")
         
-        # [OMS_STATE_CENTRALIZATION]: Iterate and cancel all active orders tracked in state store
-        active_orders = await self.state_store.get_active_orders()
-        for order_id, order in active_orders.items():
-            if order.status in ["PENDING", "PARTIAL"]:
-                # In a real system, we would call a specific exchange cancellation method
-                self.logger.info(f"Initiating cancellation for tracked order: {order_id}")
-                # For now, mark as cancelled in the state store
-                await self.state_store.update_order(order_id, lambda x: setattr(x, "status", "CANCELLED"))
+        # Delegate to UnifiedOMS to ensure FSM and StateStore are synchronized
+        active_orders = await self.oms.get_active_orders()
+        for order_id in active_orders.keys():
+            await self.oms.cancel_order(order_id)
+            self.logger.info(f"Initiated cancellation for order: {order_id}")

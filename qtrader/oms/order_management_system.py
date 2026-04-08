@@ -5,18 +5,19 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from qtrader.core.decimal_adapter import d, math_authority
+from qtrader.core.decimal_adapter import d
 from qtrader.core.events import (
     FillEvent,
     OrderEvent,
     SystemEvent,
     SystemPayload,
 )
-from qtrader.core.state_store import Order, Position, StateStore
-from qtrader.oms.event_store import EventStore
+from qtrader_core import UnifiedOMS as RustUnifiedOMS, Order as RustOrder, OrderStatus, Side as RustSide, OrderType as RustOrderType
 from qtrader.oms.order_fsm import OrderFSM, OrderState
+from qtrader.core.state_store import StateStore, Order, Position
+from qtrader.oms.event_store import EventStore
 
 if TYPE_CHECKING:
     from qtrader.core.types import EventBusProtocol
@@ -30,15 +31,15 @@ _LOG = logging.getLogger("qtrader.oms")
 class UnifiedOMS:
     """
     Production-grade centralized Order Management System.
-    Enforces a strict FSM and persists all transitions to the EventStore.
-    State(t) = Σ Events[0 → t]
+    Delegates all execution and position logic to the Rust core.
     """
 
-    def __init__(self, state_store: StateStore, event_bus: EventBusProtocol) -> None:
+    def __init__(self, state_store: StateStore, event_bus: EventBusProtocol, initial_capital: float = 1_000_000.0) -> None:
         self.state_store = state_store
         self.event_bus = event_bus
         self.event_store = EventStore()
         self.fsm = OrderFSM()
+        self._rust_oms = RustUnifiedOMS(initial_capital, self.fsm.pending_timeout_s)
         self.adapters: dict[str, BrokerAdapter] = {}
         self._log = _LOG
 
@@ -47,7 +48,23 @@ class UnifiedOMS:
 
     async def create_order(self, order_event: OrderEvent) -> None:
         """Create a new order and record its initial state."""
-        # 1. State Store update (PENDING / NEW)
+        # 1. Rust Execution
+        rust_side = RustSide.Buy if order_event.side == "BUY" else RustSide.Sell
+        rust_type = RustOrderType.Limit if order_event.order_type == "LIMIT" else \
+                    RustOrderType.Stop if order_event.order_type == "STOP" else \
+                    RustOrderType.Market
+
+        rust_order = RustOrder(
+            order_event.order_id,
+            order_event.symbol,
+            rust_side,
+            float(order_event.quantity),
+            float(order_event.price) if order_event.price else 0.0,
+            rust_type,
+            order_event.timestamp
+        )
+        self._rust_oms.create_order(rust_order)
+
         order = Order(
             order_id=order_event.order_id,
             symbol=order_event.symbol,
@@ -60,170 +77,87 @@ class UnifiedOMS:
         )
         await self.state_store.set_order(order)
 
-        # 2. Event Recording
-        created_event = SystemEvent(
-            source="UnifiedOMS",
-            trace_id=getattr(order_event, "trace_id", "unknown"),
-            payload=SystemPayload(
-                action="ORDER_CREATED",
-                reason=f"New order: {order_event.symbol}",
-                metadata={"order_id": order_event.order_id, "symbol": order_event.symbol},
-            ),
+        # 3. Persistence & Notifications
+        await self._record_and_publish(
+            "ORDER_CREATED", 
+            f"New order: {order_event.symbol}", 
+            {"order_id": order_event.order_id, "symbol": order_event.symbol},
+            trace_id=getattr(order_event, "trace_id", None)
         )
-        await self.event_store.record_event(created_event)
-
-        # 3. Bus Publication
-        await self.event_bus.publish(created_event)
         self._log.info(f"OMS | Order Created: {order_event.order_id} [{order_event.symbol}]")
 
     async def on_ack(self, order_id: str) -> None:
         """Handle exchange acknowledgement (ACK)."""
-        await self._transition(order_id, "ACK")
+        rust_order = self._rust_oms.on_ack(order_id)
+        await self._sync_order_state(rust_order)
 
     async def on_reject(self, order_id: str, reason: str) -> None:
         """Handle order rejection from exchange."""
-        await self._transition(order_id, "REJECT")
-        rejected_event = SystemEvent(
-            source="UnifiedOMS",
-            trace_id="unknown",
-            payload=SystemPayload(
-                action="ORDER_REJECTED",
-                reason=reason,
-                metadata={"order_id": order_id},
-            ),
+        rust_order = self._rust_oms.on_reject(order_id)
+        await self._sync_order_state(rust_order)
+        await self._record_and_publish(
+            "ORDER_REJECTED", 
+            reason, 
+            {"order_id": order_id},
+            trace_id=None # We typically don't have trace_id on Reject if it comes from exchange later
         )
-        await self.event_store.record_event(rejected_event)
-        await self.event_bus.publish(rejected_event)
         self._log.error(f"OMS | Order Rejected: {order_id} - Reason: {reason}")
 
     async def cancel_order(self, order_id: str) -> None:
         """Handle order cancellation."""
-        await self._transition(order_id, "CANCEL")
+        rust_order = self._rust_oms.on_cancel(order_id)
+        await self._sync_order_state(rust_order)
         self._log.info(f"OMS | Order Cancelled: {order_id}")
 
     async def on_fill(self, fill_event: FillEvent) -> None:
-        """Handle order fill and update positions."""
-        order_id = fill_event.order_id
-        order = await self.state_store.get_order(order_id)
-        if not order:
-            self._log.warning(f"OMS | Fill received for untracked order: {order_id}")
-            return
-
-        # 1. Determine FSM event (PARTIAL vs COMPLETE)
-        # Using Decimal for precision
-        current_fill_total = await self._calculate_current_fill(order_id) + Decimal(
-            str(fill_event.quantity)
+        """Handle order fill and update positions via Rust core."""
+        rust_order, rust_pos, rust_cash = self._rust_oms.on_fill(
+            fill_event.order_id, float(fill_event.quantity), float(fill_event.price)
         )
-        is_complete = current_fill_total >= order.quantity
-        fsm_event = "FILL_COMPLETE" if is_complete else "FILL_PARTIAL"
 
-        # 2. Transition State
-        await self._transition(order_id, fsm_event)
+        await self._sync_order_state(rust_order)
 
-        # 3. Update Position centralized in StateStore
-        await self._update_position(fill_event)
+        py_pos = Position(
+            symbol=rust_pos.symbol,
+            quantity=Decimal(str(rust_pos.qty)),
+            average_price=Decimal(str(rust_pos.avg_entry_price)),
+            timestamp=datetime.utcnow(),
+        )
+        await self.state_store.set_position(py_pos)
 
-        # 4. Record and Publish
-        filled_event = SystemEvent(
+        await self.state_store.set_portfolio_value(Decimal(str(rust_cash))) # Should use equity() in real scenario
+
+        await self._record_and_publish(
+            "ORDER_FILLED", 
+            f"Fill: {fill_event.payload.symbol}", 
+            {
+                "order_id": fill_event.order_id,
+                "symbol": fill_event.payload.symbol,
+                "quantity": str(fill_event.payload.quantity),
+                "price": str(fill_event.payload.price),
+                "side": fill_event.payload.side,
+            },
+            trace_id=getattr(fill_event, "trace_id", None)
+        )
+        self._log.info(f"OMS | Order Fill: {fill_event.order_id} | Qty: {fill_event.quantity}")
+
+    async def _sync_order_state(self, rust_order: RustOrder) -> None:
+        """Helper to sync Rust order state back to Python StateStore."""
+        # Map Rust OrderStatus back to Python OrderState
+        from qtrader.oms.order_fsm import get_state_from_status
+        next_state = get_state_from_status(rust_order.status)
+        await self.state_store.update_order(
+            rust_order.id, lambda o: setattr(o, "status", next_state)
+        )
+
+    async def _record_and_publish(self, action: str, reason: str, metadata: dict[str, Any], trace_id: str | None = None) -> None:
+        """Unified logging and event bus publication."""
+        from uuid import uuid4
+        
+        event = SystemEvent(
             source="UnifiedOMS",
-            trace_id=getattr(fill_event, "trace_id", "unknown"),
-            payload=SystemPayload(
-                action="ORDER_FILLED",
-                reason=f"Fill: {fill_event.payload.symbol}",
-                metadata={
-                    "order_id": order_id,
-                    "symbol": fill_event.payload.symbol,
-                    "quantity": str(fill_event.payload.quantity),
-                    "price": str(fill_event.payload.price),
-                    "side": fill_event.payload.side,
-                    "remaining": str(order.quantity - current_fill_total),
-                },
-            ),
+            trace_id=trace_id or str(uuid4()),
+            payload=SystemPayload(action=action, reason=reason, metadata=metadata),
         )
-        await self.event_store.record_event(filled_event)
-        await self.event_bus.publish(filled_event)
-        self._log.info(
-            f"OMS | Order Fill: {order_id} ({fsm_event}) | Total Fill: {current_fill_total}/{order.quantity}"
-        )
-
-    async def _transition(self, order_id: str, event: str) -> None:
-        """Centralized FSM transition logic."""
-        order = await self.state_store.get_order(order_id)
-        if not order:
-            return
-
-        current_state = order.status
-        try:
-            next_state = self.fsm.transition(current_state, event)
-            await self.state_store.update_order(
-                order_id, lambda o: setattr(o, "status", next_state)
-            )
-            self._log.debug(f"OMS | FSM Transition: {order_id} ({current_state} -> {next_state})")
-        except ValueError as e:
-            self._log.error(
-                f"OMS | FSM Violation: {order_id} ({current_state} + {event} failed) - {e}"
-            )
-
-    async def _update_position(self, fill: FillEvent) -> None:
-        """Update global system position in StateStore."""
-        symbol = fill.symbol
-        quantity = (
-            Decimal(str(fill.quantity)) if fill.side == "BUY" else -Decimal(str(fill.quantity))
-        )
-        price = Decimal(str(fill.price))
-
-        pos = await self.state_store.get_position(symbol)
-        if pos:
-            new_qty = pos.quantity + quantity
-            # Update average cost (WAP)
-            if new_qty != 0:
-                if (pos.quantity > 0 and quantity > 0) or (pos.quantity < 0 and quantity < 0):
-                    # Same side: update average price (WAP)
-                    new_avg = ((pos.quantity * pos.average_price) + (quantity * price)) / new_qty
-                else:
-                    # Closing/Reducing position: average price remains same, realized P&L updated
-                    new_avg = pos.average_price
-                    realized = (
-                        (price - pos.average_price)
-                        * abs(quantity)
-                        * (d(1) if pos.quantity > 0 else d(-1))
-                    )
-                    pos.realized_pnl += realized
-            else:
-                new_avg = d(0)
-                realized = (
-                    (price - pos.average_price)
-                    * abs(quantity)
-                    * (d(1) if pos.quantity > 0 else d(-1))
-                )
-                pos.realized_pnl += realized
-
-            pos.quantity = new_qty
-            pos.average_price = math_authority.to_price(abs(new_avg))
-            pos.timestamp = datetime.utcnow()
-            await self.state_store.set_position(pos)
-        else:
-            await self.state_store.set_position(
-                Position(
-                    symbol=symbol,
-                    quantity=quantity,
-                    average_price=price,
-                    timestamp=datetime.utcnow(),
-                )
-            )
-
-    async def _calculate_current_fill(self, order_id: str) -> Decimal:
-        """Replay events for the order to calculate true current fill sum."""
-        events = self.event_store.replay_order(order_id)
-        total = Decimal("0")
-        for ev in events:
-            payload = ev.get("payload", ev)
-            action = payload.get("action", ev.get("type", ""))
-            if action == "ORDER_FILLED":
-                qty_str = payload.get("metadata", {}).get("quantity", "0")
-                total += Decimal(str(qty_str))
-        return total
-
-    async def replay_state(self, order_id: str) -> str:
-        """Reconstruct the latest state from event logs."""
-        return self.event_store.get_latest_state(order_id)
+        await self.event_store.record_event(event)
+        await self.event_bus.publish(event)

@@ -58,7 +58,7 @@ impl TwapAlgo {
             for i in 0..to_execute {
                 self.next_order_id += 1;
                 let o = Order::new(
-                    self.next_order_id,
+                    self.next_order_id.to_string(),
                     symbol.to_string(),
                     *side,
                     slice_qty,

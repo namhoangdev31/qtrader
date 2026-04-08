@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import time
 from enum import Enum
+from qtrader_core import OrderFSM as RustOrderFSM, OrderStatus
 
 logger = logging.getLogger(__name__)
 
@@ -24,118 +25,61 @@ class OrderState(Enum):
     REJECTED = "REJECTED"
 
 
-# Pending states that require timeout monitoring
-PENDING_STATES = {OrderState.NEW.value, OrderState.ACK.value, OrderState.PARTIAL.value}
+# Mapping Python OrderState to Rust OrderStatus
+STATE_TO_STATUS = {
+    OrderState.NEW.value: OrderStatus.New,
+    OrderState.ACK.value: OrderStatus.Ack,
+    OrderState.PARTIAL.value: OrderStatus.Partial,
+    OrderState.FILLED.value: OrderStatus.Filled,
+    OrderState.CLOSED.value: OrderStatus.Closed,
+    OrderState.REJECTED.value: OrderStatus.Rejected,
+}
 
-# Default timeout for pending states (seconds)
-DEFAULT_PENDING_TIMEOUT_S = 30.0
+def get_state_from_status(status: OrderStatus) -> str:
+    """Helper to find OrderState value from Rust OrderStatus variant."""
+    for state_val, rust_status in STATE_TO_STATUS.items():
+        if rust_status == status:
+            return state_val
+    raise ValueError(f"Unknown status: {status}")
 
 
 class OrderFSM:
-    """Strict Finite State Machine for order lifecycle management.
+    """High-performance Order FSM using Rust Core."""
 
-    Transitions:
-        NEW → ACK → PARTIAL → FILLED → CLOSED
-               ↘ REJECTED
-
-    Timeout: Pending states (NEW, ACK, PARTIAL) auto-expire after
-    configurable timeout, emitting a TIMEOUT event for reconciliation.
-    """
-
-    def __init__(self, pending_timeout_s: float = DEFAULT_PENDING_TIMEOUT_S) -> None:
+    def __init__(self, pending_timeout_s: float = 30.0) -> None:
         self.pending_timeout_s = pending_timeout_s
+        self._rust_fsm = RustOrderFSM(pending_timeout_s)
         self._state_timestamps: dict[str, float] = {}
 
     def transition(self, current_state: str, event: str) -> str:
-        """
-        Transition function: State(t+1) = Transition(State(t), Event).
+        status = STATE_TO_STATUS.get(current_state)
+        if status is None:
+            raise ValueError(f"Unknown state: {current_state}")
 
-        Args:
-            current_state: Current order state.
-            event: Transition event.
-
-        Returns:
-            New state after transition.
-
-        Raises:
-            ValueError: On invalid transition.
-        """
-        if current_state == OrderState.NEW.value:
-            if event == "ACK":
-                return OrderState.ACK.value
-            if event == "REJECT":
-                return OrderState.REJECTED.value
-
-        if current_state == OrderState.ACK.value:
-            if event == "FILL_PARTIAL":
-                return OrderState.PARTIAL.value
-            if event == "FILL_COMPLETE":
-                return OrderState.FILLED.value
-            if event == "CANCEL":
-                return OrderState.CLOSED.value
-            if event == "REJECT":
-                return OrderState.REJECTED.value
-
-        if current_state == OrderState.PARTIAL.value:
-            if event == "FILL_PARTIAL":
-                return OrderState.PARTIAL.value
-            if event == "FILL_COMPLETE":
-                return OrderState.FILLED.value
-            if event == "CANCEL":
-                return OrderState.CLOSED.value
-
-        # Terminal states are immutable
-        if current_state in (
-            OrderState.FILLED.value,
-            OrderState.CLOSED.value,
-            OrderState.REJECTED.value,
-        ):
-            logger.warning(f"OrderFSM | Terminal state {current_state} — ignoring event {event}")
-            return current_state
-
-        raise ValueError(f"Invalid transition from {current_state} on event {event}")
+        try:
+            new_status = self._rust_fsm.transition(status, event)
+            return get_state_from_status(new_status)
+        except Exception as e:
+            raise ValueError(str(e))
 
     def record_state_entry(self, order_id: str, state: str) -> None:
-        """Record the timestamp when an order enters a state."""
         self._state_timestamps[order_id] = time.time()
-        if state not in PENDING_STATES:
-            # Clean up timestamp for terminal states
+        if state in ("FILLED", "CLOSED", "REJECTED"):
             self._state_timestamps.pop(order_id, None)
 
     def check_timeout(self, order_id: str) -> bool:
-        """Check if an order has exceeded the pending state timeout.
-
-        Args:
-            order_id: Order to check.
-
-        Returns:
-            True if the order has timed out.
-        """
         entry_time = self._state_timestamps.get(order_id)
         if entry_time is None:
             return False
 
         elapsed = time.time() - entry_time
         if elapsed > self.pending_timeout_s:
-            logger.warning(
-                f"OrderFSM | TIMEOUT | Order {order_id} in pending state "
-                f"for {elapsed:.1f}s (limit: {self.pending_timeout_s}s)"
-            )
+            logger.warning(f"OrderFSM | TIMEOUT | Order {order_id} elapsed {elapsed:.1f}s")
             return True
-
         return False
 
     def get_pending_orders(self, order_ids: list[str]) -> list[str]:
-        """Return order IDs that are currently in pending states.
-
-        Args:
-            order_ids: List of order IDs to check.
-
-        Returns:
-            List of order IDs still in pending states.
-        """
         return [oid for oid in order_ids if oid in self._state_timestamps]
 
     def cleanup(self, order_id: str) -> None:
-        """Remove order from timeout tracking (called on terminal state)."""
         self._state_timestamps.pop(order_id, None)

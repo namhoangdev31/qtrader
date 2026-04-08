@@ -95,7 +95,7 @@ pub fn run_hft_simulation(
 
     let n = ts_slice.len();
     let mut equity_curve = Vec::with_capacity(n);
-    let mut open_orders: HashMap<u64, Order> = HashMap::new();
+    let mut open_orders: HashMap<String, Order> = HashMap::new();
     let mut order_id_counter = 0;
     let mut peak_equity = config.initial_capital;
 
@@ -139,13 +139,14 @@ pub fn run_hft_simulation(
             let order_price = if sig > 0.0 { ask } else { bid }; // Aggressive market fill
 
             order_id_counter += 1;
+            let order_id = order_id_counter.to_string();
             let order = Order::new(
-                order_id_counter, symbol.clone(), side, target_qty, order_price,
+                order_id.clone(), symbol.clone(), side, target_qty, order_price,
                 crate::oms::OrderType::Market, ts
             );
 
             if risk.check_order(&order, &account, mid, peak_equity).is_ok() {
-                open_orders.insert(order_id_counter, order);
+                open_orders.insert(order_id, order);
             }
         }
     }
@@ -184,7 +185,7 @@ pub fn run_simulation_1d(
 
     let n = ts_slice.len();
     let mut equity_curve = Vec::with_capacity(n);
-    let mut open_orders: HashMap<u64, Order> = HashMap::new();
+    let mut open_orders: HashMap<String, Order> = HashMap::new();
     let mut order_id_counter = 0;
     let mut peak_equity = config.initial_capital;
 
@@ -216,9 +217,10 @@ pub fn run_simulation_1d(
             let qty = (current_eq * 0.1) / price;
             let side = if sig > 0.0 { Side::Buy } else { Side::Sell };
             order_id_counter += 1;
-            let order = Order::new(order_id_counter, symbol.clone(), side, qty, 0.0, crate::oms::OrderType::Market, ts);
+            let order_id = order_id_counter.to_string();
+            let order = Order::new(order_id.clone(), symbol.clone(), side, qty, 0.0, crate::oms::OrderType::Market, ts);
             if risk.check_order(&order, &account, price, peak_equity).is_ok() {
-                open_orders.insert(order_id_counter, order);
+                open_orders.insert(order_id, order);
             }
         }
     }

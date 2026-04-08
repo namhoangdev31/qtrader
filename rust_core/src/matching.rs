@@ -33,7 +33,7 @@ impl MatchingEngine {
         current_price: f64,
         tick_timestamp: i64,
     ) -> Option<(f64, f64, f64)> {
-        if order.status == OrderStatus::Filled || order.status == OrderStatus::Canceled {
+        if order.status == OrderStatus::Filled || order.status == OrderStatus::Closed {
             return None;
         }
         if tick_timestamp < order.timestamp_ms + self.latency_ms {
@@ -91,13 +91,13 @@ impl MatchingEngine {
     /// Internal: Process a HashMap of orders (used by simulator).
     pub fn match_orders(
         &self,
-        orders: &mut HashMap<u64, Order>,
+        orders: &mut HashMap<String, Order>,
         current_price: f64,
         tick_timestamp: i64,
-    ) -> Vec<(u64, f64, f64, f64)> {
+    ) -> Vec<(String, f64, f64, f64)> {
         let mut fills = Vec::new();
         for (id, order) in orders.iter_mut() {
-            if order.status == OrderStatus::Filled || order.status == OrderStatus::Canceled {
+            if order.status == OrderStatus::Filled || order.status == OrderStatus::Closed {
                 continue;
             }
             if tick_timestamp < order.timestamp_ms + self.latency_ms {
@@ -137,7 +137,7 @@ impl MatchingEngine {
                 order.alloc_price = exec_price;
                 order.status = OrderStatus::Filled;
                 let commission = exec_price * fill_qty * self.fee_rate;
-                fills.push((*id, fill_qty, exec_price, commission));
+                fills.push((id.clone(), fill_qty, exec_price, commission));
             }
         }
         fills

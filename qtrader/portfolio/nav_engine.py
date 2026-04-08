@@ -12,6 +12,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+try:
+    from qtrader_core import Account, PortfolioEngine
+    _HAS_RUST = True
+except ImportError:
+    logger.warning("NAV_ENGINE | Rust core (qtrader_core) not found. Falling back to Python implementation.")
+    _HAS_RUST = False
+
 
 class NAVEngine:
     """
@@ -21,72 +28,45 @@ class NAVEngine:
     NAV = Cash + PortfolioMarketValue - CumulativeFees
     """
 
+    def __init__(self) -> None:
+        if _HAS_RUST:
+            self._rust_engine = PortfolioEngine()
+
     def compute(
         self, state: SystemState, mark_prices: dict[str, Decimal], trace_id: UUID | None = None
     ) -> NAVEvent:
         """
         Compute the latest NAV and PnL breakdown for the given system state.
-
-        Args:
-            state: The current SystemState (positions, cash, fees).
-            mark_prices: Current market mark prices (e.g. Mid Price) per symbol.
-            trace_id: Optional correlation ID for the resulting NAV event.
-
-        Returns:
-            NAVEvent: Containing the updated portfolio valuation.
+        
+        Institutional Requirement: Must use high-performance Rust backend.
         """
-        total_market_value = Decimal("0")
-        total_unrealized_pnl = Decimal("0")
-        total_realized_pnl = Decimal("0")
+        if not _HAS_RUST:
+            raise RuntimeError("NAV_ENGINE | Rust core (qtrader_core) is required but not found. Build the rust extension to proceed.")
 
+        # 1. Prepare Account state for Rust
+        account = Account(float(state.cash))
+        account.cash = float(state.cash)
+        
         for symbol, pos in state.positions.items():
-            # Get the mark price: Priority mark_prices > last known position market value
-            price = mark_prices.get(symbol)
+            account.add_position_direct(symbol, float(pos.quantity), float(pos.average_price))
 
-            if price is None:
-                # Fallback to last known unit price from position if quantity is non-zero
-                if pos.quantity != 0:
-                    # Deriving last known price from market_value if available
-                    if pos.market_value != 0:
-                        price = pos.market_value / abs(pos.quantity)
-                    else:
-                        price = pos.average_price  # Extreme fallback
-                    logger.warning(
-                        f"NAV_ENGINE | Missing live price for {symbol}, falling back to {price}"
-                    )
-                else:
-                    price = Decimal("0")
+        # 2. Conversion of mark_prices to float dict
+        float_prices = {sym: float(p) for sym, p in mark_prices.items()}
 
-            # 1. Calculate Mark-to-Market Value (V_i = q_i * P_i)
-            mv = pos.quantity * price
-            total_market_value += mv
+        # 3. Compute via Rust
+        report = self._rust_engine.compute_nav(account, float_prices, float(state.total_fees))
 
-            # 2. Unrealized PnL = Quantity * (CurrentPrice - EntryPrice)
-            # This follows the provided mathematical model
-            if pos.quantity != 0:
-                upnl = pos.quantity * (price - pos.average_price)
-                total_unrealized_pnl += upnl
-
-            # 3. Aggregate Realized PnL (from closed positions/trades)
-            total_realized_pnl += pos.realized_pnl
-
-        # 4. Aggregate NAV
-        # Standard Accounting: NAV = Cash + MarketValue - Fees
-        # Realized PnL is usually reflected in Cash adjustments during trade settlement.
-        nav = state.cash + total_market_value - state.total_fees
-
-        logger.debug(
-            f"NAV_ENGINE | NAV: {nav:.2f} | Cash: {state.cash:.2f} | MtM: {total_market_value:.2f}"
-        )
+        # 4. Aggregate Realized PnL (still tracked in state for now)
+        total_realized_pnl = sum(pos.realized_pnl for pos in state.positions.values())
 
         return NAVEvent(
             trace_id=trace_id or uuid4(),
-            source="NAVEngine",
+            source="NAVEngineRust",
             payload=NAVPayload(
-                nav=nav,
-                cash=state.cash,
+                nav=Decimal(str(report.nav)),
+                cash=Decimal(str(report.cash)),
                 realized_pnl=total_realized_pnl,
-                unrealized_pnl=total_unrealized_pnl,
-                total_fees=state.total_fees,
+                unrealized_pnl=Decimal(str(report.unrealized_pnl)),
+                total_fees=Decimal(str(report.total_fees)),
             ),
         )

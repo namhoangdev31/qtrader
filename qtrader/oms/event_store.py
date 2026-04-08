@@ -8,6 +8,9 @@ from enum import Enum
 from typing import Any
 
 
+from qtrader_core import EventStore as RustEventStore
+
+
 class EventStore:
     """High-fidelity persistence layer for system events.
     
@@ -18,16 +21,19 @@ class EventStore:
     def __init__(self, log_path: str = "data/events/order_event_log.jsonl") -> None:
         self.log_path = log_path
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+        self._rust_store = RustEventStore(log_path)
         self._log = logging.getLogger("qtrader.oms.event_store")
 
     async def record_event(self, event: Any) -> None:
-        """Append a state-changing event to the persistent log."""
+        """Append a state-changing event to the persistent log via Rust."""
         try:
             event_dict = self._serialize(event)
             event_dict["timestamp"] = datetime.utcnow().isoformat()
             
-            with open(self.log_path, "a") as f:
-                f.write(json.dumps(event_dict) + "\n")
+            # Delegate I/O to Rust
+            json_payload = json.dumps(event_dict)
+            self._rust_store.record_event(json_payload)
+            
         except Exception as e:
             self._log.exception("Persistent event logging failed", exc_info=e)
 
@@ -116,7 +122,10 @@ class EventStore:
         return deltas
 
     def _serialize(self, obj: Any) -> Any:
-        """Deep serialization for events with Decimals/Enums."""
+        """Deep serialization for events with Decimals/Enums/Pydantic."""
+        if hasattr(obj, "model_dump"):
+            return self._serialize(obj.model_dump())
+        
         if is_dataclass(obj):
             return {k: self._serialize(v) for k, v in asdict(obj).items()}
         
@@ -134,5 +143,11 @@ class EventStore:
             res = obj.name
         elif isinstance(obj, datetime):
             res = obj.isoformat()
+        else:
+            # Handle UUID or any other type by converting to string if not serializable
+            try:
+                json.dumps(obj)
+            except (TypeError, OverflowError):
+                res = str(obj)
             
         return res

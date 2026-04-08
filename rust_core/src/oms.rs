@@ -18,16 +18,15 @@ pub enum OrderType {
     Stop,
 }
 
-/// Status of an order in the OMS.
 #[pyclass]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderStatus {
-    Pending,
-    Open,
-    PartialFill,
-    Filled,
-    Canceled,
-    Rejected,
+    New,       // NEW
+    Ack,       // ACK
+    Partial,   // PARTIAL
+    Filled,    // FILLED
+    Closed,    // CLOSED
+    Rejected,  // REJECTED
 }
 
 /// A standard execution order.
@@ -35,7 +34,7 @@ pub enum OrderStatus {
 #[derive(Debug, Clone)]
 pub struct Order {
     #[pyo3(get)]
-    pub id: u64,
+    pub id: String,
     #[pyo3(get)]
     pub symbol: String,
     #[pyo3(get)]
@@ -61,7 +60,7 @@ impl Order {
     #[new]
     #[pyo3(signature = (id, symbol, side, qty, price, order_type, timestamp_ms))]
     pub fn new(
-        id: u64,
+        id: String,
         symbol: String,
         side: Side,
         qty: f64,
@@ -76,7 +75,7 @@ impl Order {
             qty,
             price,
             order_type,
-            status: OrderStatus::Pending,
+            status: OrderStatus::New,
             filled_qty: 0.0,
             alloc_price: 0.0,
             timestamp_ms,

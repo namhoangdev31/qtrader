@@ -20,14 +20,13 @@ mod tests {
             50000.0,  // daily_loss_limit
         );
         
-        let mut engine = ExecutionEngine::new(&risk, RoutingMode::Smart, 3);
-        let account = Account::new(1000000.0);
-        let order = Order::new(1, "BTC/USDT".to_string(), Side::Buy, 0.1, 50000.0, OrderType::Limit, 1000);
+        let mut engine = ExecutionEngine::new(&risk, 1000000.0, RoutingMode::Smart, 3);
+        let order = Order::new("1".to_string(), "BTC/USDT".to_string(), Side::Buy, 0.1, 50000.0, OrderType::Limit, 1000);
         
         let mut market_data = HashMap::new();
         market_data.insert("BINANCE".to_string(), (49990.0, 50010.0));
         
-        let result = engine.execute_order(order, &account, 50000.0, 1000000.0, market_data);
+        let result = engine.execute_order(order, 1000000.0, market_data);
         assert!(result.is_ok());
         let routed = result.unwrap();
         assert_eq!(routed.len(), 1);
@@ -48,15 +47,14 @@ mod tests {
             50000.0,
         );
         
-        let mut engine = ExecutionEngine::new(&risk, RoutingMode::Smart, 3);
-        let account = Account::new(1000000.0);
+        let mut engine = ExecutionEngine::new(&risk, 1000000.0, RoutingMode::Smart, 3);
         // Order value $5000 > $1000 limit
-        let order = Order::new(1, "BTC/USDT".to_string(), Side::Buy, 0.1, 50000.0, OrderType::Limit, 1000);
+        let order = Order::new("2".to_string(), "BTC/USDT".to_string(), Side::Buy, 0.1, 50000.0, OrderType::Limit, 1000);
         
         let mut market_data = HashMap::new();
         market_data.insert("BINANCE".to_string(), (49990.0, 50010.0));
         
-        let result = engine.execute_order(order, &account, 50000.0, 1000000.0, market_data);
+        let result = engine.execute_order(order, 1000000.0, market_data);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Risk Check Failed"));
     }

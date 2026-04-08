@@ -179,7 +179,7 @@ impl SmartOrderRouter {
             let qty = split_qty.min(remaining);
             let mut sub_order = order.clone();
             sub_order.qty = qty;
-            sub_order.id += 1000 + i;
+            sub_order.id = format!("{}-{}", order.id, i);
 
             let exchange = self.select_exchange(&sub_order, market_data, liquidity_data);
             results.push((sub_order, exchange));
