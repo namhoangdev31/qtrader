@@ -4,9 +4,12 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
-
-_LOG = logging.getLogger("qtrader.risk.monitoring_engine")
+try:
+    import qtrader_core
+    stats_engine = qtrader_core.StatsEngine()
+except ImportError as e:
+    _LOG.error("[MONITOR] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
+    raise ImportError("qtrader_core is a mandatory dependency for institutional monitoring") from e
 
 
 @dataclass(slots=True, frozen=True)
@@ -24,11 +27,10 @@ class SystemMetrics:
 
 class MonitoringEngine:
     """
-    Principal Real-time Monitoring System.
+    Principal Real-time Monitoring System backed by Rust StatsEngine.
 
     Objective: Detect degradation in system health and strategic alpha
-    before it reaches critical risk thresholds. Provides continuous
-    situational awareness across performance, latency, and execution quality.
+    before it reaches critical risk thresholds.
     """
 
     def __init__(
@@ -41,13 +43,6 @@ class MonitoringEngine:
     ) -> None:
         """
         Initialize the Monitoring Engine parameters.
-
-        Args:
-            pnl_drift_threshold: Permissible deviation between real and model PnL.
-            latency_limit_ms: Hard threshold for execution latency alert.
-            max_slippage_bps: Ceiling for execution slippage alerts.
-            min_fill_rate: Floor for venue liquidity alerts.
-            history_window: Sample size for statistical anomaly detection.
         """
         self._pnl_thresh = pnl_drift_threshold
         self._lat_limit = latency_limit_ms
@@ -63,33 +58,27 @@ class MonitoringEngine:
 
     def monitor(self, metrics: SystemMetrics) -> list[str]:
         """
-        Continuously evaluate system signals for health degradation.
-
-        Args:
-            metrics: Standardized system health input.
-
-        Returns:
-            list[str]: Summary of active alerts triggered during this sampling.
+        Continuously evaluate system signals for health degradation via Rust Stats.
         """
         self._stats["evaluations"] += 1
         alerts: list[str] = []
 
-        # 1. PnL Drift Detection ($|PnL_{real} - PnL_{exp}| > \tau$)
+        # 1. PnL Drift Detection
         drift = abs(metrics.pnl_real - metrics.pnl_expected)
         if drift > self._pnl_thresh:
             alerts.append(f"PNL_DRIFT:{drift:.2f}")
 
         # 2. Latency Anomaly Detection
-        # Path A: Hard Limit Check
         if metrics.latency_ms > self._lat_limit:
             alerts.append(f"LATENCY_HARD_LIMIT:{metrics.latency_ms:.2f}ms")
 
-        # Path B: Statistical Z-Score (Anomaly detection on sliding window)
+        # Path B: Statistical Z-Score via Rust StatsEngine
         if len(self._latency_history) >= 20:  # noqa: PLR2004
-            mu = float(np.mean(self._latency_history))
-            sigma = float(np.std(self._latency_history))
-            if sigma > 1e-6:  # noqa: PLR2004
-                z_score = (metrics.latency_ms - mu) / sigma
+            mu = stats_engine.calculate_mean(self._latency_history)
+            sigma = stats_engine.calculate_std(self._latency_history)
+            
+            if sigma > 1e-9:
+                z_score = stats_engine.calculate_z_score(metrics.latency_ms, mu, sigma)
                 if z_score > 3.0:  # noqa: PLR2004
                     alerts.append(f"LATENCY_STAT_ANOMALY:Z={z_score:.2f}")
 
@@ -115,13 +104,14 @@ class MonitoringEngine:
 
     def get_health_report(self) -> dict[str, Any]:
         """
-        Generate industrial situational awareness report.
+        Generate industrial situational awareness report using Rust precision.
         """
         total = self._stats["evaluations"]
-        avg_lat = float(np.mean(self._latency_history)) if self._latency_history else 0.0
+        avg_lat = stats_engine.calculate_mean(self._latency_history) if self._latency_history else 0.0
         return {
             "status": "HEALTH_SUMMARY",
             "alert_count": self._stats["alerts"],
             "anomaly_rate": round(self._stats["alerts"] / total, 4) if total > 0 else 0.0,
             "avg_latency_ms": round(avg_lat, 2),
+            "engine": "RUST_STATS_CORE"
         }

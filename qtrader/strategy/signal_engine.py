@@ -9,6 +9,13 @@ from qtrader.core.session_state import SessionState
 
 logger = logging.getLogger("qtrader.strategy.signal")
 
+try:
+    import qtrader_core
+    HAS_RUST_CORE = True
+    sizing_engine = qtrader_core.SizingEngine()
+except ImportError:
+    HAS_RUST_CORE = False
+
 class SignalEngine:
     """Specialized engine for signal generation and logic validation.
     
@@ -24,7 +31,7 @@ class SignalEngine:
         ml_result: dict[str, Any], 
         is_exit_check: bool = False
     ) -> dict[str, Any] | None:
-        """Core signal generation logic using dynamic thresholds."""
+        """Core signal generation logic using dynamic thresholds and Kelly sizing."""
         decision = ml_result["decision"]
         action = str(
             decision.action.value if hasattr(decision.action, "value") else decision.action
@@ -38,7 +45,12 @@ class SignalEngine:
         if action == "HOLD" or confidence < threshold:
             return None
 
-        position_size = float(getattr(decision, "position_size_multiplier", 0.1))
+        base_size = float(getattr(decision, "position_size_multiplier", 0.1))
+        
+        kelly_multiplier = self._calculate_kelly_multiplier()
+        
+        position_size = base_size * kelly_multiplier
+        
         position_size = min(position_size, config_manager.get("POSITION_SIZE_PCT", 0.5))
 
         return {
@@ -46,8 +58,27 @@ class SignalEngine:
             "side": "BUY" if action == "BUY" else "SELL",
             "position_size_multiplier": position_size,
             "confidence": confidence,
+            "kelly_multiplier": kelly_multiplier,
             "reasoning": str(decision.reasoning),
         }
+
+    def _calculate_kelly_multiplier(self) -> float:
+        """Calculate Kelly-based multiplier from session performance."""
+        if not self.state.win_history:
+            return 1.0
+            
+        wins = sum(self.state.win_history)
+        total = len(self.state.win_history)
+        win_rate = wins / total
+        
+        win_loss_ratio = 2.0 
+        
+        if HAS_RUST_CORE:
+            fraction = config_manager.get("KELLY_FRACTION", 0.5)
+            kelly_f = sizing_engine.calculate_kelly_fraction(win_rate, win_loss_ratio, fraction)
+            return kelly_f * 2.0
+            
+        return win_rate
 
     def check_trend_confirmation(self, symbol: str, side: str, market_data_history: list[dict[str, float]]) -> bool:
         """Check if price trend confirms the signal direction."""

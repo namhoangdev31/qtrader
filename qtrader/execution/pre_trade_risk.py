@@ -22,6 +22,13 @@ from typing import Any
 
 logger = logging.getLogger("qtrader.execution.pre_trade_risk")
 
+try:
+    import qtrader_core
+    from qtrader.core.oms import Side as RustSide
+    HAS_RUST_CORE = True
+except ImportError:
+    HAS_RUST_CORE = False
+
 
 @dataclass(slots=True)
 class PreTradeRiskConfig:
@@ -87,6 +94,19 @@ class PreTradeRiskValidator:
         self._total_validated: int = 0
         self._total_rejected: int = 0
         self._rejection_reasons: dict[str, int] = {}
+
+        # 10. High-Performance Rust Core Initialization
+        if HAS_RUST_CORE:
+            self._rust_engine = qtrader_core.RiskEngine(
+                max_position_usd=float(self.config.max_position_per_symbol * (self.config.max_order_notional / self.config.max_order_quantity)), # Approximation
+                max_drawdown_pct=float(self.config.max_concentration_pct), # Using concentration as proxy for simple pos limit
+                max_order_qty=float(self.config.max_order_quantity),
+                max_order_notional=float(self.config.max_order_notional),
+                max_orders_per_second=int(self.config.max_orders_per_second),
+                max_price_deviation_pct=float(self.config.max_price_deviation_pct),
+            )
+            # Override specialized max_position_usd if we have it
+            self._rust_engine.max_position_usd = float(self.config.max_total_exposure)
 
     def set_kill_switch_active(self, active: bool) -> None:
         """Update kill switch status."""
@@ -191,25 +211,59 @@ class PreTradeRiskValidator:
             else:
                 checks_passed.append("CONCENTRATION_OK")
 
-        # Check 7: Order rate limit (per second)
-        now = time.time()
-        self._order_timestamps.append(now)
-        recent_1s = sum(1 for t in self._order_timestamps if now - t < 1.0)
-        if recent_1s > self.config.max_orders_per_second:
-            checks_failed.append(
-                f"RATE_LIMIT_1S: {recent_1s} > {self.config.max_orders_per_second}"
-            )
-        else:
-            checks_passed.append("RATE_LIMIT_1S_OK")
+        # ------------------------------------------------------------------
+        # Performance Gating: Rust Acceleration Path (< 100μs)
+        # ------------------------------------------------------------------
+        if HAS_RUST_CORE:
+            from qtrader.core.oms import Order as RustOrder
+            from qtrader.core.oms import Account as RustAccount
+            from qtrader.core.oms import Side as RustSide
+            from qtrader.core.oms import OrderType as RustOrderType
 
-        # Check 8: Order rate limit (per minute)
-        recent_60s = sum(1 for t in self._order_timestamps if now - t < 60.0)
-        if recent_60s > self.config.max_orders_per_minute:
-            checks_failed.append(
-                f"RATE_LIMIT_60S: {recent_60s} > {self.config.max_orders_per_minute}"
+            # Build mock context for Rust engine
+            rust_side = RustSide.Buy if side.upper() == "BUY" else RustSide.Sell
+            order_price_f = float(price or self._mid_prices.get(symbol, Decimal("0")))
+            
+            # Create lightweight Rust order object
+            rust_order = RustOrder(
+                0, symbol, rust_side, float(quantity), order_price_f,
+                RustOrderType.Limit if price else RustOrderType.Market,
+                int(time.time() * 1000)
             )
+            
+            # Create lightweight Account snapshot
+            rust_account = RustAccount(float(self._portfolio_value))
+            # We must sync positions for concentration checks
+            for sym, qty in self._positions.items():
+                rust_account.add_position_direct(sym, float(qty), float(self._mid_prices.get(sym, Decimal("0"))))
+
+            try:
+                self._rust_engine.check_order(rust_order, rust_account, order_price_f, float(self._portfolio_value))
+                checks_passed.extend(["RUST_RATE_LIMIT_OK", "RUST_FAT_FINGER_OK", "RUST_POSITION_OK"])
+            except ValueError as e:
+                checks_failed.append(f"RUST_RISK_REJECT: {str(e)}")
+
         else:
-            checks_passed.append("RATE_LIMIT_60S_OK")
+            # Legacy Python Logic (Fallback)
+            # Check 7: Order rate limit (per second)
+            now = time.time()
+            self._order_timestamps.append(now)
+            recent_1s = sum(1 for t in self._order_timestamps if now - t < 1.0)
+            if recent_1s > self.config.max_orders_per_second:
+                checks_failed.append(
+                    f"RATE_LIMIT_1S: {recent_1s} > {self.config.max_orders_per_second}"
+                )
+            else:
+                checks_passed.append("RATE_LIMIT_1S_OK")
+
+            # Check 8: Order rate limit (per minute)
+            recent_60s = sum(1 for t in self._order_timestamps if now - t < 60.0)
+            if recent_60s > self.config.max_orders_per_minute:
+                checks_failed.append(
+                    f"RATE_LIMIT_60S: {recent_60s} > {self.config.max_orders_per_minute}"
+                )
+            else:
+                checks_passed.append("RATE_LIMIT_60S_OK")
 
         # Final decision
         approved = len(checks_failed) == 0

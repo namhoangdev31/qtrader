@@ -19,22 +19,22 @@ __all__ = ["RealTimeRiskEngine"]
 
 _LOG = logging.getLogger("qtrader.risk.realtime")
 
+try:
+    import qtrader_core
+    from qtrader_core import RiskEngine, WarModeState
+    stats_engine = qtrader_core.StatsEngine()
+    math_engine = qtrader_core.MathEngine()
+except ImportError as e:
+    _LOG.error("[RISK] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
+    raise ImportError("qtrader_core is a mandatory dependency for institutional risk management") from e
+
 
 @dataclass(slots=True)
 class RealTimeRiskEngine:
-    """Real-time portfolio risk monitor.
+    """Real-time portfolio risk monitor using high-performance Rust core.
 
     Tracks positions, PnL history and derived risk measures. Limit checks are
-    pure computations; asynchronous publication of `RiskEvent` instances to the
-    `EventBus` is handled via :meth:`publish_breaches`.
-
-    Attributes:
-        positions: Positions DataFrame with columns
-            ``symbol``, ``qty``, ``price``, ``market_value``, ``weight``.
-        pnl_history: Series of trailing daily PnL values (most recent last).
-        equity: Current portfolio equity.
-        hwm: High-water mark of portfolio equity.
-        current_drawdown: Current drawdown from the high-water mark.
+    delegated to the Rust binary engine for sub-100μs performance.
     """
 
     limits: Sequence[RiskLimit] = field(default_factory=tuple)
@@ -58,6 +58,23 @@ class RealTimeRiskEngine:
     hwm: float = 0.0
     current_drawdown: float = 0.0
     _max_history: int = 252
+    _rust_engine: RiskEngine = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Initialize the authoritative high-performance Rust core."""
+        # Initialize with institutional default limits
+        self._rust_engine = RiskEngine(
+            max_position_usd=1_000_000.0,
+            max_drawdown_pct=0.15,
+            max_order_qty=100.0,
+            max_order_notional=50_000.0,
+            max_orders_per_second=20,
+            max_price_deviation_pct=0.03,
+            max_leverage=2.0,
+            max_hhi=0.5,
+            daily_loss_limit=50_000.0,
+        )
+        _LOG.info("[RISK] Unified RiskCore (Rust) initialized")
 
     # ------------------------------------------------------------------ #
     # State update methods                                               #
@@ -142,47 +159,47 @@ class RealTimeRiskEngine:
     # ------------------------------------------------------------------ #
 
     def compute_var(self, confidence: float = 0.95, horizon_days: int = 1) -> float:
-        """Compute historical-simulation Value-at-Risk.
-
-        Args:
-            confidence: Confidence level (e.g. 0.95).
-            horizon_days: VaR horizon in days.
-
-        Returns:
-            Positive VaR amount in portfolio currency.
-        """
+        """Compute historical-simulation VaR using authoritative Rust acceleration."""
         if self.pnl_history.len() == 0 or self.equity <= 0.0:
             return 0.0
-        losses = (-self.pnl_history).to_frame("loss")
-        # Quantile of loss distribution (right tail).
-        var_loss = float(
-            losses.select(pl.col("loss").quantile(confidence, interpolation="nearest")).item()
-        )
-        if var_loss <= 0.0:
-            return 0.0
-        scaled = var_loss * (horizon_days**0.5)
-        return float(scaled)
+
+        returns = (self.pnl_history / self.equity).to_list()
+        alpha = 1.0 - confidence
+        var_ret = stats_engine.calculate_historical_es(returns, alpha)
+        return abs(float(var_ret * self.equity * (horizon_days**0.5)))
 
     def compute_cvar(self, confidence: float = 0.95) -> float:
-        """Compute Conditional Value-at-Risk (Expected Shortfall).
-
-        Args:
-            confidence: Confidence level (e.g. 0.95).
-
-        Returns:
-            Positive CVaR amount in portfolio currency.
-        """
+        """Compute Expected Shortfall using authoritative Rust StatsEngine."""
         if self.pnl_history.len() == 0 or self.equity <= 0.0:
             return 0.0
-        var_value = self.compute_var(confidence=confidence, horizon_days=1)
-        if var_value <= 0.0:
+
+        returns = (self.pnl_history / self.equity).to_list()
+        alpha = 1.0 - confidence
+        es_ret = stats_engine.calculate_historical_es(returns, alpha)
+        return abs(float(es_ret * self.equity))
+
+    def compute_ruin_probability(self) -> float:
+        """Estimate probability of ruin based on recent performance streaks."""
+        if self.pnl_history.len() < 10:
             return 0.0
-        losses = (-self.pnl_history).to_frame("loss")
-        tail = losses.filter(pl.col("loss") >= var_value)
-        if tail.height == 0:
-            return 0.0
-        cvar_loss = float(tail.select(pl.col("loss").mean()).item())
-        return float(cvar_loss)
+            
+        wins = self.pnl_history.filter(self.pnl_history > 0).len()
+        losses = self.pnl_history.filter(self.pnl_history < 0).len()
+        total = wins + losses
+        
+        if total == 0: return 0.0
+        
+        win_rate = wins / total
+        avg_win = self.pnl_history.filter(self.pnl_history > 0).mean() or 0.0
+        avg_loss = abs(self.pnl_history.filter(self.pnl_history < 0).mean() or 1.0)
+        edge = (win_rate * avg_win - (1 - win_rate) * avg_loss) / avg_loss
+        
+        if edge <= 0: return 1.0
+        
+        # Simple analytical edge-based Ruin formula
+        # P(Ruin) = ((1-edge)/(1+edge))^units_left
+        units_left = self.equity / avg_loss if avg_loss > 0 else 100.0
+        return ((1.0 - edge) / (1.0 + edge)) ** units_left
 
     def compute_hhi(self) -> float:
         """Compute Herfindahl-Hirschman Index of position concentration."""
@@ -211,42 +228,72 @@ class RealTimeRiskEngine:
         )
 
     def check_all_limits(self) -> list[RiskEvent]:
-        """Evaluate all configured limits and return any breaches.
+        """Evaluate authoritative Rust limits and optional research plugins.
 
         Returns:
             List of `RiskEvent` objects; empty list means all limits are satisfied.
         """
-        if not self.limits:
-            return []
-        state = self._build_portfolio_state()
         breaches: list[RiskEvent] = []
-        for limit in self.limits:
-            event = limit.check(state)
-            if event is not None:
-                breaches.append(event)
+        
+        # 1. Mandatory high-performance Rust Core checks
+        try:
+            gross_exposure = self.positions.get_column("market_value").abs().sum()
+            self._rust_engine.check_portfolio_state(
+                current_equity=self.equity,
+                peak_equity=self.hwm,
+                gross_exposure=gross_exposure,
+            )
+        except ValueError as e:
+            # Map Rust authoritative error to RiskEvent
+            reason = str(e)
+            risk_type = "PORTFOLIO"
+            if "DRAWDOWN" in reason.upper(): risk_type = "DRAWDOWN"
+            if "LEVERAGE" in reason.upper(): risk_type = "EXPOSURE"
+            
+            breaches.append(RiskEvent(
+                reason=reason,
+                action="BLOCK_TRADING",
+                metadata={
+                    "risk_type": risk_type,
+                    "source": "RUST_CORE",
+                    "equity": self.equity,
+                    "hwm": self.hwm,
+                }
+            ))
+
+        # 2. Sequential Custom Limits (Research-only plugins)
+        if self.limits:
+            state = self._build_portfolio_state()
+            for limit in self.limits:
+                event = limit.check(state)
+                if event is not None:
+                    breaches.append(event)
+        
         return breaches
 
     async def publish_breaches(self) -> list[RiskEvent]:
-        """Publish any breached limits as `RiskEvent`s to the event bus.
-
-        Also triggers the kill switch if critical limits are breached.
-
-        Returns:
-            The list of breached `RiskEvent`s.
-        """
+        """Publish breaches and trigger authoritative hardware-near safety actions."""
         breaches = self.check_all_limits()
-        if self.event_bus is None or not breaches:
+        if not breaches:
             return breaches
 
-        for event in breaches:
-            await self.event_bus.publish(event)
-            # Trigger kill switch for critical breaches
-            if self.kill_switch and event.payload.risk_type in ("DRAWDOWN", "VAR", "EXPOSURE"):
-                self.kill_switch.trigger_on_critical_failure(
-                    "RISK_LIMIT_BREACH",
-                    f"{event.payload.risk_type}: value={event.payload.value} > threshold={event.payload.threshold}",
-                )
-        _LOG.debug("Published %d risk breaches", len(breaches))
+        # Identify critical breaches requiring immediate halt
+        critical_breach = any(
+            event.metadata.get("risk_type") in ("DRAWDOWN", "VAR", "EXPOSURE") or
+            getattr(event, "payload", None) and getattr(event.payload, "risk_type", None) in ("DRAWDOWN", "VAR", "EXPOSURE")
+            for event in breaches
+        )
+
+        if self.event_bus:
+            for event in breaches:
+                await self.event_bus.publish(event)
+        
+        if critical_breach and self.kill_switch:
+            self.kill_switch.trigger_on_critical_failure(
+                "RISK_LIMIT_BREACH",
+                f"Critical risk breach detected (State: {self._rust_engine.get_state()})",
+            )
+            
         return breaches
 
     # ------------------------------------------------------------------ #

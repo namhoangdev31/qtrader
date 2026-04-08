@@ -14,7 +14,12 @@ if TYPE_CHECKING:
 
 __all__ = ["RuntimeRiskEngine"]
 
-_LOG = logging.getLogger("qtrader.risk.runtime")
+try:
+    import qtrader_core
+    math_engine = qtrader_core.MathEngine()
+except ImportError as e:
+    _LOG.error("[RISK] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
+    raise ImportError("qtrader_core is a mandatory dependency for institutional risk management") from e
 
 
 @dataclass(slots=True)
@@ -38,23 +43,20 @@ class RuntimeRiskEngine:
     # State tracking
     current_drawdown: float = 0.0
     current_exposure: float = 0.0
+    current_hwm: float = 0.0
+    equity: float = 0.0
     intraday_pnl: float = 0.0
     daily_turnover: float = 0.0
-    previous_day_exposure: float = 0.0
     is_active: bool = True
     current_day: date = field(
         default_factory=lambda: datetime.now().date(),
     )
     
-    # Position tracking for turnover calculation
-    _position_history: dict[str, float] = field(default_factory=dict)
-    # Leverage tracking
-    current_leverage: float = 0.0
-    # Portfolio value for leverage calculation (would come from position keeper in reality)
-    portfolio_value: float = 100000.0  # Default portfolio value
+    # Portfolio value for leverage calculation
+    portfolio_value: float = 100000.0
 
     def check_breach(self) -> bool:
-        """Check whether any safety limits have been breached.
+        """Check whether any safety limits have been breached via authoritative Rust checks.
 
         Returns:
             ``True`` if a breach is detected, otherwise ``False``.
@@ -62,17 +64,23 @@ class RuntimeRiskEngine:
         if not self.is_active:
             return False
 
-        # Check max drawdown
-        if self.current_drawdown > self.max_drawdown:
-            _LOG.critical("Max drawdown breached (%.4f > %.4f)", self.current_drawdown, self.max_drawdown)
-            return True
+        # 1. Check max drawdown using Rust precision
+        if self.current_hwm > 0:
+            self.current_drawdown = math_engine.calculate_drawdown(self.equity, self.current_hwm)
+            if self.current_drawdown > self.max_drawdown:
+                _LOG.critical(
+                    "Max drawdown breached: RUST_VAL(%.4f) > LIMIT(%.4f)", 
+                    self.current_drawdown, 
+                    self.max_drawdown
+                )
+                return True
 
-        # Check max exposure
+        # 2. Check max exposure
         if self.current_exposure > self.max_exposure:
             _LOG.warning("Max exposure breached (%.2f > %.2f)", self.current_exposure, self.max_exposure)
             return True
 
-        # Check max daily loss
+        # 3. Check max daily loss
         if -self.intraday_pnl > self.max_daily_loss:
             _LOG.critical(
                 "Max daily loss breached (%.2f > %.2f)",
@@ -81,9 +89,9 @@ class RuntimeRiskEngine:
             )
             return True
 
-        # Check max leverage (if we have position data)
-        if self.portfolio_value > 0:
-            leverage = self.current_exposure / self.portfolio_value
+        # 4. Check max leverage
+        if self.equity > 0:
+            leverage = self.current_exposure / self.equity
             if leverage > self.max_leverage:
                 _LOG.critical(
                     "Max leverage breached (%.2f > %.2f)",
@@ -92,7 +100,7 @@ class RuntimeRiskEngine:
                 )
                 return True
 
-        # Check max turnover
+        # 5. Check max turnover
         if self.daily_turnover > self.max_turnover:
             _LOG.warning(
                 "Max daily turnover breached (%.2f > %.2f)",
@@ -102,6 +110,9 @@ class RuntimeRiskEngine:
             return True
 
         return False
+        
+    def _now(self) -> datetime:
+        return datetime.now()
 
     def update_intraday_pnl(self, pnl_delta: float, now: datetime | None = None) -> None:
         """Update intraday PnL, resetting at UTC midnight boundaries.

@@ -9,9 +9,9 @@ pub struct TwapAlgo {
     pub duration_ms: i64,
     #[pyo3(get, set)]
     pub slice_count: usize,
-    start_ts: i64,
-    slices_executed: usize,
-    next_order_id: u64,
+    pub(crate) start_ts: i64,
+    pub(crate) slices_executed: usize,
+    pub(crate) next_order_id: u64,
 }
 
 #[pymethods]
@@ -82,12 +82,12 @@ impl TwapAlgo {
     }
 
     #[getter]
-    fn is_complete(&self) -> bool {
+    pub(crate) fn is_complete(&self) -> bool {
         self.slices_executed >= self.slice_count
     }
 
     #[getter]
-    fn progress(&self) -> f64 {
+    pub(crate) fn progress(&self) -> f64 {
         if self.slice_count == 0 {
             return 1.0;
         }
@@ -99,35 +99,5 @@ impl TwapAlgo {
             "TwapAlgo(total_qty={}, duration_ms={}, slices={}/{})",
             self.total_qty, self.duration_ms, self.slices_executed, self.slice_count
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_twap_generates_slices() {
-        let mut twap = TwapAlgo::new(100.0, 60000, 6, 0, 0); // 100 qty over 60s, 6 slices
-        let orders = twap.generate_slices(10000, "BTC", &Side::Buy); // 10s in
-        assert_eq!(orders.len(), 1); // 1 slice expected at 10s
-        assert_eq!(twap.slices_executed, 1);
-    }
-
-    #[test]
-    fn test_twap_catches_up() {
-        let mut twap = TwapAlgo::new(100.0, 60000, 6, 0, 0);
-        // Jump to 50s — should catch up 5 slices
-        let orders = twap.generate_slices(50000, "BTC", &Side::Buy);
-        assert_eq!(orders.len(), 5);
-        assert_eq!(twap.slices_executed, 5);
-    }
-
-    #[test]
-    fn test_twap_completes() {
-        let mut twap = TwapAlgo::new(100.0, 60000, 6, 0, 0);
-        twap.generate_slices(60000, "BTC", &Side::Buy);
-        assert!(twap.is_complete());
-        assert_eq!(twap.progress(), 1.0);
     }
 }

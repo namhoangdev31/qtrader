@@ -5,6 +5,12 @@ from dataclasses import dataclass
 
 import polars as pl
 
+try:
+    import qtrader_core
+    HAS_RUST_CORE = True
+except ImportError:
+    HAS_RUST_CORE = False
+
 __all__ = ["VectorizedEngine"]
 
 _ROLLING_VOL_WINDOW = 20
@@ -328,6 +334,62 @@ class VectorizedEngine:
         )
         result = portfolio.join(contrib, on="timestamp", how="left")
         return result
+
+    def run_hft_backtest(
+        self,
+        df: pl.DataFrame,
+        signal_col: str,
+        initial_capital: float = 100_000.0,
+        latency_ms: int = 5,
+        fee_rate: float = 0.0001,
+        slippage_bps: float = 2.0,
+        max_position_usd: float = 50_000.0,
+        max_drawdown_pct: float = 0.1,
+    ) -> tuple[pl.Series, float]:
+        """
+        Run a high-fidelity tick-by-tick backtest using the Rust HFT Simulator.
+        
+        Requires L1 columns: bid_price, ask_price, bid_size, ask_size.
+        """
+        if not HAS_RUST_CORE:
+            raise ImportError("run_hft_backtest requires qtrader_core (Rust) to be installed.")
+
+        required = {"timestamp", "bid_price", "ask_price", "bid_size", "ask_size", signal_col}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"HFT backtest requires columns: {missing}")
+
+        # 1. Prepare Configuration
+        config = qtrader_core.SimulatorConfig(
+            initial_capital=initial_capital,
+            latency_ms=latency_ms,
+            fee_rate=fee_rate,
+            slippage_bps=slippage_bps,
+            max_position_usd=max_position_usd,
+            max_drawdown_pct=max_drawdown_pct
+        )
+
+        # 2. Extract Native Data
+        timestamps = df["timestamp"].cast(pl.Int64).to_numpy()
+        bid_prices = df["bid_price"].to_numpy()
+        ask_prices = df["ask_price"].to_numpy()
+        bid_sizes = df["bid_size"].to_numpy()
+        ask_sizes = df["ask_size"].to_numpy()
+        signals = df[signal_col].to_numpy()
+
+        # 3. Execution (Rust)
+        equity_curve_arr, final_pnl = qtrader_core.run_hft_simulation(
+            config,
+            "PRIMARY_ASSET",
+            timestamps,
+            bid_prices,
+            ask_prices,
+            bid_sizes,
+            ask_sizes,
+            signals
+        )
+
+        return pl.Series(name="equity_curve", values=equity_curve_arr), final_pnl
 
 
 if __name__ == "__main__":

@@ -8,13 +8,17 @@ name = "qtrader_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.20" }
 numpy = "0.20"
 polars = { version = "0.36", features = ["parquet", "lazy"] }
 serde = { version = "1.0", features = ["derive"] }
 crossbeam-channel = "0.5"
 rayon = "1.8"
 chrono = "0.4"
+
+[features]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]
 
 [profile.release]
 opt-level = 3

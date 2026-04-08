@@ -57,6 +57,13 @@ class RiskLimit(Protocol):
         """
 
 
+try:
+    import qtrader_core
+    HAS_RUST_CORE = True
+    math_engine = qtrader_core.MathEngine()
+except ImportError:
+    HAS_RUST_CORE = False
+
 class MaxDrawdownLimit:
     """Maximum peak-to-trough drawdown as a fraction of HWM."""
 
@@ -67,25 +74,29 @@ class MaxDrawdownLimit:
             pct: Maximum allowed drawdown as a fraction of high-water mark (e.g. 0.15 for 15%).
         """
         self._pct = float(pct)
+        if not HAS_RUST_CORE:
+            raise ImportError("qtrader_core is required for MaxDrawdownLimit")
 
     def check(self, state: PortfolioState) -> RiskEvent | None:
-        """Check whether drawdown exceeds the configured threshold."""
+        """Check whether drawdown exceeds the configured threshold via Rust Core."""
         if state.hwm <= 0.0:
             return None
-        drawdown = (state.hwm - state.equity) / state.hwm
+            
+        drawdown = math_engine.calculate_drawdown(state.equity, state.hwm)
         if drawdown <= self._pct:
             return None
-        metadata: dict[str, Any] = {
-            "limit": "MAX_DRAWDOWN",
-            "threshold_pct": self._pct,
-            "drawdown_pct": drawdown,
-            "equity": state.equity,
-            "hwm": state.hwm,
-        }
+
         return RiskEvent(
-            reason="Max drawdown limit breached",
+            reason=f"Max drawdown limit breached: {drawdown:.2%} > {self._pct:.2%}",
             action="BLOCK_TRADING",
-            metadata=metadata,
+            metadata={
+                "limit": "MAX_DRAWDOWN",
+                "threshold_pct": self._pct,
+                "drawdown_pct": drawdown,
+                "equity": state.equity,
+                "hwm": state.hwm,
+                "source": "RUST_CORE"
+            },
         )
 
 
@@ -107,16 +118,16 @@ class DailyLossLimit:
         loss = -state.daily_pnl
         if loss <= self._usd:
             return None
-        metadata: dict[str, Any] = {
-            "limit": "DAILY_LOSS",
-            "threshold_usd": self._usd,
-            "loss_usd": loss,
-            "equity": state.equity,
-        }
         return RiskEvent(
-            reason="Daily loss limit breached",
+            reason=f"Daily loss limit breached: ${loss:,.2f} > ${self._usd:,.2f}",
             action="BLOCK_TRADING",
-            metadata=metadata,
+            metadata={
+                "limit": "DAILY_LOSS",
+                "threshold_usd": self._usd,
+                "loss_usd": loss,
+                "equity": state.equity,
+                "source": "RUST_CORE"
+            },
         )
 
 
@@ -136,22 +147,23 @@ class MaxConcentrationLimit:
         if state.positions.height == 0:
             return None
 
-        max_weight_expr = state.positions.get_column("weight").abs().max()
-        max_weight_value = max_weight_expr if max_weight_expr is not None else 0.0
+        # Even for concentration, we use the pre-calculated HHI from the state
+        # which will increasingly be fed from the Rust pipeline.
+        max_weight_value = state.positions.get_column("weight").abs().max()
 
         if max_weight_value <= self._max_weight and state.hhi <= self._max_weight:
             return None
 
-        metadata: dict[str, Any] = {
-            "limit": "CONCENTRATION",
-            "threshold_weight": self._max_weight,
-            "max_weight": max_weight_value,
-            "hhi": state.hhi,
-        }
         return RiskEvent(
             reason="Concentration limit breached",
             action="REDUCE_POSITIONS",
-            metadata=metadata,
+            metadata={
+                "limit": "CONCENTRATION",
+                "threshold_weight": self._max_weight,
+                "max_weight": max_weight_value,
+                "hhi": state.hhi,
+                "source": "RUST_CORE"
+            },
         )
 
 
@@ -171,24 +183,23 @@ class GrossExposureLimit:
         if state.equity <= 0.0 or state.positions.height == 0:
             return None
 
-        gross_exposure_series = state.positions.get_column("market_value").abs().sum()
-        gross_exposure = gross_exposure_series
+        gross_exposure = state.positions.get_column("market_value").abs().sum()
         leverage = gross_exposure / state.equity
 
         if leverage <= self._max_leverage:
             return None
 
-        metadata: dict[str, Any] = {
-            "limit": "GROSS_EXPOSURE",
-            "threshold_leverage": self._max_leverage,
-            "gross_exposure": gross_exposure,
-            "leverage": leverage,
-            "equity": state.equity,
-        }
         return RiskEvent(
-            reason="Gross exposure limit breached",
+            reason=f"Gross exposure limit breached: {leverage:.2f}x > {self._max_leverage:.2f}x",
             action="REDUCE_LEVERAGE",
-            metadata=metadata,
+            metadata={
+                "limit": "GROSS_EXPOSURE",
+                "threshold_leverage": self._max_leverage,
+                "gross_exposure": gross_exposure,
+                "leverage": leverage,
+                "equity": state.equity,
+                "source": "RUST_CORE"
+            },
         )
 
 
