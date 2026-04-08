@@ -1,38 +1,238 @@
 services:
-  app:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
+  # ============================================================
+  # QTrader Orchestrator — Main trading engine
+  # ============================================================
+  orchestrator:
+    container_name: qt-orchestrator
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production-core
+    command: ["python", "live_trader.py"]
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
+      - SERVICE_TYPE=ORCHESTRATOR
+      - QTRADER_EXCHANGE=coinbase
+      - QTRADER_SYMBOLS=BTC-USD
+      - QTRADER_TESTNET=true
+      - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
+      - ML_ENGINE_URL=http://qt-ml-engine:8001
+      - AUTONOMOUS_MODE=${AUTONOMOUS_MODE:-true}
+      - SIMULATE_MODE=${SIMULATE_MODE:-true}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_PREFIX=qtrader_core
+    volumes:
+      - hf_cache:/app/.cache/huggingface
+    restart: always
     depends_on:
-      - timescaledb
-      - mlflow
+      timescaledb:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f live_trader.py || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
 
+  # ============================================================
+  # Dashboard UI — Paper Trading FastAPI
+  # ============================================================
+  api_dashboard:
+    container_name: qt-dashboard
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production-core
+    command: ["uvicorn", "qtrader.api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_TYPE=API_DASHBOARD
+      - QTRADER_SYMBOLS=BTC-USD
+      - ML_ENGINE_URL=http://qt-ml-engine:8001
+      - COINBASE_API_KEY=${COINBASE_API_KEY:-paper_key}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET:-paper_secret}
+      - QTRADER_TESTNET=true
+      - UI_ONLY_MODE=true
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_PREFIX=qtrader_ui
+    restart: always
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  # ============================================================
+  # ML Engine — Atomic Trio (Chronos-2, TabPFN 2.5, Phi-2)
+  # ============================================================
+  ml_engine:
+    container_name: qt-ml-engine
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production-ml
+    command: ["python", "-m", "qtrader.ml.atomic_trio"]
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_TYPE=ML
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - CHRONOS_MODEL_ID=${CHRONOS_MODEL_ID:-amazon/chronos-2}
+      - TABPFN_MODEL_ID=Prior-Labs/tabpfn_2_5
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL_DECISION=llama3.2:1b
+      - OLLAMA_MODEL_RISK=qwen3-embedding:0.6b
+    volumes:
+      - hf_cache:/app/.cache/huggingface
+    restart: always
+    depends_on:
+      - mlflow
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 6G
+
+  # ============================================================
+  # TimescaleDB — Time-series database
+  # ============================================================
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
-    platform: linux/arm64
+    container_name: qt-timescaledb
+    image: timescale/timescaledb:2.14.2-pg16
     ports:
       - "5433:5432"
     environment:
-      - POSTGRES_USER=sanauto
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=qtrader
+      - POSTGRES_USER=${DATABASE_USERNAME:-sanauto}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD:-secret}
+      - POSTGRES_DB=${DATABASE_NAME:-qtrader}
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sanauto -d qtrader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ============================================================
+  # MLflow — Experiment tracking & model registry
+  # ============================================================
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
-    platform: linux/arm64
+    container_name: qt-mlflow
+    image: ghcr.io/mlflow/mlflow:v2.14.1
     ports:
       - "5050:5000"
-    command: mlflow server --host 0.0.0.0 --port 5000
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
+    volumes:
+      - mlflow_data:/mlflow
+    restart: always
+
+  # ============================================================
+  # Redis — Cache & message broker
+  # ============================================================
+  redis:
+    container_name: qt-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================
+  # Ollama — Mac-optimized Large Language Model Engine
+  # ============================================================
+  ollama:
+    container_name: qt-ollama
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts/ollama_setup.sh:/scripts/ollama_setup.sh
+    entrypoint: ["/usr/bin/bash", "/scripts/ollama_setup.sh"]
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 4G
+
+  # ============================================================
+  # Frontend UI — Next.js Dashboard
+  # ============================================================
+  frontend:
+    container_name: qt-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    restart: always
+    depends_on:
+      api_dashboard:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
 volumes:
   timescaledb_data:
+  mlflow_data:
+  redis_data:
+  hf_cache:
+  ollama_data:
 
 networks:
-  sanauto-production-net:
-    external: true
+  default:
+    name: qtrader-net

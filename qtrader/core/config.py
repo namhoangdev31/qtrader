@@ -1,11 +1,9 @@
-"""Central configuration via Pydantic Settings with validation and env loading."""
-
 from __future__ import annotations
+
+from typing import Any
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-__all__ = ["QTraderSettings", "settings", "Config"]
 
 
 class QTraderSettings(BaseSettings):
@@ -34,44 +32,111 @@ class QTraderSettings(BaseSettings):
     s3_endpoint: str = ""
     s3_access_key: str = ""
     s3_secret_key: str = ""
-    
+
     # ML
     mlflow_tracking_uri: str = "http://localhost:5050"
     mlflow_experiment_name: str = "qtrader_v4_autonomous"
     simulate_mode: bool = True
-    
+
     # PostgreSQL
     database_url: str = "postgresql://sanauto:secret@localhost:5432/qtrader"
     database_read_url: str | None = None  # Read replica; falls back to database_url if unset
     database_max_connections: int = 100
     database_ssl_enabled: bool = False
     
+    # Redis (Shared State)
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_password: str | None = None
+    redis_db: int = 0
+    redis_prefix: str = "qtrader"
+
     # Execution
     impact_daily_volume: float = 1_000_000.0
     impact_sigma_daily: float = 0.02
     impact_y: float = 1.0
+
+    # Trading System Settings
+    ts_max_position_usd: float = 100_000.0
+    ts_max_drawdown_pct: float = 0.20
+    ts_max_order_qty: float = 1.0
+    ts_max_order_notional: float = 50_000.0
+    ts_max_orders_per_second: float = 5.0
+    ts_max_latency_ms: float = 100.0
     
+    # Model Hub
+    ts_forecast_model: str = "llama3.2:1b"
+    ts_risk_model: str = "qwen3.5:2b"
+    ts_decision_model: str = "gemma4:e2b"
+    
+    # Risk & Guardrails
+    ts_atr_window: int = 14
+    ts_atr_multiplier: float = 2.0
+    ts_forecast_multiplier: float = 1.5
+    ts_min_sl_pct: float = 0.005
+    ts_max_sl_pct: float = 0.05
+    ts_price_jump_threshold: float = 0.05
+    ts_reference_price: float = 50000.0
+    
+    # Retraining & Circuit Breakers
+    ts_retrain_win_rate_threshold: float = 0.35
+    ts_win_history_window: int = 10
+    ts_min_forecast_points: int = 2
+    ts_streak_reduction_threshold: int = 3
+    ts_anomaly_loss_threshold: int = 3
+
     # Bot / Operational
     log_level: str = "INFO"
     monthly_cloud_budget: float = 1000.0
     db_path: str = "qtrader.db"
     timezone: str = "Asia/Ho_Chi_Minh"
+    trading_symbols: list[str] = ["BTC/USDT", "ETH/USDT"]
+
+    # Alert Routing
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_alerts_enabled: bool = False
+    alert_email_smtp_host: str = ""
+    alert_email_smtp_port: int = 587
+    alert_email_sender: str = ""
+    alert_email_password: str = ""
+    alert_email_recipients: str = ""  # comma-separated
+    alert_email_enabled: bool = False
+    alert_webhook_url: str = ""
+    alert_webhook_enabled: bool = False
+    alert_min_severity: str = "WARNING"
+    alert_cooldown_seconds: float = 60.0
+    arbitrator_wt_latency: float = 1.0
+    arbitrator_wt_staleness: float = 1.0
+
+    # Clock Sync
+    clock_sync_enabled: bool = True
+    clock_sync_interval_s: int = 3600
+    clock_sync_ntp_server: str = "pool.ntp.org"
+
+    # JWT Security
+    jwt_secret_key: str = "changeme-for-production"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
+
+    @property
+    def TRADING_SYMBOLS(self) -> list[str]:
+        return self.trading_symbols
 
     @model_validator(mode="after")
     def resolve_paths(self) -> QTraderSettings:
         """Ensure paths are absolute relative to project root."""
-        import os
         from pathlib import Path
-        
+
         # Find project root (where .env or .git exists, or just parent of qtrader/)
         root = Path(__file__).parent.parent.parent
-        
+
         if not Path(self.datalake_uri).is_absolute():
             self.datalake_uri = str((root / self.datalake_uri).resolve())
-            
+
         if not Path(self.db_path).is_absolute():
             self.db_path = str((root / self.db_path).resolve())
-            
+
         return self
 
     @model_validator(mode="after")
@@ -155,6 +220,14 @@ class QTraderSettings(BaseSettings):
         return self.database_ssl_enabled
 
     @property
+    def REDIS_HOST(self) -> str:
+        return self.redis_host
+
+    @property
+    def REDIS_PORT(self) -> int:
+        return self.redis_port
+
+    @property
     def DB_PATH(self) -> str:
         return self.db_path
 
@@ -179,48 +252,59 @@ class QTraderSettings(BaseSettings):
         return self.monthly_cloud_budget
 
     @property
-    def RAY_ADDRESS(self) -> str:
-        return self.ray_address
-
+    def FORECAST_MODEL(self) -> str:
+        return self.ts_forecast_model
+    
     @property
-    def RAY_MEMORY(self) -> str:
-        return self.ray_memory
-
+    def RISK_MODEL(self) -> str:
+        return self.ts_risk_model
+    
     @property
-    def RAY_CPUS(self) -> int:
-        return self.ray_cpus
+    def DECISION_MODEL(self) -> str:
+        return self.ts_decision_model
 
-    @property
-    def TIMEZONE(self) -> str:
-        return self.timezone
-
-    @property
-    def tz(self):
-        """Returns the tzinfo object (ZoneInfo)."""
-        import zoneinfo
-        return zoneinfo.ZoneInfo(self.timezone)
+    # Removed problematic attributes: RAY_ADDRESS, RAY_MEMORY, RAY_CPUS
 
 
 # Module-level singleton; validated at import (fail-fast)
 settings: QTraderSettings = QTraderSettings()
 
+
+class ConfigLoader:
+    """Unified configuration loader for QTrader."""
+
+    @staticmethod
+    def load() -> QTraderSettings:
+        return settings
+
+
 # Backward compatibility alias for existing code using Config.BINANCE_API_KEY etc.
 Config: QTraderSettings = settings
 
 
-"""
-# Pytest-style examples:
-def test_settings_validates_live_mode_requires_api_key(monkeypatch) -> None:
-    monkeypatch.setenv("SIMULATE_MODE", "false")
-    monkeypatch.delenv("BINANCE_API_KEY", raising=False)
-    monkeypatch.delenv("COINBASE_API_KEY", raising=False)
-    from pydantic_settings import BaseSettings
-    # Re-import to get fresh validation; in practice use pytest fixture to clear cache
-    with pytest.raises(ValueError, match="Live mode requires"):
-        QTraderSettings()
+def build_alert_router_config() -> dict[str, Any]:
+    """Build AlertRouterConfig kwargs from centralized settings.
 
-def test_settings_loads_from_env(monkeypatch) -> None:
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    s = QTraderSettings()
-    assert s.log_level == "DEBUG"
-"""
+    Returns a plain dict so the caller can construct the config without
+    importing alert_router at module level (avoids circular imports).
+    """
+    cfg: dict[str, Any] = {
+        "min_severity": settings.alert_min_severity,
+        "cooldown_seconds": settings.alert_cooldown_seconds,
+    }
+    if settings.telegram_alerts_enabled and settings.telegram_bot_token:
+        cfg["telegram"] = {
+            "bot_token": settings.telegram_bot_token,
+            "chat_id": settings.telegram_chat_id,
+        }
+    if settings.alert_email_enabled and settings.alert_email_smtp_host:
+        cfg["email"] = {
+            "smtp_host": settings.alert_email_smtp_host,
+            "smtp_port": settings.alert_email_smtp_port,
+            "sender": settings.alert_email_sender,
+            "password": settings.alert_email_password,
+            "recipients": [r.strip() for r in settings.alert_email_recipients.split(",") if r.strip()],
+        }
+    if settings.alert_webhook_enabled and settings.alert_webhook_url:
+        cfg["webhook"] = {"url": settings.alert_webhook_url}
+    return cfg

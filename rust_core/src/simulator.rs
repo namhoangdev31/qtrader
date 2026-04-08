@@ -1,9 +1,9 @@
-use numpy::{PyReadonlyArray1, PyArray1};
+use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-use crate::oms::{Account, Order, Side};
 use crate::matching::MatchingEngine;
+use crate::oms::{Account, Order, Side};
 use crate::risk::RiskEngine;
 
 #[pyclass]
@@ -55,13 +55,13 @@ pub fn run_simulation_1d(
     let ts_slice = timestamps.as_slice()?;
     let close_slice = closes.as_slice()?;
     let sig_slice = signals.as_slice()?;
-    
+
     let n = ts_slice.len();
     let mut equity_curve = Vec::with_capacity(n);
-    
+
     let mut open_orders: HashMap<u64, Order> = HashMap::new();
     let mut order_id_counter = 0;
-    
+
     let mut peak_equity = config.initial_capital;
 
     for i in 0..n {
@@ -71,12 +71,12 @@ pub fn run_simulation_1d(
 
         // 1. Match active orders first using current price
         let fills = matcher.match_orders(&mut open_orders, price, ts);
-        
+
         for (id, qty, fill_price, comm) in fills {
             let side = open_orders.get(&id).unwrap().side;
             account.cash -= comm;
             account.total_commissions += comm;
-            
+
             // Deduct cost of position
             match side {
                 Side::Buy => {
@@ -87,16 +87,19 @@ pub fn run_simulation_1d(
                 }
             }
 
-            let pos = account.positions.entry(symbol.clone()).or_insert_with(|| crate::oms::Position::new(symbol.clone()));
+            let pos = account
+                .positions
+                .entry(symbol.clone())
+                .or_insert_with(|| crate::oms::Position::new(symbol.clone()));
             pos.add_fill(side, qty, fill_price);
-            
+
             open_orders.remove(&id);
         }
 
         // 2. Track Equity
         let mut sim_prices = HashMap::new();
         sim_prices.insert(symbol.clone(), price);
-        let current_eq = account.equity(&sim_prices);
+        let current_eq = account.equity(sim_prices);
         equity_curve.push(current_eq);
 
         if current_eq > peak_equity {
@@ -108,9 +111,9 @@ pub fn run_simulation_1d(
         if sig != 0.0 && open_orders.is_empty() {
             let target_value = current_eq * 0.10; // Fixed simplistic sizing for now
             let qty = target_value / price;
-            
+
             let side = if sig > 0.0 { Side::Buy } else { Side::Sell };
-            
+
             order_id_counter += 1;
             let order = Order::new(
                 order_id_counter,
@@ -123,14 +126,17 @@ pub fn run_simulation_1d(
             );
 
             // Risk Check
-            if risk.check_order(&order, &account, price, peak_equity).is_ok() {
+            if risk
+                .check_order(&order, &account, price, peak_equity)
+                .is_ok()
+            {
                 open_orders.insert(order_id_counter, order);
             }
         }
     }
 
     let final_eq = equity_curve.last().copied().unwrap_or(account.cash);
-    
+
     // Convert output to PyArray
     let eq_pyarray = pyo3::prelude::Py::from(numpy::PyArray1::from_vec(py, equity_curve));
 

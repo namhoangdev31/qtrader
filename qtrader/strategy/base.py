@@ -3,23 +3,39 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from decimal import Decimal
+from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
 
-from qtrader.core.event import FillEvent, OrderEvent, SignalEvent
+from qtrader.core.types import FillEvent, OrderEvent, SignalEvent
 
-__all__ = ["Strategy", "BaseStrategy"]
+__all__ = ["BaseStrategy", "Strategy"]
 
 _LOG = logging.getLogger("qtrader.strategy.base")
 
 
 @runtime_checkable
 class Strategy(Protocol):
-    """Protocol for converting signals into orders."""
+    """Protocol for strategies that can compute signals and optionally convert them to orders."""
 
-    def on_signal(self, event: SignalEvent) -> list[OrderEvent]:  # pragma: no cover - interface
-        """Handle an incoming signal and return zero or more orders."""
+    def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
+        """Compute trading signals from features.
+
+        Returns a SignalEvent containing the trading signal.
+        """
+        ...
+
+    def on_signal(self, event: SignalEvent) -> list[OrderEvent]:
+        """Handle an incoming signal and return zero or more orders.
+
+        Args:
+            event: The signal event.
+
+        Returns:
+            List of `OrderEvent` objects to be submitted to the OMS.
+        """
+        ...
 
 
 @dataclass(slots=True)
@@ -34,6 +50,7 @@ class BaseStrategy:
     """
 
     symbol: str
+    DEFAULT_MIN_FILLS: int = 10
     capital: float = 100_000.0
     _position: dict[str, float] = field(default_factory=dict, init=False)
     fills_log: pl.DataFrame = field(
@@ -50,10 +67,21 @@ class BaseStrategy:
         init=False,
     )
 
+    def compute_signals(self, features: dict[str, pl.Series]) -> dict[str, Any]:
+        """Compute trading signals from features.
+
+        Subclasses are expected to override this method.
+
+        Returns:
+            A dict with keys: 'signal_type', 'strength', 'metadata'.
+        """
+        raise NotImplementedError("BaseStrategy.compute_signals must be implemented by subclasses.")
+
     def on_signal(self, event: SignalEvent) -> list[OrderEvent]:
         """Convert a signal into one or more orders.
 
-        Subclasses are expected to override this method.
+        By default, strategies do not generate orders directly.
+        Subclasses are expected to override this method if they do.
 
         Args:
             event: Incoming `SignalEvent`.
@@ -61,7 +89,7 @@ class BaseStrategy:
         Returns:
             List of `OrderEvent` objects to be submitted.
         """
-        raise NotImplementedError("BaseStrategy.on_signal must be implemented by subclasses.")
+        return []
 
     def on_fill(self, event: FillEvent) -> None:
         """Update internal position tracking and fill log on each fill.
@@ -69,7 +97,8 @@ class BaseStrategy:
         Args:
             event: Executed `FillEvent` for an order.
         """
-        qty_signed = event.quantity if event.side.upper() == "BUY" else -event.quantity
+        side_upper = event.side.upper()
+        qty_signed = float(event.quantity) if side_upper == "BUY" else -float(event.quantity)
         prev_qty = self._position.get(event.symbol, 0.0)
         self._position[event.symbol] = prev_qty + qty_signed
 
@@ -113,7 +142,7 @@ class BaseStrategy:
         Returns:
             Mapping from symbol to expected value estimate.
         """
-        if self.fills_log.height < 10:
+        if self.fills_log.height < self.DEFAULT_MIN_FILLS:
             return {}
 
         df = self.fills_log
@@ -121,14 +150,35 @@ class BaseStrategy:
         losses = df.filter(pl.col("pnl") < 0.0)
 
         total_counts = df.group_by("symbol").len().rename({"len": "total"})
-        win_counts = wins.group_by("symbol").len().rename({"len": "wins"}) if wins.height > 0 else pl.DataFrame(
-            {"symbol": pl.Series([], dtype=pl.String), "wins": pl.Series([], dtype=pl.UInt32)},
+        win_counts = (
+            wins.group_by("symbol").len().rename({"len": "wins"})
+            if wins.height > 0
+            else pl.DataFrame(
+                {
+                    "symbol": pl.Series([], dtype=pl.String),
+                    "wins": pl.Series([], dtype=pl.UInt32),
+                },
+            )
         )
-        avg_win = wins.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_win")) if wins.height > 0 else pl.DataFrame(
-            {"symbol": pl.Series([], dtype=pl.String), "avg_win": pl.Series([], dtype=pl.Float64)},
+        avg_win = (
+            wins.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_win"))
+            if wins.height > 0
+            else pl.DataFrame(
+                {
+                    "symbol": pl.Series([], dtype=pl.String),
+                    "avg_win": pl.Series([], dtype=pl.Float64),
+                },
+            )
         )
-        avg_loss = losses.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_loss")) if losses.height > 0 else pl.DataFrame(
-            {"symbol": pl.Series([], dtype=pl.String), "avg_loss": pl.Series([], dtype=pl.Float64)},
+        avg_loss = (
+            losses.group_by("symbol").agg(pl.col("pnl").mean().alias("avg_loss"))
+            if losses.height > 0
+            else pl.DataFrame(
+                {
+                    "symbol": pl.Series([], dtype=pl.String),
+                    "avg_loss": pl.Series([], dtype=pl.Float64),
+                },
+            )
         )
 
         joined = (
@@ -138,7 +188,7 @@ class BaseStrategy:
             .with_columns(
                 pl.col("wins").fill_null(0),
                 pl.col("avg_win").fill_null(0.0),
-                pl.col("avg_loss").fill_null(0.0).abs(),
+                pl.col("avg_loss").fill_null(0.0),
             )
         )
 
@@ -186,45 +236,22 @@ class BaseStrategy:
 
         Args:
             quantity: Order quantity.
-            side: \"BUY\" or \"SELL\".
-            order_type: Order type string, default \"MARKET\".
+            side: "BUY" or "SELL".
+            order_type: Order type string, default "MARKET".
             price: Optional limit price.
 
         Returns:
             Constructed `OrderEvent` instance.
         """
+        timestamp = datetime.now()
+        # Generate a simple order ID based on symbol and timestamp
+        order_id = f"{self.symbol}_{int(timestamp.timestamp())}"
         return OrderEvent(
+            order_id=order_id,
             symbol=self.symbol,
+            timestamp=timestamp,
             order_type=order_type,
-            quantity=quantity,
-            price=price,
             side=side,
+            quantity=Decimal(str(quantity)),
+            price=Decimal(str(price)) if price is not None else None,
         )
-
-
-"""
-Pytest-style examples (conceptual):
-
-def test_on_fill_updates_position() -> None:
-    from qtrader.core.event import FillEvent, EventType
-
-    strat = BaseStrategy(symbol="AAPL")
-    fill = FillEvent(
-        type=EventType.FILL,
-        symbol="AAPL",
-        quantity=10.0,
-        price=150.0,
-        commission=0.0,
-        side="BUY",
-        order_id="1",
-        fill_id="1",
-    )
-    strat.on_fill(fill)
-    assert strat.get_position("AAPL") == 10.0
-
-
-def test_win_rate_trailing_no_fills() -> None:
-    strat = BaseStrategy(symbol="AAPL")
-    assert strat.win_rate_trailing() == 0.0
-"""
-

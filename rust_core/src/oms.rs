@@ -43,7 +43,7 @@ pub struct Order {
     #[pyo3(get)]
     pub qty: f64,
     #[pyo3(get)]
-    pub price: f64,          // 0.0 for Market
+    pub price: f64, // 0.0 for Market
     #[pyo3(get)]
     pub order_type: OrderType,
     #[pyo3(get, set)]
@@ -51,7 +51,7 @@ pub struct Order {
     #[pyo3(get, set)]
     pub filled_qty: f64,
     #[pyo3(get, set)]
-    pub alloc_price: f64,    // Average fill price
+    pub alloc_price: f64, // Average fill price
     #[pyo3(get)]
     pub timestamp_ms: i64,
 }
@@ -91,12 +91,14 @@ pub struct Position {
     #[pyo3(get)]
     pub symbol: String,
     #[pyo3(get, set)]
-    pub qty: f64,            // Positive: Long, Negative: Short
+    pub qty: f64, // Positive: Long, Negative: Short
     #[pyo3(get, set)]
     pub avg_entry_price: f64,
 }
 
+#[pymethods]
 impl Position {
+    #[new]
     pub fn new(symbol: String) -> Self {
         Position {
             symbol,
@@ -113,39 +115,48 @@ impl Position {
 
         let new_qty = self.qty + signed_fill;
 
-        // Simplified average price calculation (VWAP of position)
         if new_qty.abs() > 1e-9 {
             if self.qty.signum() == signed_fill.signum() || self.qty == 0.0 {
-                // Adding to same side position
                 let prior_value = self.qty.abs() * self.avg_entry_price;
                 let add_value = fill_qty * fill_price;
                 self.avg_entry_price = (prior_value + add_value) / new_qty.abs();
             } else {
-                // Reversing or reducing position
                 if new_qty.signum() != self.qty.signum() {
-                    // Flipped position
                     self.avg_entry_price = fill_price;
                 }
             }
         } else {
-            // Flat
             self.avg_entry_price = 0.0;
         }
 
         self.qty = new_qty;
     }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Position(symbol={}, qty={}, avg_price={})",
+            self.symbol, self.qty, self.avg_entry_price
+        )
+    }
 }
 
 /// State of the trading account (Balance + open positions).
-#[derive(Debug)]
+#[pyclass]
+#[derive(Debug, Clone)]
 pub struct Account {
+    #[pyo3(get)]
     pub initial_capital: f64,
+    #[pyo3(get, set)]
     pub cash: f64,
+    #[pyo3(get)]
     pub positions: HashMap<String, Position>,
+    #[pyo3(get)]
     pub total_commissions: f64,
 }
 
+#[pymethods]
 impl Account {
+    #[new]
     pub fn new(initial_capital: f64) -> Self {
         Account {
             initial_capital,
@@ -155,16 +166,111 @@ impl Account {
         }
     }
 
-    pub fn equity(&self, current_prices: &HashMap<String, f64>) -> f64 {
+    pub fn get_position(&self, symbol: &str) -> Option<Position> {
+        self.positions.get(symbol).cloned()
+    }
+
+    pub fn set_position(&mut self, symbol: String, position: Position) {
+        self.positions.insert(symbol, position);
+    }
+
+    pub fn equity(&self, current_prices: HashMap<String, f64>) -> f64 {
         let mut eq = self.cash;
         for (sym, pos) in &self.positions {
             if let Some(&price) = current_prices.get(sym) {
-                // UnPnL
                 let unpnl = pos.qty * (price - pos.avg_entry_price);
-                // Value of pos + pnL (simplified for delta)
                 eq += pos.qty * pos.avg_entry_price + unpnl;
             }
         }
         eq
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Account(cash={}, positions={}, commissions={})",
+            self.cash,
+            self.positions.len(),
+            self.total_commissions
+        )
+    }
+}
+
+impl Account {
+    pub fn equity_internal(&self, current_prices: &HashMap<String, f64>) -> f64 {
+        let mut eq = self.cash;
+        for (sym, pos) in &self.positions {
+            if let Some(&price) = current_prices.get(sym) {
+                let unpnl = pos.qty * (price - pos.avg_entry_price);
+                eq += pos.qty * pos.avg_entry_price + unpnl;
+            }
+        }
+        eq
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_position_add_fill_long() {
+        let mut pos = Position::new("BTC".to_string());
+        pos.add_fill(Side::Buy, 1.0, 50000.0);
+        assert_eq!(pos.qty, 1.0);
+        assert_eq!(pos.avg_entry_price, 50000.0);
+
+        pos.add_fill(Side::Buy, 1.0, 60000.0);
+        assert_eq!(pos.qty, 2.0);
+        assert_eq!(pos.avg_entry_price, 55000.0);
+    }
+
+    #[test]
+    fn test_position_partial_close() {
+        let mut pos = Position::new("BTC".to_string());
+        pos.add_fill(Side::Buy, 2.0, 50000.0);
+        pos.add_fill(Side::Sell, 1.0, 60000.0);
+        assert_eq!(pos.qty, 1.0);
+        assert_eq!(pos.avg_entry_price, 50000.0);
+    }
+
+    #[test]
+    fn test_account_equity() {
+        let mut account = Account::new(100000.0);
+        let prices = HashMap::new();
+
+        assert_eq!(account.equity(prices), 100000.0);
+
+        let mut btc_pos = Position::new("BTC".to_string());
+        btc_pos.add_fill(Side::Buy, 1.0, 40000.0);
+        account.positions.insert("BTC".to_string(), btc_pos);
+        account.cash -= 40000.0;
+
+        let mut prices2 = HashMap::new();
+        prices2.insert("BTC".to_string(), 50000.0);
+        assert_eq!(account.equity(prices2), 110000.0);
+    }
+
+    #[test]
+    fn test_position_shorting() {
+        let mut pos = Position::new("ETH".to_string());
+        pos.add_fill(Side::Sell, 10.0, 2000.0);
+        assert_eq!(pos.qty, -10.0);
+        assert_eq!(pos.avg_entry_price, 2000.0);
+
+        pos.add_fill(Side::Sell, 10.0, 3000.0);
+        assert_eq!(pos.qty, -20.0);
+        assert_eq!(pos.avg_entry_price, 2500.0);
+    }
+
+    #[test]
+    fn test_position_full_close_and_flip() {
+        let mut pos = Position::new("ETH".to_string());
+        pos.add_fill(Side::Buy, 5.0, 2000.0);
+        pos.add_fill(Side::Sell, 5.0, 2500.0);
+        assert_eq!(pos.qty, 0.0);
+
+        pos.add_fill(Side::Sell, 2.0, 2600.0);
+        assert_eq!(pos.qty, -2.0);
+        assert_eq!(pos.avg_entry_price, 2600.0);
     }
 }

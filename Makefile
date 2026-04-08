@@ -1,23 +1,68 @@
-.PHONY: help install test lint check clean docker-up docker-down rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader bot-start bot-stop
+.PHONY: help install test lint check clean up down logs log-api log-bot log-ml log-ollama ml-status ml-test rust-build rust-py rust-py-dev analyst analyst-researcher analyst-trader
 
 help:
-	@echo "Available commands:"
-	@echo "  install     Install dependencies"
-	@echo "  test        Run tests"
-	@echo "  lint        Run ruff linting"
-	@echo "  check       Run type checks (mypy)"
-	@echo "  clean       Remove temporary files"
-	@echo "  docker-up   Start docker services"
-	@echo "  docker-down Stop docker services"
-	@echo "  rust-build  Build rust core"
-	@echo "  rust-py     Build Python wheel via maturin"
-	@echo "  rust-py-dev Build+install extension (dev)"
-	@echo "  analyst             Install analyst deps + launch Jupyter (all notebooks)"
-	@echo "  analyst-researcher  Launch Jupyter for Researcher notebooks"
-	@echo "  analyst-trader      Launch Jupyter for Trader notebooks"
-	@echo "  bot-start   Start trading bot (paper config)"
-	@echo "  bot-stop    Stop trading bot"
+	@echo "=== QTrader Commands ==="
+	@echo ""
+	@echo "  Docker:"
+	@echo "    up           Build and start all services"
+	@echo "    down         Stop all services"
+	@echo "    logs         View all logs (follow)"
+	@echo "    log-api      View dashboard API logs"
+	@echo "    log-bot      View orchestrator bot logs"
+	@echo "    log-ml       View ML engine logs"
+	@echo "    log-ollama   View Ollama LLM logs"
+	@echo ""
+	@echo "  Intelligence (AI/ML):"
+	@echo "    ml-status    Check ML engine health and model status"
+	@echo "    ml-test      Run ML-specific unit tests"
+	@echo ""
+	@echo "  Development:"
+	@echo "    install      Install local dependencies (uv sync)"
+	@echo "    test         Run tests"
+	@echo "    lint         Run ruff linting"
+	@echo "    check        Run type checks (mypy)"
+	@echo "    clean        Remove temp files"
+	@echo ""
+	@echo "  Rust:"
+	@echo "    rust-build   Build rust core"
+	@echo "    rust-py      Build Python wheel via maturin"
+	@echo "    rust-py-dev  Build+install extension (dev)"
+	@echo ""
+	@echo "  Analyst:"
+	@echo "    analyst            Launch Jupyter (all notebooks)"
+	@echo "    analyst-researcher Launch Jupyter for Researcher"
+	@echo "    analyst-trader     Launch Jupyter for Trader"
 
+# --- Docker Commands ---
+up:
+	docker compose up -d --build
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f
+
+log-api:
+	docker logs -f qt-dashboard
+
+log-bot:
+	docker logs -f qt-orchestrator
+
+log-ml:
+	docker logs -f qt-ml-engine
+
+log-ollama:
+	docker logs -f qt-ollama
+
+# --- Intelligence (AI/ML) ---
+ml-status:
+	@curl -s http://localhost:8001/info | python3 -m json.tool
+
+ml-test:
+	uv run pytest tests/unit/ml/ -v
+
+# --- Development ---
 install:
 	uv sync
 
@@ -35,12 +80,7 @@ clean:
 	find . -type f -name "*.pyc" -delete
 	rm -rf .pytest_cache .coverage .mypy_cache .ruff_cache
 
-docker-up:
-	docker-compose up -d --build
-
-docker-down:
-	docker-compose down
-
+# --- Rust ---
 rust-build:
 	cd rust_core && cargo build --release
 
@@ -50,6 +90,7 @@ rust-py:
 rust-py-dev:
 	maturin develop --release --manifest-path rust_core/Cargo.toml -i python3.10
 
+# --- Analyst ---
 analyst:
 	uv sync --extra analyst
 	uv run jupyter lab notebooks/
@@ -61,9 +102,3 @@ analyst-researcher:
 analyst-trader:
 	uv sync --extra analyst
 	uv run jupyter lab notebooks/trader/
-
-bot-start:
-	uv run python -m qtrader.output.bot.runner configs/bot_paper.yaml
-
-bot-stop:
-	@echo "Send SIGINT (Ctrl+C) to the bot process to stop."

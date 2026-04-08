@@ -1,16 +1,28 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
-import ray
-from ray import tune
+
+try:
+    import ray
+    from ray import tune
+
+    _HAS_RAY = True
+except ImportError:
+    _HAS_RAY = False
+    ray = None
+    tune = None
 
 from qtrader.core.config import Config
 from qtrader.ml.evaluation import ModelEvaluator
 from qtrader.ml.walk_forward import WalkForwardPipeline
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import pandas as pd
 
 __all__ = ["RayCompute", "RayHyperparamTuner"]
 
@@ -19,6 +31,11 @@ class RayCompute:
     """Helper for distributed task execution using Ray (local or cluster)."""
 
     def __init__(self) -> None:
+        if not _HAS_RAY:
+            raise ImportError(
+                "Ray is not installed. Please install 'qtrader[ray]' "
+                "or use the 'production-ml' Docker image."
+            )
         if not ray.is_initialized():
             ray.init(
                 address=Config.RAY_ADDRESS,
@@ -32,11 +49,12 @@ class RayCompute:
         """Run a function in parallel over a list of arguments."""
         remote_func = ray.remote(func)
         futures = [remote_func.remote(*args) for args in tasks_args]
-        return ray.get(futures)
+        result: list[Any] = ray.get(futures)
+        return result
 
     def shutdown(self) -> None:
         """Shutdown the underlying Ray runtime."""
-        if ray.is_initialized():
+        if _HAS_RAY and ray.is_initialized():
             ray.shutdown()
 
 
@@ -68,28 +86,20 @@ class RayHyperparamTuner:
         self.ray_address = ray_address
         self._evaluator = ModelEvaluator()
 
-    def tune(
+    def tune(  # noqa: PLR0913
         self,
         model_cls: type,
-        param_space: Dict[str, Any],
+        param_space: dict[str, Any],
         df: pl.DataFrame,
         wf_pipeline: WalkForwardPipeline,
         target_col: str = "forward_return",
         feature_cols: list[str] | None = None,
-    ) -> Dict[str, Any]:
-        """Run Ray Tune to optimize hyperparameters.
+    ) -> dict[str, Any]:
+        if not _HAS_RAY:
+            raise ImportError(
+                "Ray is not installed. RayTune cannot be used without the 'ray[tune]' dependency."
+            )
 
-        Args:
-            model_cls: Model class with ``fit(X, y)`` and ``predict(X)`` methods.
-            param_space: Ray Tune parameter space dictionary.
-            df: Full dataset as Polars DataFrame.
-            wf_pipeline: Walk-forward pipeline for backtesting.
-            target_col: Column containing forward returns.
-            feature_cols: Optional list of feature columns.
-
-        Returns:
-            Best hyperparameter configuration found.
-        """
         if target_col not in df.columns:
             raise ValueError(f"Target column '{target_col}' not found in DataFrame.")
 
@@ -98,8 +108,7 @@ class RayHyperparamTuner:
 
         dataset_serialized = df.to_pandas()  # external boundary; small-ish by design
 
-        def trainable(config: Dict[str, Any]) -> None:
-            import pandas as pd  # local import for Ray workers
+        def trainable(config: dict[str, Any]) -> None:
 
             pdf: pd.DataFrame = dataset_serialized.copy()
             local_df = pl.from_pandas(pdf)
@@ -146,7 +155,6 @@ class RayHyperparamTuner:
 
 
 if __name__ == "__main__":
-    import polars as pl  # type: ignore[reimported]
     from sklearn.linear_model import LinearRegression
 
     _df = pl.DataFrame(
@@ -167,5 +175,5 @@ if __name__ == "__main__":
         target_col="forward_return",
         feature_cols=["x"],
     )
-    assert isinstance(_best, dict)
-
+    if not isinstance(_best, dict):
+        raise TypeError("Tuner failed to return a valid configuration dictionary")

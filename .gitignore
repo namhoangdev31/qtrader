@@ -21,5 +21,7 @@ mlruns/
 # Environment
 .env
 .DS_Store
-qtrader/api/__init__.py
 rust_core/.cargo
+qtrader/.clone
+qtrader/_deprecated
+tests/_deprecated_tests

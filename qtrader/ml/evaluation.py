@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
 
 from qtrader.ml.walk_forward import WalkForwardPipeline
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = ["ModelEvaluator", "NestedCrossValidation"]
 
@@ -97,7 +99,7 @@ class ModelEvaluator:
     def feature_importance_report(
         self,
         model: Any,
-        feature_names: List[str],
+        feature_names: list[str],
     ) -> pl.DataFrame:
         """Extract feature importance from tree/linear models.
 
@@ -113,14 +115,18 @@ class ModelEvaluator:
         """
         importances: np.ndarray | None = None
         if hasattr(model, "feature_importances_"):
-            importances = np.asarray(getattr(model, "feature_importances_"), dtype=float)
+            importances = np.asarray(model.feature_importances_, dtype=float)
         elif hasattr(model, "coef_"):
-            coef = np.asarray(getattr(model, "coef_"), dtype=float)
+            coef = np.asarray(model.coef_, dtype=float)
             importances = np.abs(coef).ravel()
 
         if importances is None:
             return pl.DataFrame(
-                {"feature": feature_names, "importance": [0.0] * len(feature_names), "rank": [0] * len(feature_names)}
+                {
+                    "feature": feature_names,
+                    "importance": [0.0] * len(feature_names),
+                    "rank": [0] * len(feature_names),
+                }
             )
 
         if importances.shape[0] != len(feature_names):
@@ -139,7 +145,7 @@ class ModelEvaluator:
         self,
         df: pl.DataFrame,
         transaction_cost_bps: float = 10.0,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Run a quick vectorized backtest over predictions.
 
         Args:
@@ -171,11 +177,7 @@ class ModelEvaluator:
         )
         cost = transaction_cost_bps / 10_000.0
         df_local = df_local.with_columns(
-            [
-                (
-                    pl.col("strategy_return") - pl.col("_turnover") * cost
-                ).alias("net_return")
-            ]
+            [(pl.col("strategy_return") - pl.col("_turnover") * cost).alias("net_return")]
         )
         df_local = df_local.with_columns(
             [(pl.col("net_return") + 1.0).cum_prod().alias("equity_curve")]
@@ -224,11 +226,11 @@ class NestedCrossValidation:
     def evaluate(
         self,
         df: pl.DataFrame,
-        train_func: Callable[[pl.DataFrame, Dict[str, Any]], Any],
-        param_grid: List[Dict[str, Any]],
+        train_func: Callable[[pl.DataFrame, dict[str, Any]], Any],
+        param_grid: list[dict[str, Any]],
         target_col: str = "forward_return",
-        feature_cols: List[str] | None = None,
-    ) -> List[Dict[str, Any]]:
+        feature_cols: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Run nested cross-validation with IC-based scoring.
 
         Args:
@@ -250,7 +252,7 @@ class NestedCrossValidation:
         outer_splits = self.outer.get_splits(df)
 
         for i, (outer_train, outer_test) in enumerate(outer_splits):
-            best_params: Dict[str, Any] | None = None
+            best_params: dict[str, Any] | None = None
             best_inner_score = float("-inf")
 
             inner_splits = self.inner.get_splits(outer_train)
@@ -288,7 +290,7 @@ class NestedCrossValidation:
         model: Any,
         df: pl.DataFrame,
         target_col: str,
-        feature_cols: List[str] | None,
+        feature_cols: list[str] | None,
     ) -> float:
         """Compute IC between model predictions and forward returns."""
         if target_col not in df.columns:
@@ -307,9 +309,31 @@ class NestedCrossValidation:
 
 
 if __name__ == "__main__":
-    import polars as pl  # type: ignore[reimported]
+    import asyncio
+
+    import polars as pl
     from sklearn.linear_model import LinearRegression
 
+    from qtrader.core.bus import EventBus
+    from qtrader.core.orchestrator import TradingOrchestrator
+
+    # 1. Mandatory Sovereign Initialization
+    # Ensures deterministic seeds and audit logging for the evaluation script
+    orch = TradingOrchestrator(
+        event_bus=EventBus(),
+        market_data_adapter=object(),
+        alpha_modules=[],
+        feature_validator=None,
+        strategies=[],
+        ensemble_strategy=None,
+        portfolio_allocator=None,
+        runtime_risk_engine=None,
+        oms_adapter=None,
+    )
+    orch.initialize()
+    orch.validate()
+
+    # 2. Evaluation Logic
     _df = pl.DataFrame(
         {
             "x": [0.0, 1.0, 2.0, 3.0, 4.0],
@@ -319,7 +343,7 @@ if __name__ == "__main__":
     _outer = WalkForwardPipeline(train_size=3, test_size=1, embargo=0)
     _inner = WalkForwardPipeline(train_size=3, test_size=1, embargo=0)
 
-    def _train(train_df: pl.DataFrame, params: Dict[str, Any]) -> Any:
+    def _train(train_df: pl.DataFrame, params: dict[str, Any]) -> Any:
         x_train = train_df.select(["x"]).to_numpy()
         y_train = train_df["forward_return"].to_numpy()
         model = LinearRegression(**params)
@@ -329,10 +353,14 @@ if __name__ == "__main__":
     _nc = NestedCrossValidation(_outer, _inner)
     _res = _nc.evaluate(
         _df,
+        target_col="forward_return",
         train_func=_train,
         param_grid=[{}],
-        target_col="forward_return",
         feature_cols=["x"],
     )
-    assert isinstance(_res, list)
+    if not isinstance(_res, list):
+        raise TypeError("Evaluation result must be a list")
+    print(f"Evaluation Complete | Result Count: {len(_res)}")
 
+    # 3. Graceful Clean Halt
+    asyncio.run(orch.halt_core("Evaluation_Script_Finished"))

@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+import polars as pl
+
+from qtrader.alpha.base import BaseAlpha
+
+__all__ = ["AmihudIlliquidityAlpha", "OrderImbalanceAlpha", "VPINAlpha"]
+
+
+@dataclass(slots=True)
+class OrderImbalanceAlpha(BaseAlpha):
+    """Bid-ask volume imbalance as short-term directional signal."""
+
+    window: int = 100
+    name: ClassVar[str] = "order_imbalance"
+
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw order imbalance from L1 data."""
+        if "bid_size" not in df.columns or "ask_size" not in df.columns:
+            raise ValueError("OrderImbalanceAlpha requires 'bid_size' and 'ask_size' columns.")
+        bid = df.get_column("bid_size")
+        ask = df.get_column("ask_size")
+        denom = bid + ask
+        imbalance = (bid - ask) / denom
+        return imbalance.to_frame("imb").with_columns(
+            pl.when(pl.col("imb").is_finite()).then(pl.col("imb")).otherwise(0.0).alias("imb"),
+        )["imb"]
+
+
+@dataclass(slots=True)
+class AmihudIlliquidityAlpha(BaseAlpha):
+    """Amihud (2002) illiquidity proxy. High illiq → mean reversion signal."""
+
+    window: int = 20
+    name: ClassVar[str] = "amihud"
+
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Compute raw Amihud illiquidity."""
+        close = df.get_column("close")
+        volume = df.get_column("volume")
+        ret = close.pct_change().abs()
+        dollar_vol = close * volume
+        illiq = ret / dollar_vol
+        # Invert the signal: high illiq -> negative return expectation
+        return -(illiq.to_frame("x").with_columns(
+            pl.when(pl.col("x").is_finite()).then(pl.col("x")).otherwise(0.0).alias("x"),
+        )["x"])
+
+
+@dataclass(slots=True)
+class VPINAlpha(BaseAlpha):
+    """Flow toxicity proxy (VPIN-style). High toxicity → adverse selection risk."""
+
+    window: int = 50
+    name: ClassVar[str] = "vpin"
+
+    def __post_init__(self) -> None:
+        super().__init__(name=self.name, standardize=True, standardize_window=self.window)
+
+    def _compute_raw(self, df: pl.DataFrame) -> pl.Series:
+        """Approximate VPIN using sign of price change to classify volume."""
+        close = df.get_column("close")
+        open_ = df.get_column("open")
+        volume = df.get_column("volume")
+
+        sign = pl.when(close > open_).then(1.0).otherwise(-1.0)
+        buy_vol = volume * (sign > 0).cast(pl.Float64)
+        sell_vol = volume * (sign < 0).cast(pl.Float64)
+
+        buy_roll = buy_vol.rolling_sum(self.window)
+        sell_roll = sell_vol.rolling_sum(self.window)
+        tot_roll = volume.rolling_sum(self.window)
+        vpin = (buy_roll - sell_roll).abs() / tot_roll
+        # Invert the signal: high toxicity -> negative alpha
+        return -(vpin.to_frame("x").with_columns(
+            pl.when(pl.col("x").is_finite()).then(pl.col("x")).otherwise(0.0).alias("x"),
+        )["x"])
+
+
+"""
+Pytest-style examples (conceptual):
+
+def test_order_imbalance_requires_columns() -> None:
+    df = pl.DataFrame({"close": [1.0]})
+    alpha = OrderImbalanceAlpha()
+    try:
+        alpha.compute(df)
+    except ValueError:
+        assert True
+"""

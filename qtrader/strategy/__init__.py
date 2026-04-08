@@ -1,17 +1,27 @@
 from __future__ import annotations
 
-from qtrader.strategy.alpha_combiner import AlphaCombiner
 from qtrader.strategy.base import BaseStrategy, Strategy
-from qtrader.strategy.mean_reversion import OUMeanReversion, StatisticalArbitrage
-from qtrader.strategy.momentum import CrossSectionalMomentum, TimeSeriesMomentum
+from qtrader.strategy.meta_strategy import (
+    MetaStrategy,
+    RegimeAwareMetaStrategy,
+    WeightedMetaStrategy,
+)
+from qtrader.strategy.momentum import (
+    CrossSectionalMomentum,
+    TimeSeriesMomentum,
+    ZScoreMomentumAlpha,
+)
+from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 
 __all__ = [
-    "Strategy",
     "BaseStrategy",
     "CrossSectionalMomentum",
+    "MetaStrategy",
+    "ProbabilisticStrategy",
+    "RegimeAwareMetaStrategy",
+    "Strategy",
     "TimeSeriesMomentum",
-    "OUMeanReversion",
-    "StatisticalArbitrage",
-    "AlphaCombiner",
+    "WeightedMetaStrategy",
+    "ZScoreMomentumAlpha",
 ]
 

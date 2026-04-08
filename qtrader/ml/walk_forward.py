@@ -1,12 +1,10 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import polars as pl
 
-__all__ = ["WalkForwardPipeline", "PurgedKFoldCV"]
+__all__ = ["PurgedKFoldCV", "WalkForwardPipeline"]
 
 
 @dataclass(slots=True)
@@ -23,7 +21,7 @@ class WalkForwardPipeline:
     test_size: int
     embargo: int = 0
 
-    def get_splits(self, df: pl.DataFrame) -> List[Tuple[pl.DataFrame, pl.DataFrame]]:
+    def get_splits(self, df: pl.DataFrame) -> list[tuple[pl.DataFrame, pl.DataFrame]]:
         """Generate (train, test) splits using rolling windows.
 
         Args:
@@ -39,7 +37,7 @@ class WalkForwardPipeline:
         while start + self.train_size + self.embargo + self.test_size <= n:
             train_end = start + self.train_size
             test_start = train_end + self.embargo
-            test_end = test_start + self.test_size
+            test_start + self.test_size
 
             train_df = df.slice(start, self.train_size)
             test_df = df.slice(test_start, self.test_size)
@@ -71,7 +69,7 @@ class PurgedKFoldCV:
         self,
         df: pl.DataFrame,
         events_col: str = "timestamp",
-    ) -> List[Tuple[pl.DataFrame, pl.DataFrame]]:
+    ) -> list[tuple[pl.DataFrame, pl.DataFrame]]:
         """Generate purged (train, test) splits.
 
         Args:
@@ -111,16 +109,13 @@ class PurgedKFoldCV:
 
             # Purging: remove any train samples overlapping the test period.
             purge_mask = ~(
-                (keyed[events_col] >= test_start_time)
-                & (keyed[events_col] <= test_end_time)
+                (keyed[events_col] >= test_start_time) & (keyed[events_col] <= test_end_time)
             )
 
             # Embargo: remove samples within embargo window after test_end_time.
             if embargo > 0:
                 embargo_end_idx = min(test_end + embargo, n)
-                embargo_mask = ~(
-                    (keyed["idx"] >= test_end) & (keyed["idx"] < embargo_end_idx)
-                )
+                embargo_mask = ~((keyed["idx"] >= test_end) & (keyed["idx"] < embargo_end_idx))
                 train_mask = purge_mask & embargo_mask & (~test_mask)
             else:
                 train_mask = purge_mask & (~test_mask)
@@ -144,9 +139,10 @@ if __name__ == "__main__":
     )
     _wf = WalkForwardPipeline(train_size=50, test_size=10, embargo=5)
     _splits = _wf.get_splits(_df)
-    assert len(_splits) > 0
+    if not _splits:
+        raise ValueError("Walk-forward pipeline failed to generate splits")
 
     _cv = PurgedKFoldCV(n_splits=5, embargo_pct=0.02)
     _cv_splits = _cv.split(_df, events_col="timestamp")
-    assert len(_cv_splits) > 0
-
+    if not _cv_splits:
+        raise ValueError("Purged K-Fold CV failed to generate splits")

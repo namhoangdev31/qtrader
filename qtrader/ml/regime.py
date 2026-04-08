@@ -1,8 +1,7 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import polars as pl
@@ -11,7 +10,7 @@ from sklearn.mixture import GaussianMixture
 try:
     from hmmlearn.hmm import GaussianHMM
 except Exception:  # pragma: no cover - optional dependency
-    GaussianHMM = None  # type: ignore[assignment]
+    GaussianHMM = None
 
 __all__ = ["RegimeDetector", "VolatilityRegimeDetector"]
 
@@ -37,7 +36,9 @@ class RegimeDetector:
 
     Examples:
         >>> import polars as pl
-        >>> df = pl.DataFrame({"ret": [0.01, -0.02, 0.005, 0.003], "vol": [0.02, 0.03, 0.01, 0.015]})
+        >>> df = pl.DataFrame(
+        ...     {"ret": [0.01, -0.02, 0.005], "vol": [0.02, 0.03, 0.01]}
+        ... )
         >>> det = RegimeDetector(n_regimes=2, method="gmm")
         >>> _ = det.fit(df, ["ret", "vol"])
         >>> regimes = det.predict_regime(df, ["ret", "vol"])
@@ -48,17 +49,20 @@ class RegimeDetector:
     n_regimes: int = 3
     method: RegimeMethod = "gmm"
     random_state: int = 42
-    _gmm: Optional[GaussianMixture] = field(init=False, default=None)
-    _hmm: Optional["GaussianHMM"] = field(init=False, default=None)  # type: ignore[name-defined]
-    _means: Optional[np.ndarray] = field(init=False, default=None)
-    _stds: Optional[np.ndarray] = field(init=False, default=None)
+    _gmm: GaussianMixture | None = field(init=False, default=None)
+    _hmm: GaussianHMM | None = field(init=False, default=None)
+    _means: np.ndarray | None = field(init=False, default=None)
+    _stds: np.ndarray | None = field(init=False, default=None)
     _is_fitted: bool = field(init=False, default=False)
 
     def _standardize(self, data: np.ndarray) -> np.ndarray:
         if self._means is None or self._stds is None:
-            raise RuntimeError("RegimeDetector scaler statistics are not initialized. Call fit() first.")
+            raise RuntimeError(
+                "RegimeDetector scaler statistics are not initialized. Call fit() first."
+            )
         stds_safe = np.where(self._stds == 0.0, 1.0, self._stds)
-        return (data - self._means) / stds_safe
+        result: np.ndarray = (data - self._means) / stds_safe
+        return result
 
     def fit(self, df: pl.DataFrame, feature_cols: list[str]) -> None:
         """Fit the underlying regime model.
@@ -118,14 +122,12 @@ class RegimeDetector:
         if self.method == "hmm":
             if self._hmm is None:
                 raise RuntimeError("HMM model is not initialized.")
-            # type: ignore[union-attr]
             return self._hmm.predict_proba(x_std)
 
         # ensemble: average posterior probabilities from GMM and HMM
         if self._gmm is None or self._hmm is None:
             raise RuntimeError("Both GMM and HMM models are required for ensemble method.")
         proba_gmm = self._gmm.predict_proba(x_std)
-        # type: ignore[union-attr]
         proba_hmm = self._hmm.predict_proba(x_std)
         return 0.5 * (proba_gmm + proba_hmm)
 
@@ -226,7 +228,8 @@ class RegimeDetector:
                 (
                     pl.col("avg_return")
                     / (pl.col("vol") + 1e-12)
-                    * (365.25 * 24 * 12)**0.5  # Crypto-tailored annualization (5-min intervals)
+                    # Crypto-tailored annualization (5-minute intervals)
+                    * (365.25 * 24 * 12) ** 0.5
                 ).alias("sharpe")
             )
             .sort("regime")
@@ -307,17 +310,14 @@ class VolatilityRegimeDetector:
         low_thr = float(np.quantile(vols, self.low_vol_pct))
         high_thr = float(np.quantile(vols, self.high_vol_pct))
 
-        regimes = (
-            df.select(
-                pl.when(pl.col(vol_col) <= low_thr)
-                .then(0)
-                .when(pl.col(vol_col) >= high_thr)
-                .then(2)
-                .otherwise(1)
-                .alias("vol_regime")
-            )
-            .to_series()
-        )
+        regimes = df.select(
+            pl.when(pl.col(vol_col) <= low_thr)
+            .then(0)
+            .when(pl.col(vol_col) >= high_thr)
+            .then(2)
+            .otherwise(1)
+            .alias("vol_regime")
+        ).to_series()
         return regimes
 
 
@@ -329,9 +329,10 @@ if __name__ == "__main__":
     _det = RegimeDetector(n_regimes=2, method="gmm")
     _det.fit(_df, ["ret", "vol"])
     _reg = _det.predict_regime(_df, ["ret", "vol"])
-    assert len(_reg) == _df.height
+    if len(_reg) != _df.height:
+        raise ValueError("Regime prediction length mismatch")
 
     _vol_det = VolatilityRegimeDetector()
     _vol_reg = _vol_det.classify(pl.DataFrame({"realized_vol": [0.1, 0.2, 0.3]}))
-    assert set(_vol_reg.to_list()) <= {0, 1, 2}
-
+    if not set(_vol_reg.to_list()) <= {0, 1, 2}:
+        raise ValueError("Volatility regime labels out of bounds")

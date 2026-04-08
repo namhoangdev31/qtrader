@@ -4,19 +4,25 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from decimal import Decimal
 
 import polars as pl
 
 from qtrader.core.bus import EventBus
-from qtrader.core.event import EventType, SignalEvent
+from qtrader.core.events import (
+    MarketEvent,
+    SignalEvent,
+    SignalPayload,
+    SystemEvent,
+    SystemPayload,
+)
 from qtrader.ml.regime import RegimeDetector
 from qtrader.ml.registry import ModelRegistry
 from qtrader.ml.rotation import ModelRotator
 
 __all__ = ["AutonomousLoop"]
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("qtrader.ml.autonomous")
 
 
 DataProvider = Callable[[], Awaitable[pl.DataFrame]]
@@ -24,20 +30,9 @@ DataProvider = Callable[[], Awaitable[pl.DataFrame]]
 
 @dataclass(slots=True)
 class AutonomousLoop:
-    """Production auto-retraining loop that publishes regime changes.
+    """Production auto-retraining orchestrator that reacts to regime changes and data drift.
 
-    On each step:
-      1. Predict current regime and posterior probabilities.
-      2. Detect regime changes and publish a ``SignalEvent`` to the EventBus.
-      3. Delegate to ``ModelRotator`` to select a target model.
-      4. Log rotations to MLflow via ``ModelRegistry``.
-
-    Args:
-        detector: Regime detector instance.
-        rotator: Model rotator managing active model IDs.
-        registry: MLflow-backed model registry.
-        bus: EventBus used to publish regime-change signals.
-        interval_s: Interval between iterations in seconds.
+    Eliminates all polling by subscribing to DRIFT and MARKET_DATA events.
     """
 
     detector: RegimeDetector
@@ -45,20 +40,17 @@ class AutonomousLoop:
     registry: ModelRegistry
     bus: EventBus
     interval_s: int = 3600
-    _last_regime: Optional[int] = field(init=False, default=None)
+    drift_threshold: float = 0.25  # Threshold for triggering retraining
+    _last_regime: int | None = field(init=False, default=None)
+    _last_run_ts: float = field(init=False, default=0.0)
 
     async def run_step(self, recent_data: pl.DataFrame, feature_cols: list[str]) -> None:
-        """Execute one autonomous step.
-
-        Args:
-            recent_data: Recent market data as a Polars DataFrame.
-            feature_cols: Columns to use as regime features.
-        """
+        """Execute one autonomous step for regime detection."""
         try:
             regime_id, confidence = self.detector.current_regime_confidence(
                 recent_data, feature_cols
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.error("Regime detection failed", exc_info=exc)
             return
 
@@ -67,65 +59,91 @@ class AutonomousLoop:
 
         if regime_changed:
             event = SignalEvent(
-                type=EventType.SIGNAL,
-                symbol="__regime__",
-                signal_type="REGIME_CHANGE",
-                strength=confidence,
-                metadata={
-                    "regime": regime_id,
-                    "confidence": confidence,
-                    "action": "regime_change",
-                },
+                source="AutonomousLoop",
+                payload=SignalPayload(
+                    symbol="__regime__",
+                    signal_type="REGIME_CHANGE",
+                    strength=Decimal(str(confidence)),
+                    metadata={
+                        "regime": regime_id,
+                        "confidence": confidence,
+                        "action": "regime_change",
+                    },
+                ),
             )
             await self.bus.publish(event)
-            log.info(
-                "Regime change detected: regime=%s confidence=%.3f",
-                regime_id,
-                confidence,
-            )
+            log.info("Regime change: %s (conf: %.3f)", regime_id, confidence)
 
         target_model_id = self.rotator.on_regime_change(regime_id)
         if target_model_id is not None:
-            log.info("Rotated to model_id=%s for regime=%s", target_model_id, regime_id)
-            # Best-effort metadata logging; model artifact logging happens in training.
-            try:
-                self.registry.log_model_iteration(
-                    model_name="regime_rotation",
-                    model={"model_id": target_model_id},
-                    features=feature_cols,
-                    params={"regime_id": regime_id},
-                    metrics={"confidence": confidence},
-                    tags={"rotation_event": "true", "target_model_id": str(target_model_id)},
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.error("Failed to log rotation to MLflow", exc_info=exc)
+            self.registry.log_model_iteration(
+                model_name="regime_rotation",
+                model={"model_id": target_model_id},
+                features=feature_cols,
+                params={"regime_id": regime_id},
+                metrics={"confidence": confidence},
+                tags={"rotation_event": "true"},
+            )
 
-    async def start(self, get_data_func: DataProvider, feature_cols: list[str]) -> None:
-        """Run the autonomous loop continuously.
+    async def on_market_data(
+        self, event: MarketEvent, get_data_func: DataProvider, feature_cols: list[str]
+    ) -> None:
+        """Triggered on new market ticks to check regimes (zero latency)."""
+        current_ts = asyncio.get_event_loop().time()
 
-        All exceptions are caught and logged; the loop will not crash.
+        if current_ts - self._last_run_ts < self.interval_s:
+            return
 
-        Args:
-            get_data_func: Async callable returning the latest data slice.
-            feature_cols: Feature columns passed to the regime detector.
-        """
-        while True:
-            try:
-                recent_data = await get_data_func()
-                if not isinstance(recent_data, pl.DataFrame):
-                    raise TypeError("get_data_func must return a Polars DataFrame.")
-                await self.run_step(recent_data, feature_cols)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                log.error("AutonomousLoop iteration failed", exc_info=exc)
-            await asyncio.sleep(self.interval_s)
+        try:
+            recent_data = await get_data_func()
+            await self.run_step(recent_data, feature_cols)
+            self._last_run_ts = current_ts
+        except Exception as exc:
+            log.error("Autonomous market data handler failed", exc_info=exc)
+
+    async def on_drift(self, event: SystemEvent) -> None:
+        """Event-driven retraining trigger: Drift > threshold -> retrain."""
+        drift_score = event.payload.metadata.get("drift_score", 0.0)
+        symbol = event.payload.metadata.get("symbol", "unknown")
+
+        if drift_score > self.drift_threshold:
+            log.warning(
+                "[ML] Significant drift detected (%.3f > %.3f). Triggering retrain...",
+                drift_score,
+                self.drift_threshold,
+            )
+
+            # Emit SystemEvent for downstream trainer consumers
+            retrain_event = SystemEvent(
+                source="AutonomousLoop",
+                trace_id=event.trace_id,
+                payload=SystemPayload(
+                    action="MODEL_RETRAIN",
+                    reason=f"Drift score {drift_score:.3f} exceeded threshold",
+                    metadata={
+                        "symbol": symbol,
+                        "model_id": str(self._last_regime or "active"),
+                        "drift_score": drift_score,
+                    },
+                ),
+            )
+            await self.bus.publish(retrain_event)
+
+            # Log to registry for auditing
+            self.registry.log_model_iteration(
+                model_name="auto_retrain_trigger",
+                model={"status": "pending"},
+                features=[],
+                params={"trigger": "drift"},
+                metrics={"drift_score": drift_score},
+                tags={"reason": "drift"},
+            )
 
 
 if __name__ == "__main__":
     # Smoke test: construct with dummy components (no EventBus loop).
-    from qtrader.ml.rotation import ModelRotator  # type: ignore[reimported]
-    from qtrader.ml.registry import ModelRegistry  # type: ignore[reimported]
+    from qtrader.ml.registry import ModelRegistry
+    from qtrader.ml.rotation import ModelRotator
 
     _detector = RegimeDetector()
     _rotator = ModelRotator()
@@ -138,5 +156,5 @@ if __name__ == "__main__":
         bus=_bus,
         interval_s=1,
     )
-    assert isinstance(_loop, AutonomousLoop)
-
+    if not isinstance(_loop, AutonomousLoop):
+        raise TypeError("Failed to initialize AutonomousLoop properly")

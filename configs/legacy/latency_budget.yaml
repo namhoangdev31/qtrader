@@ -1,0 +1,31 @@
+version: "1.0.0"
+
+# Latency Budget per Execution Stage (milliseconds)
+# If a stage exceeds its budget, a LatencyViolation is triggered.
+# Institutional Standard: End-to-End < 100ms.
+
+budgets:
+  # Ingestion Path
+  market_data_ingestion: 5.0
+  tick_normalization: 2.0
+
+  # Research & Alpha Path
+  alpha_computation: 20.0
+  feature_extraction: 10.0
+
+  # Logic & Risk Path
+  strategy_logic: 15.0
+  risk_pre_gate: 5.0
+
+  # Execution Path
+  order_serialization: 3.0
+  exchange_routing: 15.0 # Round-trip locally to socket
+
+  # Global Constraint
+  total_end_to_end: 100.0
+
+# Enforcement Rules
+rules:
+  fail_on_breach: true         # Hard Halt if budget violated
+  log_p99_latency: true        # Periodic report of tail latency
+  alert_threshold_pct: 0.8     # Alert if at 80% of budget

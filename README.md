@@ -1,26 +1,74 @@
-# QTrader v4 — Autonomous Trading Framework (2026) 🚀📈
+# QTrader — Institutional-grade Quantitative Trading Framework 🚀📈
 
-QTrader is an institutional-grade, high-performance algorithmic trading and research framework designed for autonomous operations in multi-venue environments. Optimized for **Apple Silicon M4** and built with a hybrid Rust/Python architecture.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Polars](https://img.shields.io/badge/Polars-Blazing%20Fast-orange.svg)](https://pola.rs/)
+[![Rust](https://img.shields.io/badge/Rust-Kernel-black.svg)](https://www.rust-lang.org/)
+[![Status](https://img.shields.io/badge/Status-Early%20Alpha-red.svg)]()
 
----
-
-## 🏗️ Architecture Stack
-
-- **Execution Kernel**: Native Rust (ARM64 Optimized) for nano-second latency L2 orderbook processing.
-- **Research Layer**: Python 3.10 (Standardized) using Polars, Apache Arrow, and Scikit-Learn.
-- **Data Persistence**: **PostgreSQL / TimescaleDB** for relational metadata and **ArcticDB** for high-performance tick storage.
-- **Distributed Compute**: **Ray** for hyperparameter tuning and massive factor calculation.
-- **Monitoring & Lifecycle**: **MLflow** for model versioning and tracking autonomous rotations.
+QTrader is a high-performance, event-driven algorithmic trading and research framework built for institutional-grade autonomous operations. Designed for **Apple Silicon (M4)** and built with a hybrid Rust/Python architecture, it bridges the gap between deep quantitative research and nanosecond-latency execution.
 
 ---
 
-## 💻 Apple Silicon (M4) Optimization
+## 🏗️ System Architecture & Engines
 
-The system uses a **Hybrid Infrastructure** for peak performance:
+QTrader is powered by a set of specialized **Engines** that orchestrate the trading lifecycle. For a deep dive into how these engines interact, see [ENGINES_ARCHITECTURE.md](file:///home/lkct-lee-park/var/www/qtrader/docs/ENGINES_ARCHITECTURE.md).
 
-- **Native M4 (Mac)**: Rust kernel compilation and local research (via `make rust-build`).
-- **Emulated (Docker Rosetta)**: Python application layer (`linux/amd64`) to support complex libraries like `ArcticDB`.
-- **Native ARM (Docker)**: Database and observability services (`timescaledb`, `mlflow`).
+- **Research & Vectorization**: Native `Polars` integration via `VectorizedEngine` for ultra-fast backtesting.
+- **Microstructure Kernel**: Native Rust (`RustTickEngine`) optimized for L2/L3 orderbook simulations.
+- **Adaptive Learning**: `MetaLearningEngine` (GMM-based) for real-time market regime detection and dynamic strategy weighting.
+- **Recursive Feedback**: `FeedbackEngine` for closed-loop learning from trade executions (fills and slippage).
+- **Runtime Risk**: `RuntimeRiskEngine` provides parametric VaR, exposure limits, and automatic drawdown enforcement.
+
+---
+
+## 🎯 Core Capabilities
+
+1. **Advanced Alpha Layer**: Includes `CandleAlphaEngine` with 27 institutional-grade pattern features. Built-in `FeatureValidator` measures IC decay and stability to prevent over-fitting.
+2. **Probabilistic Strategy**: Moves beyond binary 0/1 signals. Uses an `EnsembleStrategy` to convert alpha combinations into dynamic, probability-weighted signals.
+3. **Institutional Portfolio Allocation**: Implements True Risk Parity using Ledoit-Wolf Shrinkage and Volatility Targeting, treating assets as a correlated matrix.
+4. **Smart Execution & OMS**: Unified Order Management System (OMS) with support for Smart Order Routing (SOR), TWAP/VWAP, and Paper/Shadow trading modes.
+
+---
+
+## 🛑 Project Status & Critical Assessment (March 2026)
+
+> [!WARNING]
+> **QTrader is currently in EARLY ALPHA and is NOT ready for real-money live trading.**
+
+Based on the [FINAL_PROJECT_EVALUATION.md](file:///home/lkct-lee-park/var/www/qtrader/docs/FINAL_PROJECT_EVALUATION.md), here is the current assessment:
+
+### ✅ Strengths
+
+- **Modular Pipeline**: High degree of separation between Data, Features, Risk, and Execution.
+- **Feature Integrity**: Robust validation layer for signal quality (IC Decay monitoring).
+- **M4 Optimization**: Leverages Apple Silicon's hardware acceleration for crypto-heavy operations.
+
+### ⚠️ Gaps & Risks
+
+- **State Desync**: Potential mismatch between local OMS and Exchange state during network instability.
+- **Transaction Cost Sensitivity**: High regime-flicker can lead to "whipsawing" and fee-burn.
+- **Python Latency**: The Global Interpreter Lock (GIL) may introduce jitter in high-frequency event loops compared to the pure Rust kernel.
+- **Kill Switch**: Lack of a hardware-level/networking kill switch; system relies on software-level risk checks.
+
+---
+
+## 📂 Project Structure
+
+```text
+qtrader/
+├── bot/              # Live Trading Runner (Entry point)
+├── pipeline/         # Master orchestration (Research -> Deploy -> LiveMonitor)
+├── qtrader/          # CORE PYTHON PACKAGE
+│   ├── alpha/        # Raw signal generators & AlphaEngine
+│   ├── backtest/     # Vectorized & Event-driven Simulators
+│   ├── execution/    # SOR, OMS, PaperTradingEngine
+│   ├── feedback/     # FeedbackEngine for closed-loop learning
+│   ├── ml/           # Regime detection (GMM), MetaLearningEngine
+│   ├── risk/         # RuntimeRiskEngine, VaR limits
+│   └── strategy/     # Ensemble & Probabilistic decision making
+├── rust_core/        # Rust kernel for low-latency calculations
+├── docs/             # Architecture, Evaluations, and Engine Documentation
+```
 
 ---
 
@@ -28,66 +76,36 @@ The system uses a **Hybrid Infrastructure** for peak performance:
 
 ### 1. Requirements
 
-- Docker Desktop (Rosetta 2 enabled)
 - Python 3.10+
 - Rust toolchain (for native kernel)
 - `uv` (fast package manager)
+- Docker Desktop (For supplementary infra)
 
-### 2. Configuration
-
-Copy the template and fill in your API keys:
+### 2. Environment Setup
 
 ```bash
+# Clone the repository
+git clone https://github.com/hoangnamdev31/qtrader.git
+cd qtrader
+
+# Copy the configuration template
 cp configs/env.example .env
+
+# Install dependencies and build Rust core
+make install
+make rust-build
 ```
 
-### 3. Deployment
+### 3. Verify Installation
 
 ```bash
-make docker-up
+python -c "import qtrader; print('QTrader framework initialized successfully!')"
 ```
 
-_Note: If port 5000 is occupied (e.g., by another MLflow instance or MacOS AirPlay Receiver), please ensure it is free._
-
 ---
 
-## 🛠️ Makefile Commands
+## 🛡️ Important Disclaimer
 
-| Command           | Description                             |
-| :---------------- | :-------------------------------------- |
-| `make install`    | Install Python dependencies using `uv`  |
-| `make rust-build` | Compile the Rust kernel natively for M4 |
-| `make docker-up`  | Start the full trading stack in Docker  |
-| `make test`       | Run unit and integration tests          |
-| `make clean`      | Purge temporary cache and build files   |
-| `make analyst`    | Install analyst deps + launch Jupyter   |
+Trading financial markets involves high risk. This software is provided for research and educational purposes only. **Always** perform extensive paper trading and risk monitoring before live deployment.
 
----
-
-## 🛡️ Operational Guardrails
-
-- **Flash Crash Protection**: AI-driven safety layer monitoring liquidity drops.
-- **Risk Engine**: Hardened OMS with SOR for multi-exchange neutrality.
-- **Budget Circuit Breaker**: Real-time cloud cost tracking.
-
----
-
-## 📊 Data Lake Structure
-
-The data lake is managed via `UniversalDataLake`, supporting:
-
-- Local filesystem (`./data_lake`)
-- AWS S3 / S3-Compatible storage
-- Google Cloud Storage (GCS)
-
----
-
-## 🧪 Analyst Toolkit (Jupyter + Colab)
-
-The analyst workflow is documented in `docs/analyst.md` and provides:
-
-- Notebook quickstart for local Jupyter
-- Colab quickstart with git clone + pip install
-- Core research flow: load data, EDA, vectorized backtest, metrics
-
-**Developed for QTrader 2026 Autonomous Operations.**
+_Built for autonomous quantitative operations. 2026._

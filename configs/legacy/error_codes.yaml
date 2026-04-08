@@ -1,0 +1,23 @@
+# QTrader Consolidated Error Taxonomy Registry
+
+# ERROR CLASSES:
+#   Recoverable: Network/API glitches (Retry)
+#   Critical: Execution/OMS drift (Isolate)
+#   Fatal: State corruption/Risk violation (Halt)
+#   Validation: Schema/Input mismatch (Audit)
+
+ERR_NET_001: RecoverableError # Connection timeout
+ERR_NET_002: RecoverableError # Rate limit hit
+ERR_API_001: RecoverableError # Temporary endpoint down
+
+ERR_EXE_001: CriticalError    # Execution slippage > tolerance
+ERR_OMS_001: CriticalError    # Position mismatch (internal vs exchange)
+ERR_BT_001:  CriticalError    # Backtest fidelity violation
+
+ERR_RISK_001: FatalError      # Max drawdown breach
+ERR_STATE_001: FatalError     # Corrupted state recovery failure
+ERR_CORE_001:  FatalError     # Deterministic seed violation
+ERR_HFT_001:   FatalError     # Ultra-low latency drift
+
+ERR_VAL_001: ValidationError  # Missing config field
+ERR_VAL_002: ValidationError  # Invalid symbol format

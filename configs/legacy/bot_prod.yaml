@@ -1,0 +1,20 @@
+symbols: ["BTC-USD", "ETH-USD"]
+venues: ["coinbase"]
+signal_interval_s: 60
+rebalance_interval_s: 300
+risk_check_interval_s: 10
+initial_capital: 100000.0
+max_leverage: 1.0
+vol_target: 0.10
+max_drawdown_pct: 0.10
+daily_loss_usd: 5000.0
+max_position_pct: 0.20
+strategy: "momentum"
+execution_algo: "twap"
+regime_detection: true
+auto_retrain: false
+# HFT Mode Configuration
+hft_enabled: true
+hft_latency_target_ms: 100.0
+hft_throttle_threshold_ms: 120.0
+hft_safe_mode_latency_ms: 150.0

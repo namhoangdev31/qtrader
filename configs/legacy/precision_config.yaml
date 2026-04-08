@@ -1,0 +1,26 @@
+version: "1.0.0"
+
+# Numerical Precision Authority
+# Rules for quantizing Decimal outputs across the trading lifecycle.
+
+precision:
+  # Institutional High-Fidelity (Intermediates)
+  nav: 12                # Net Asset Value resolution
+  internal_yield: 18     # Interest and Yield calculations
+  pnl_raw: 12            # Unquantized PnL accumulation
+
+  # Market Data & Order Book
+  price: 8               # Market price (matching exchange standard)
+  quantity: 6            # Asset quantity (matching exchange standard)
+  slippage_bps: 4        # Slippage calculations (basis points)
+
+  # Settlement & Reporting (Final)
+  notional: 2            # Cash and USD settlement
+  fee: 4                 # Transaction fee reporting
+  tax: 2                 # Tax withholding
+
+# Arithmetic Configuration
+arithmetic:
+  rounding_mode: "ROUND_HALF_EVEN" # banker's rounding (minimize statistical bias)
+  max_context_prec: 28             # maximum digits for intermediate calculations
+  fail_on_float_init: true         # HARD FAIL if Decimal is initialized from float
