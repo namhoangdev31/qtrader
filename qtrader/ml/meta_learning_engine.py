@@ -203,8 +203,8 @@ class MetaLearningEngine:
 
         Returns:
             Dict with:
-                - strategy_weights: Dict[str, float]
-                - feature_weights: Dict[str, float]
+                - strategy_weights: dict[str, float]
+                - feature_weights: dict[str, float]
                 - confidence_multiplier: float
         """
         # Handle insufficient global data

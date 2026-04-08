@@ -35,7 +35,7 @@ class PostExecutionValidator:
             state_store: The final state of the system for consistency review.
             
         Returns:
-            Dict[str, Any]: Standardized post-execution report.
+            dict[str, Any]: Standardized post-execution report.
         """
         logger.info("POST_EXEC_START | Initiating system verification gate.")
         

@@ -139,15 +139,16 @@ class OllamaDecisionAdapter:
         if rag_context:
             instruct += (
                 "RAG INSTITUTIONAL MEMORY:\n"
-                "In similar past market regimes, the following 'Elite Exemplars' were successful:\n"
+                "The following 'Elite Exemplars' (past success) or 'Forensic Interventions' (live human directives) were retrieved:\n"
             )
             for i, match in enumerate(rag_context, 1):
+                role = "FORENSIC INTERVENTION" if match.get("regime") == "forensic_intervention" else "HISTORICAL SUCCESS"
                 instruct += (
-                    f"Match {i} (Similarity: {match['similarity']:.2f}):\n"
-                    f"  Successful Parameters: {json.dumps(match['parameters'])}\n"
-                    f"  Expert Forensic Note: {match['notes']}\n"
+                    f"Match {i} [{role}] (Similarity: {match['similarity']:.2f}):\n"
+                    f"  Parameters/Context: {json.dumps(match['parameters'])}\n"
+                    f"  Expert Note: {match['notes']}\n"
                 )
-            instruct += "\nUse this historical 'Institutional Memory' to inform your current overrides.\n"
+            instruct += "\nIMPORTANT: Prioritize 'FORENSIC INTERVENTION' as these are immediate human directives for the current market state. Use them to override or bias your decision.\n"
 
         instruct += (
             "JSON Template: {"
@@ -215,7 +216,7 @@ class OllamaDecisionAdapter:
         )
 
     async def embed(self, text: str) -> list[float]:
-        """Generate text embeddings using phi3:mini (/api/embed)."""
+        """Generate text embeddings using Ollama (/api/embed)."""
         self._embed_count += 1
         payload = {
             "model": self.model_id,

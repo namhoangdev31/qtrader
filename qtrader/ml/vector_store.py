@@ -14,11 +14,12 @@ logger = logging.getLogger("qtrader.ml.vector_store")
 class EliteExemplar:
     session_id: str
     timestamp: str
-    market_vector: list[float]  # [volatility, trend, spread, RSI, etc.]
-    semantic_embedding: list[float]  # phi3:mini embedding of forensic notes
+    market_vector: list[float] 
+    semantic_embedding: list[float]  
     parameters: dict[str, Any]
     performance_score: float
     expert_notes: str
+    regime_tag: str = "forensic"
 
 
 class InstitutionalMemoryStore:
@@ -61,8 +62,8 @@ class InstitutionalMemoryStore:
         conn = duckdb.connect(self.db_path)
         try:
             conn.execute(
-                "INSERT INTO exemplars (session_id, timestamp, market_vector, semantic_embedding, parameters, performance_score, expert_notes) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO exemplars (session_id, timestamp, market_vector, semantic_embedding, parameters, performance_score, expert_notes, regime_tag) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     exemplar.session_id,
                     exemplar.timestamp,
@@ -70,7 +71,8 @@ class InstitutionalMemoryStore:
                     exemplar.semantic_embedding,
                     json.dumps(exemplar.parameters),
                     exemplar.performance_score,
-                    exemplar.expert_notes
+                    exemplar.expert_notes,
+                    exemplar.regime_tag
                 ]
             )
             logger.info(f"[VECTOR_DB] Saved Elite Exemplar for session {exemplar.session_id}")
@@ -96,6 +98,7 @@ class InstitutionalMemoryStore:
                     parameters, 
                     expert_notes, 
                     performance_score,
+                    regime_tag,
                     list_cosine_similarity(market_vector, ?::FLOAT[]) as market_sim
             """
             params: list[Any] = [market_vector]
@@ -117,7 +120,8 @@ class InstitutionalMemoryStore:
                     "parameters": json.loads(row[0]),
                     "notes": row[1],
                     "score": row[2],
-                    "similarity": row[3] if not semantic_embedding else (0.7 * row[3] + 0.3 * row[4])
+                    "regime": row[3],
+                    "similarity": row[4] if not semantic_embedding else (0.7 * row[4] + 0.3 * row[5])
                 })
             return templates
         except Exception as e:

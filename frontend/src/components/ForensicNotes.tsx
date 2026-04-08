@@ -2,20 +2,24 @@ import React, { useState, useCallback } from 'react';
 import { StickyNote, Plus, Send, Cpu } from 'lucide-react';
 import { useTradingSystem } from '@/hooks/useTradingSystem';
 
-export function ForensicNotes() {
-  const { audit, getBaseUrl } = useTradingSystem();
+interface ForensicNotesProps {
+  notes?: any[];
+  baseUrl?: string;
+}
+
+export function ForensicNotes({ notes = [], baseUrl }: ForensicNotesProps) {
+  const { getBaseUrl } = useTradingSystem();
+  const effectiveBaseUrl = baseUrl || getBaseUrl();
   const [input, setInput] = useState('');
   const [type, setType] = useState<'OBSERVATION' | 'ALERT' | 'TRIAL'>('OBSERVATION');
   const [isSyncing, setIsSyncing] = useState(false);
-
-  const notes = audit.notes || [];
 
   const addNote = async () => {
     if (!input.trim()) return;
     setIsSyncing(true);
     
     try {
-      const res = await fetch(`${getBaseUrl()}/api/v1/forensic_notes`, {
+      const res = await fetch(`${effectiveBaseUrl}/api/v1/forensic_notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: input, type })

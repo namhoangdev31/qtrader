@@ -16,7 +16,6 @@ class StrategyManager:
     """Manages dynamic switching between trading strategies based on AI configuration."""
 
     def __init__(self, symbol: str) -> None:
-        # Initialize available strategies
         momentum = TimeSeriesMomentum(symbol=symbol)
         probabilistic = ProbabilisticStrategy(symbol=symbol)
         

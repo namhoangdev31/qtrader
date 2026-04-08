@@ -99,10 +99,14 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
         self._thinking_history: list[dict[str, Any]] = []
         self._last_trace: dict[str, Any] = {
             "module_traces": {
+                "ingestion": {"status": "INITIALIZING", "price": base_price},
                 "AlphaEngine": {"status": "INITIALIZING"},
+                "alpha": {"status": "INITIALIZING", "indicators": {"rsi": 50.0}},
                 "RiskEngine": {"status": "INITIALIZING"},
                 "RiskGuard": {"status": "INITIALIZING"},
+                "risk": {"status": "INITIALIZING", "initial_stop_loss": 0.0},
                 "Portfolio": {"status": "INITIALIZING"},
+                "execution": {"status": "AWAITING", "slippage_bps": 0.0},
                 "Reconciliation": {"status": "AWAITING"},
                 "Strategy": {"status": "AWAITING"}
             }

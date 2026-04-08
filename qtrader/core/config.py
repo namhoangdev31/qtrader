@@ -56,6 +56,35 @@ class QTraderSettings(BaseSettings):
     impact_sigma_daily: float = 0.02
     impact_y: float = 1.0
 
+    # Trading System Settings
+    ts_max_position_usd: float = 100_000.0
+    ts_max_drawdown_pct: float = 0.20
+    ts_max_order_qty: float = 1.0
+    ts_max_order_notional: float = 50_000.0
+    ts_max_orders_per_second: float = 5.0
+    ts_max_latency_ms: float = 100.0
+    
+    # Model Hub
+    ts_forecast_model: str = "llama3.2:1b"
+    ts_risk_model: str = "qwen3.5:2b"
+    ts_decision_model: str = "gemma4:e2b"
+    
+    # Risk & Guardrails
+    ts_atr_window: int = 14
+    ts_atr_multiplier: float = 2.0
+    ts_forecast_multiplier: float = 1.5
+    ts_min_sl_pct: float = 0.005
+    ts_max_sl_pct: float = 0.05
+    ts_price_jump_threshold: float = 0.05
+    ts_reference_price: float = 50000.0
+    
+    # Retraining & Circuit Breakers
+    ts_retrain_win_rate_threshold: float = 0.35
+    ts_win_history_window: int = 10
+    ts_min_forecast_points: int = 2
+    ts_streak_reduction_threshold: int = 3
+    ts_anomaly_loss_threshold: int = 3
+
     # Bot / Operational
     log_level: str = "INFO"
     monthly_cloud_budget: float = 1000.0
@@ -221,6 +250,18 @@ class QTraderSettings(BaseSettings):
     @property
     def MONTHLY_BUDGET(self) -> float:
         return self.monthly_cloud_budget
+
+    @property
+    def FORECAST_MODEL(self) -> str:
+        return self.ts_forecast_model
+    
+    @property
+    def RISK_MODEL(self) -> str:
+        return self.ts_risk_model
+    
+    @property
+    def DECISION_MODEL(self) -> str:
+        return self.ts_decision_model
 
     # Removed problematic attributes: RAY_ADDRESS, RAY_MEMORY, RAY_CPUS
 

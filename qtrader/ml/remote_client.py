@@ -91,7 +91,7 @@ class RemoteAtomicTrioPipeline:
                             pipeline_latency_ms=latency,
                             chronos_latency_ms=data.get("chronos_latency_ms", 0.0),
                             tabpfn_latency_ms=data.get("tabpfn_latency_ms", 0.0),
-                            phi2_latency_ms=data.get("phi2_latency_ms", 0.0),
+                            decision_latency_ms=data.get("decision_latency_ms", 0.0),
                             model_info=data.get("model_info", {}),
                         )
                         return result

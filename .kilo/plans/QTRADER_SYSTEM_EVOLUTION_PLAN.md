@@ -61,7 +61,7 @@
 
 ### Data Flow Characteristics:
 - Event-driven between layers with clear contracts
-- Each layer outputs standardized formats (pl.Series, SignalEvents, Dict[str, float])
+- Each layer outputs standardized formats (pl.Series, SignalEvents, dict[str, float])
 - Backward compatibility maintained through adapter patterns
 - Metrics flowing backward for continuous improvement
 

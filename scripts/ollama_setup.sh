@@ -16,6 +16,7 @@ echo "[OLLAMA] Pulling Focused Models (Llama 3.2 1B, Qwen 3 Embedding 0.6B, Qwen
 ollama pull llama3.2:1b
 ollama pull qwen3-embedding:0.6b
 ollama pull qwen3.5:2b
+ollama pull gemma4:e2b
 
 echo "[OLLAMA] All models ready!"
 

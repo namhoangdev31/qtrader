@@ -304,21 +304,16 @@ async def add_forensic_note(note: dict[str, Any], sys: TradingSystem = Depends(g
         note_type = note.get("type", "OBSERVATION")
         session_id = sys.active_session_id
         
-        # 1. Immediate Persistence (Sync-ish)
         note_id = await writer.write_forensic_note(
             content=content,
             note_type=note_type,
             session_id=session_id
         )
         
-        # 2. Async Enqueue for Language Embedding (Non-blocking)
-        embedding_manager.enqueue_note(note_id, content)
+        embedding_manager.enqueue_note(note_id, content, session_id)
         
-        # 3. If it's a high-priority forensic note, refresh the global sentiment context immediately
         if note_type in ["ALERT", "TRIAL"]:
             embedding_manager.refresh_sentiment(f"Manual Forensic Intervention: {content}")
-        
-        # 4. Notify Audit WebSocket (Real-time update)
         try:
             await sys.event_bus.publish(
                 ForensicNoteEvent(
@@ -344,7 +339,6 @@ async def get_positions(
     sys: TradingSystem = Depends(get_system),  # noqa: B008
 ) -> list[dict[str, Any]]:
     """Get active positions from the system (Redundant, use WebSocket)."""
-    # Fetch from sys state store which is synced with Redis
     positions = await sys.state_store.get_positions()
 
     rows = []
@@ -369,10 +363,7 @@ async def place_order(
     sys: TradingSystem = Depends(get_system),  # noqa: B008
 ) -> dict[str, Any]:
     """Submit a manual paper trade."""
-
-    # Create order event
     import uuid
-
     order = OrderEvent(
         source="api_dashboard",
         payload=OrderPayload(
@@ -405,17 +396,13 @@ async def get_market_history(
     now = int(time.time())
     start = now - (100 * 60)  # 100 minutes ago
 
-    # Get current real price from broker as anchor
     quote = sys.broker._quotes.get(symbol, {})
     current_price = float(quote.get("price") or 50000.0)
 
-    # Generate 100 candles walking backwards from current price
     candles = []
     temp_price = current_price
 
     for t in range(now - 60, start - 60, -60):
-        # Inverse random walk to generate historical data
-        # Scaled down to +/- 0.1 USD per minute to fit user's request
         volatility = 0.1
         c = temp_price
         o = c + random.uniform(-volatility, volatility)  # noqa: S311
@@ -447,8 +434,6 @@ async def trading_updates(websocket: WebSocket) -> None:
     
     async def get_snapshot():
         balance = await sys.broker.get_paper_balance()
-        
-        # Read positions from sim engine (primary source of truth)
         pos_list = []
         for sym, lots in engine._open_positions.items():
             for lot in lots:
@@ -504,8 +489,6 @@ async def trading_updates(websocket: WebSocket) -> None:
 
     await websocket.send_json(await get_snapshot())
     queue: asyncio.Queue[bool] = asyncio.Queue()
-    
-    # Subscribe to sim engine updates (primary) and EventBus (secondary)
     engine.add_update_listener(lambda x: queue.put_nowait(True))
     async def handler(event): await queue.put(True)
     sys.event_bus.subscribe(EventType.FILL, handler)
@@ -530,7 +513,6 @@ async def forensics_updates(websocket: WebSocket) -> None:
     engine = get_sim_engine()
 
     async def get_snapshot():
-        # Build unified trace from system or simulation engine
         trace = getattr(sys, "_last_module_traces", {})
         if engine._running:
              trace = engine._last_trace.get("module_traces", trace)
@@ -580,6 +562,7 @@ async def telemetry_updates(websocket: WebSocket) -> None:
         # 1. Prioritize simulation metrics if engine is active (fixes Bug 2)
         if engine._running:
             status["status"] = "RUNNING"
+            status["running"] = True
             status["session_id"] = engine._session_id or status.get("session_id")
             status["stats"]["orders"] = len(engine.closed_trades)
             status["stats"]["fills"] = len(engine.closed_trades)
@@ -590,6 +573,7 @@ async def telemetry_updates(websocket: WebSocket) -> None:
             uptime = time.time() - getattr(engine, "_start_time", time.time())
             latency = getattr(engine, "_last_latency_ms", 0.0)
         else:
+            status["running"] = sys._running
             uptime = time.time() - getattr(sys, "_start_time", time.time())
             latency = getattr(sys, "_last_latency_ms", 0.0)
         
@@ -689,7 +673,8 @@ async def audit_updates(websocket: WebSocket) -> None:
                 }
                 for r in notes_rows
             ]
-        except Exception:
+        except Exception as e:
+            logger.error(f"[API] Failed to fetch notes for audit snapshot: {e}")
             notes = []
 
         # 2. Fetch trade history from sim engine (primary source)

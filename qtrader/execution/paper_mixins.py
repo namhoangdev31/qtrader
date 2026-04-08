@@ -37,6 +37,7 @@ class SignalMixin:
             "latency_ms": random.randint(self.LATENCY_MIN_MS, self.LATENCY_MAX_MS)  # noqa: S311
                 if self._running else 0
         }
+        self._last_trace["module_traces"]["ingestion"] = self._last_trace["ingestion"]
         
         if self._running:
             pass
@@ -126,11 +127,14 @@ class SignalMixin:
         }
         
         self._last_trace["module_traces"]["AlphaEngine"] = self._last_trace["alpha"]
+        self._last_trace["module_traces"]["alpha"] = self._last_trace["alpha"]
+
         anomaly_threshold = 0.01  
         last_slip = getattr(self, "_last_slippage", 0.0)
-        self._last_trace["module_traces"]["Execution"] = {
+        self._last_trace["module_traces"]["execution"] = {
             "name": "PaperEngine_Sim",
             "last_slippage_bps": round(last_slip * 10000, 2),
+            "slippage_bps": round(last_slip * 10000, 2),
             "status": "DANGER" if (last_slip > anomaly_threshold) else "OK",
             "is_anomaly": last_slip > anomaly_threshold
         }
@@ -138,6 +142,11 @@ class SignalMixin:
             "name": "DynamicGuardrail_Sim",
             "sl_pct": self.adaptive.current_stop_loss_pct,
             "tp_pct": self.adaptive.current_take_profit_pct,
+            "status": "ACTIVE"
+        }
+        self._last_trace["module_traces"]["risk"] = {
+            "initial_stop_loss": self.adaptive.current_stop_loss_pct * self._current_price,
+            "sl_pct": self.adaptive.current_stop_loss_pct,
             "status": "ACTIVE"
         }
         
@@ -170,6 +179,7 @@ class SignalMixin:
         }
         self._thinking_history.append({
             "timestamp": time.time(),
+            "action": res["action"] if res else "HOLD",
             "thinking": self._last_thinking,
             "explanation": self._last_explanation
         })
@@ -382,7 +392,7 @@ class PositionMixin:
             f"PnL=${net_pnl:.2f} ({net_pnl_pct:.2f}%) | WR={self.adaptive.win_rate:.1%}"
         )
     
-        self._last_trace["execution"] = {
+        self._last_trace["module_traces"]["execution"] = {
             "order_id": trade.trade_id,
             "fill_price": exit_price,
             "slippage_bps": slippage_bps,
