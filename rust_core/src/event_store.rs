@@ -1,8 +1,5 @@
 use pyo3::prelude::*;
 use serde::{Serialize, Deserialize};
-use std::fs::OpenOptions;
-use std::io::Write;
-use chrono::Utc;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SystemEvent {

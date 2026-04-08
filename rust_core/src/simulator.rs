@@ -1,4 +1,4 @@
-use numpy::{PyArray1, PyReadonlyArray1};
+use numpy::{PyArray1, PyArrayMethods};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
@@ -65,12 +65,12 @@ pub fn run_hft_simulation(
     py: Python<'_>,
     config: &SimulatorConfig,
     symbol: String,
-    timestamps: PyReadonlyArray1<'_, i64>,
-    bid_prices: PyReadonlyArray1<'_, f64>,
-    ask_prices: PyReadonlyArray1<'_, f64>,
-    bid_sizes: PyReadonlyArray1<'_, f64>,
-    ask_sizes: PyReadonlyArray1<'_, f64>,
-    signals: PyReadonlyArray1<'_, f64>, // 1.0=Buy, -1.0=Sell, 0.0=None
+    timestamps: Bound<'_, PyArray1<i64>>,
+    bid_prices: Bound<'_, PyArray1<f64>>,
+    ask_prices: Bound<'_, PyArray1<f64>>,
+    bid_sizes: Bound<'_, PyArray1<f64>>,
+    ask_sizes: Bound<'_, PyArray1<f64>>,
+    signals: Bound<'_, PyArray1<f64>>, // 1.0=Buy, -1.0=Sell, 0.0=None
 ) -> PyResult<(Py<PyArray1<f64>>, f64)> {
     let mut account = Account::new(config.initial_capital);
     let matcher = MatchingEngine::new(config.latency_ms, config.fee_rate, config.slippage_bps);
@@ -86,12 +86,18 @@ pub fn run_hft_simulation(
         config.daily_loss_limit,
     );
 
-    let ts_slice = timestamps.as_slice()?;
-    let bid_p = bid_prices.as_slice()?;
-    let ask_p = ask_prices.as_slice()?;
-    let bid_s = bid_sizes.as_slice()?;
-    let ask_s = ask_sizes.as_slice()?;
-    let sig_slice = signals.as_slice()?;
+    let ts_slice = timestamps.readonly();
+    let ts_slice = ts_slice.as_slice()?;
+    let bid_p = bid_prices.readonly();
+    let bid_p = bid_p.as_slice()?;
+    let ask_p = ask_prices.readonly();
+    let ask_p = ask_p.as_slice()?;
+    let bid_s = bid_sizes.readonly();
+    let bid_s = bid_s.as_slice()?;
+    let ask_s = ask_sizes.readonly();
+    let ask_s = ask_s.as_slice()?;
+    let sig_slice = signals.readonly();
+    let sig_slice = sig_slice.as_slice()?;
 
     let n = ts_slice.len();
     let mut equity_curve = Vec::with_capacity(n);
@@ -151,7 +157,7 @@ pub fn run_hft_simulation(
         }
     }
 
-    let eq_pyarray = pyo3::prelude::Py::from(numpy::PyArray1::from_vec(py, equity_curve));
+    let eq_pyarray = PyArray1::from_vec(py, equity_curve).unbind();
     Ok((eq_pyarray, peak_equity))
 }
 
@@ -161,9 +167,9 @@ pub fn run_simulation_1d(
     py: Python<'_>,
     config: &SimulatorConfig,
     symbol: String,
-    timestamps: PyReadonlyArray1<'_, i64>,
-    closes: PyReadonlyArray1<'_, f64>,
-    signals: PyReadonlyArray1<'_, f64>,
+    timestamps: Bound<'_, PyArray1<i64>>,
+    closes: Bound<'_, PyArray1<f64>>,
+    signals: Bound<'_, PyArray1<f64>>,
 ) -> PyResult<(Py<PyArray1<f64>>, f64)> {
     let mut account = Account::new(config.initial_capital);
     let matcher = MatchingEngine::new(config.latency_ms, config.fee_rate, config.slippage_bps);
@@ -179,9 +185,12 @@ pub fn run_simulation_1d(
         config.daily_loss_limit,
     );
 
-    let ts_slice = timestamps.as_slice()?;
-    let close_slice = closes.as_slice()?;
-    let sig_slice = signals.as_slice()?;
+    let ts_read = timestamps.readonly();
+    let ts_slice = ts_read.as_slice()?;
+    let close_read = closes.readonly();
+    let close_slice = close_read.as_slice()?;
+    let sig_read = signals.readonly();
+    let sig_slice = sig_read.as_slice()?;
 
     let n = ts_slice.len();
     let mut equity_curve = Vec::with_capacity(n);
@@ -225,6 +234,6 @@ pub fn run_simulation_1d(
         }
     }
 
-    let eq_pyarray = pyo3::prelude::Py::from(numpy::PyArray1::from_vec(py, equity_curve));
+    let eq_pyarray = PyArray1::from_vec(py, equity_curve).unbind();
     Ok((eq_pyarray, peak_equity))
 }

@@ -24,7 +24,7 @@ mod tests;
 /// A Python module implemented in Rust.
 #[cfg(not(test))]
 #[pymodule]
-fn qtrader_core(_py: Python, m: &PyModule) -> PyResult<()> {
+fn qtrader_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     use crate::allocator::{AllocationReport, CapitalAllocator};
     use crate::algo::TwapAlgo;
     use crate::event_store::EventStore;

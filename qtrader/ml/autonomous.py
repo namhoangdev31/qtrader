@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import polars as pl
 
-from qtrader.core.bus import EventBus
+from qtrader.core.event_bus import EventBus
 from qtrader.core.events import (
     MarketEvent,
     SignalEvent,

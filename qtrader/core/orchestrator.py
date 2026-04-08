@@ -53,7 +53,7 @@ from qtrader.analytics.accounting import FundAccountingEngine
 from qtrader.analytics.drift import DriftMonitor
 from qtrader.analytics.tca_engine import TCAEngine
 from qtrader.core.config import settings
-from qtrader.core.config_manager import ConfigManager
+from qtrader.core.dynamic_config import DynamicConfigManager
 from qtrader.core.decimal_adapter import math_authority
 from qtrader.core.execution_wrapper import execution_wrapper
 from qtrader.core.logger import log_event
@@ -96,7 +96,6 @@ from qtrader.risk.recovery_system import RecoverySystem
 from qtrader.risk.regime_adapter import RegimeAdapter
 from qtrader.risk.runtime import RuntimeRiskEngine
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
-from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.validation.feature_validator import FeatureValidator
 
 
@@ -109,7 +108,7 @@ class TradingOrchestrator:
         market_data_adapter: object,
         alpha_modules: list[BaseAlpha],
         feature_validator: FeatureValidator,
-        strategies: list[ProbabilisticStrategy],
+        strategies: list[Any],
         ensemble_strategy: EnsembleStrategy,
         portfolio_allocator: AllocatorBase,
         runtime_risk_engine: RuntimeRiskEngine,
@@ -404,8 +403,8 @@ class TradingOrchestrator:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "boot_duration_ms": (asyncio.get_event_loop().time() - start_time) * 1000,
             "status": status,
-            "config_checksum": ConfigManager.get_checksum()
-            if hasattr(ConfigManager, "get_checksum")
+            "config_checksum": DynamicConfigManager.get_checksum()
+            if hasattr(DynamicConfigManager, "get_checksum")
             else "N/A",
             "seed_applied": self.seed_manager.is_applied(),
             "authorities_initialized": [

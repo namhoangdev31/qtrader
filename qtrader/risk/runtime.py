@@ -10,7 +10,7 @@ from qtrader.core.events import RiskEvent
 from qtrader.core.types import RiskMetrics
 
 if TYPE_CHECKING:
-    from qtrader.core.bus import EventBus
+    from qtrader.core.event_bus import EventBus
 
 __all__ = ["RuntimeRiskEngine"]
 

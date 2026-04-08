@@ -24,6 +24,14 @@ class SignalMixin:
                 self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
             return self._current_price
     
+        mean_reversion_strength = 0.05
+        drift = mean_reversion_strength * (self._base_price - self._current_price)
+        noise = random.gauss(0, self._volatility * self._current_price)  # noqa: S311
+        self._current_price = max(
+            self._current_price + drift + noise,
+            self._base_price * 0.8  
+        )
+
         self._price_history.append(self._current_price)
         if len(self._price_history) > self.PRICE_HISTORY_LIMIT:
             self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
@@ -32,15 +40,12 @@ class SignalMixin:
             "price": self._current_price,
             "volatility": self._volatility,
             "spread_bps": 2.0,  
-            "is_live": time.time() - self._last_external_tick < self.EXTERNAL_TICK_TIMEOUT,
+            "is_live": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "latency_ms": random.randint(self.LATENCY_MIN_MS, self.LATENCY_MAX_MS)  # noqa: S311
                 if self._running else 0
         }
         self._last_trace["module_traces"]["ingestion"] = self._last_trace["ingestion"]
-        
-        if self._running:
-            pass
     
         return self._current_price
 
@@ -61,7 +66,6 @@ class SignalMixin:
                 losses.append(abs(diff) if diff < 0 else 0)
             avg_g = sum(gains) / len(gains) if gains else 0
             avg_l = sum(losses) / len(losses) if losses else 0
-            # When prices are constant (no movement), RSI is neutral (50.0)
             if avg_g == 0 and avg_l == 0:
                 rsi = 50.0
             else:

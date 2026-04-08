@@ -157,6 +157,10 @@ class TradingSystem:
     def active_session_id(self) -> str | None:
         return self.session_state.session_id
 
+    @active_session_id.setter
+    def active_session_id(self, value: str | None) -> None:
+        self.session_state.session_id = value
+
     def get_status(self) -> dict[str, Any]:
         return {
             "status": "RUNNING" if self._running else "IDLE",
@@ -172,6 +176,8 @@ class TradingSystem:
         self._running = True
         self._stats["start_time"] = time.time()
         
+        for symbol in self.config.symbols:
+            self.broker.add_product(symbol)
         await self.broker.start_websocket()
         await self.event_bus.start()
         await embedding_manager.start()
@@ -207,12 +213,30 @@ class TradingSystem:
     async def _on_market_data_update(self, data: dict[str, Any]) -> None:
         symbol = data.get("product_id") or data.get("symbol")
         price = Decimal(str(data.get("price", "0")))
+        bid = Decimal(str(data.get("best_bid", "0")))
+        ask = Decimal(str(data.get("best_ask", "0")))
         if price > 0: self.broker._quotes[symbol] = {"price": price}
+        
+        if price > 0 and symbol:
+            try:
+                await self.event_bus.publish(
+                    MarketEvent(
+                        source="coinbase_ws",
+                        payload=MarketPayload(
+                            symbol=symbol,
+                            data=data,
+                            bid=bid,
+                            ask=ask,
+                        ),
+                    )
+                )
+            except Exception as e:
+                logger.debug(f"[TS] Failed to publish MarketEvent: {e}")
         
         if self.active_session_id:
             await self.db_writer.write_raw_market_data(
                 symbol=symbol, last_price=price, session_id=self.active_session_id,
-                bid=Decimal(str(data.get("best_bid", "0"))), ask=Decimal(str(data.get("best_ask", "0"))),
+                bid=bid, ask=ask,
                 volume=Decimal(str(data.get("volume_24h", "0")))
             )
 
@@ -305,6 +329,18 @@ class TradingSystem:
     async def _execute_exit(self, symbol: str, signal: dict[str, Any]) -> None:
         await self._execute_order(signal)
         self.session_state.record_win(symbol)
+
+def create_trading_system(
+    simulate: bool = True, 
+    symbols: list[str] | None = None, 
+    ml_pipeline: Any | None = None
+) -> TradingSystem:
+    """Factory function to create and configure a TradingSystem instance."""
+    config = TradingSystemConfig(
+        simulate=simulate,
+        symbols=symbols or settings.trading_symbols
+    )
+    return TradingSystem(config=config, ml_pipeline=ml_pipeline)
 
 if __name__ == "__main__":
     system = TradingSystem()

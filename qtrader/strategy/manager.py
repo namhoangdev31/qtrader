@@ -5,8 +5,6 @@ from typing import Any
 
 from qtrader.core.dynamic_config import config_manager
 from qtrader.strategy.base import BaseStrategy
-from qtrader.strategy.momentum import TimeSeriesMomentum
-from qtrader.strategy.probabilistic_strategy import ProbabilisticStrategy
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 
 logger = logging.getLogger("qtrader.strategy.manager")
@@ -16,14 +14,7 @@ class StrategyManager:
     """Manages dynamic switching between trading strategies based on AI configuration."""
 
     def __init__(self, symbol: str) -> None:
-        momentum = TimeSeriesMomentum(symbol=symbol)
-        probabilistic = ProbabilisticStrategy(symbol=symbol)
-        
-        self._strategies: dict[str, Any] = {
-            "MOMENTUM": momentum,
-            "PROBABILISTIC": probabilistic,
-            "ENSEMBLE": EnsembleStrategy(strategies=[momentum, probabilistic]),
-        }
+        self._strategies: dict[str, Any] = {}
         self.active_strategy_name = config_manager.get("active_strategy", "MOMENTUM")
         logger.info(f"[STRATEGY_MANAGER] Initialized with {self.active_strategy_name}")
 

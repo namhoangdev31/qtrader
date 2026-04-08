@@ -314,7 +314,7 @@ if __name__ == "__main__":
     import polars as pl
     from sklearn.linear_model import LinearRegression
 
-    from qtrader.core.bus import EventBus
+    from qtrader.core.event_bus import EventBus
     from qtrader.core.orchestrator import TradingOrchestrator
 
     # 1. Mandatory Sovereign Initialization

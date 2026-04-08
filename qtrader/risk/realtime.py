@@ -11,7 +11,7 @@ from qtrader.risk.limits import PortfolioState, RiskLimit
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from qtrader.core.bus import EventBus
+    from qtrader.core.event_bus import EventBus
     from qtrader.core.events import RiskEvent
     from qtrader.risk.kill_switch import GlobalKillSwitch
 

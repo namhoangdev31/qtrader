@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from qtrader.core.config_manager import ConfigManager
+from qtrader.core.dynamic_config import DynamicConfigManager
 from qtrader.core.decimal_adapter import math_authority
 from qtrader.core.fail_fast_engine import FailFastEngine
 from qtrader.core.logger import qlogger
@@ -36,7 +36,7 @@ class Container:
 
         # Central Registry of Core Authorities (Set S)
         self._services: dict[str, Any] = {
-            "config": ConfigManager(),
+            "config": DynamicConfigManager(),
             "trace": TraceAuthority,
             "logger": qlogger,
             "failfast": FailFastEngine(),

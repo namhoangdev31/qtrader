@@ -36,7 +36,7 @@ impl CapitalAllocator {
         strategies: HashMap<String, f64>,
         total_capital: f64,
     ) -> AllocationReport {
-        let mut performers: HashMap<String, f64> = strategies
+        let performers: HashMap<String, f64> = strategies
             .into_iter()
             .filter(|(_, sharpe)| *sharpe > 0.0)
             .collect();
@@ -115,7 +115,7 @@ impl CapitalAllocator {
         vols: HashMap<String, f64>,
         total_capital: f64,
     ) -> AllocationReport {
-        let mut inv_vols: HashMap<String, f64> = vols
+        let inv_vols: HashMap<String, f64> = vols
             .into_iter()
             .map(|(sid, vol)| (sid, 1.0 / vol.max(1e-6)))
             .collect();

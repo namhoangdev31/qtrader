@@ -8,11 +8,12 @@ from typing import Any
 import numpy as np
 import polars as pl
 
+import logging
 from qtrader.core.container import container
 from qtrader.core.decimal_adapter import d
 from qtrader.core.types import AllocationWeights, SignalEvent
 
-_LOG = container.get("logger")
+_LOG = logging.getLogger(__name__)
 
 try:
     from qtrader_core import CapitalAllocator as RustAllocator

@@ -324,7 +324,17 @@ class ExecutionEngine:
     ) -> None:
         self.exchange_adapter = exchange_adapter
         self.state_store = state_store or StateStore()
-        self.war_mode = war_mode or WarModeEngine()
+
+        # === RUST EXECUTION CORE INITIALIZATION (Standash §2) ===
+        # Create a Rust RiskEngine with matching limits (Required for WarModeEngine)
+        self._rust_risk = RustRiskEngine(
+            max_position_usd=max_order_size,  # Simplified mapping
+            max_drawdown_pct=0.1,             # Default 10%
+            max_order_notional=max_order_size,
+        )
+
+        self.war_mode = war_mode or WarModeEngine(rust_engine=self._rust_risk)
+
         # If the adapter supports fill callback, set it
         if hasattr(exchange_adapter, "set_fill_callback"):
             exchange_adapter.set_fill_callback(self._on_order_filled)
@@ -335,14 +345,6 @@ class ExecutionEngine:
         self.enable_failover_queue = enable_failover_queue
         self.logger = logger
         self._event_bus = event_bus
-
-        # === RUST EXECUTION CORE INITIALIZATION (Standash §2) ===
-        # Create a Rust RiskEngine with matching limits
-        rust_risk = RustRiskEngine(
-            max_position_usd=max_order_size,  # Simplified mapping
-            max_drawdown_pct=0.1,             # Default 10%
-            max_order_notional=max_order_size,
-        )
         
         # Python-side Rate Limiter (Standash §6.1)
         self.rate_limiter = TokenBucketRateLimiter(
@@ -353,7 +355,6 @@ class ExecutionEngine:
         # Background Execution Worker (Hybrid Concurrency)
         self._worker_queue: queue.Queue = queue.Queue()
         self._rust_engine: RustExecutionEngine | None = None
-        self._rust_risk = rust_risk
         self._max_retry_attempts = max_retry_attempts
         self._worker_thread = threading.Thread(
             target=self._execution_worker_loop,
@@ -368,7 +369,6 @@ class ExecutionEngine:
             self._event_bus.subscribe(EventType.RETRY_ORDER, self._on_retry_order)
 
         self._is_running = False
-        self._failover_processor_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         """Start the execution engine background tasks."""
@@ -377,20 +377,12 @@ class ExecutionEngine:
 
         self._is_running = True
         self._worker_thread.start()
-        if self.enable_failover_queue:
-            self._failover_processor_task = asyncio.create_task(self._process_failover_queue())
         self.logger.info("ExecutionEngine started (with Rust Worker Thread)")
 
     async def stop(self) -> None:
         """Stop the execution engine background tasks."""
         self._is_running = False
         self._worker_queue.put(None)  # Signal worker to stop
-        if self._failover_processor_task:
-            self._failover_processor_task.cancel()
-            try:
-                await self._failover_processor_task
-            except asyncio.CancelledError:
-                pass
         self._worker_thread.join(timeout=2.0)
         self.logger.info("ExecutionEngine stopped")
 

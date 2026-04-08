@@ -65,8 +65,8 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
         self.RSI_PERIOD = 14
         self.RSI_BULL_GATE = 45.0
         self.RSI_BEAR_GATE = 55.0
-        self.RSI_OVERSOLD = 45.0 
-        self.RSI_OVERBOUGHT = 55.0 
+        self.RSI_OVERSOLD = 30.0 
+        self.RSI_OVERBOUGHT = 70.0 
         self.REVERSAL_THRESHOLD = 0.35
         self.MIN_TRADE_NOTIONAL = 10.0
         self.EPSILON_QTY = 1e-8
@@ -88,7 +88,7 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
         self._current_price = base_price
         self._base_price = base_price
         self._price_history: list[float] = []
-        self._volatility = 0.002
+        self._volatility = 0.0003
         self._running = False
         self._tick_interval = tick_interval
         self._last_external_tick = 0.0

@@ -1,4 +1,4 @@
-use crate::oms::{Account, Position};
+use crate::oms::Account;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 

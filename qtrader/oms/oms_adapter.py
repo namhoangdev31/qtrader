@@ -3,14 +3,14 @@
 import asyncio
 from abc import ABC, abstractmethod
 from decimal import Decimal
+from typing import Any
 
 from qtrader.core.execution_guard import require_initialized
 from qtrader.core.logger import logger
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
-from qtrader.execution.multi_exchange_adapter import MultiExchangeAdapter
-from qtrader.execution.smart_router import SmartOrderRouter
 from qtrader.oms.order_management_system import UnifiedOMS
+
 
 
 class OMSAdapter(ABC):
@@ -57,7 +57,6 @@ class OMSAdapter(ABC):
 
     def _create_empty_order(self, timestamp: Any) -> OrderEvent:
         """Helper to create a zero-quantity order event."""
-        from typing import Any
         return OrderEvent(
             order_id="NO_TRADE",
             symbol="",
@@ -144,25 +143,13 @@ class ExecutionOMSAdapter(OMSAdapter):
         self.split_size = split_size
 
         # Create the smart router
-        self.router = SmartOrderRouter(
-            exchanges=exchange_adapters,
-            routing_mode=routing_mode,
-            max_order_size=max_order_size,
-            split_size=split_size,
-        )
-
-        # Create the multi-exchange adapter (which implements ExchangeAdapter)
-        self.multi_exchange_adapter = MultiExchangeAdapter(
-            exchanges=exchange_adapters,
-            router=self.router,
-            name="MultiExchangeAdapterInternal",
-        )
-
-        # Create the execution engine that uses the multi-exchange adapter
-        from qtrader.core.config import Config
+        # Create the execution engine using the primary exchange adapter
+        from qtrader.core.config import settings
+        main_adapter = next(iter(exchange_adapters.values())) if exchange_adapters else None
+        
         self.execution_engine = ExecutionEngine(
-            exchange_adapter=self.multi_exchange_adapter,
-            max_orders_per_second=Config.ts_max_orders_per_second,
+            exchange_adapter=main_adapter,
+            max_orders_per_second=settings.ts_max_orders_per_second,
             logger=self.logger,
         )
 
