@@ -1,16 +1,5 @@
 """Pre-Trade Risk Validation — Standash §4.6, §4.7.
-
-Validates every order before it reaches the execution layer.
-Checks:
-1. Fat-finger protection (price deviation, quantity limits)
-2. Position limits (max position per symbol, total exposure)
-3. Order rate limits (max orders per second)
-4. Kill switch status (blocks all orders when active)
-5. Notional limits (max order value)
-
-All parameters are configurable via PreTradeRiskConfig.
 """
-
 from __future__ import annotations
 
 import logging
@@ -19,6 +8,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
+
+from qtrader.core.dynamic_config import DynamicSettingsMixin, config_manager
 
 logger = logging.getLogger("qtrader.execution.pre_trade_risk")
 
@@ -66,7 +57,7 @@ class PreTradeRiskResult:
             self.timestamp = time.time()
 
 
-class PreTradeRiskValidator:
+class PreTradeRiskValidator(DynamicSettingsMixin):
     """Pre-Trade Risk Validator — Standash §4.6, §4.7.
 
     Every order must pass this validation before reaching the execution layer.
@@ -212,6 +203,34 @@ class PreTradeRiskValidator:
                 checks_passed.append("CONCENTRATION_OK")
 
         # ------------------------------------------------------------------
+        # Check 7: Dynamic Order rate limit (per second) - AI Hardened
+        # ------------------------------------------------------------------
+        now = time.time()
+        self._order_timestamps.append(now)
+        
+        # Use DynamicSettingsMixin property (reactive to AI overrides)
+        max_ops = self.TS_MAX_ORDERS_PER_SECOND
+        
+        recent_1s = sum(1 for t in self._order_timestamps if now - t < 1.0)
+        if recent_1s > max_ops:
+            checks_failed.append(
+                f"RATE_LIMIT_1S: {recent_1s} > {max_ops} orders/sec (DYNAMIC_OVERRIDE_ACTIVE)"
+            )
+        else:
+            checks_passed.append("RATE_LIMIT_1S_OK")
+
+        # Check 8: Order rate limit (per minute) - Scaled from dynamic limit
+        recent_60s = sum(1 for t in self._order_timestamps if now - t < 60.0)
+        # Scale 1m limit proportional to dynamic 1s limit if not explicitly defined
+        max_opm = self.config.max_orders_per_minute 
+        if recent_60s > max_opm:
+            checks_failed.append(
+                f"RATE_LIMIT_60S: {recent_60s} > {max_opm}"
+            )
+        else:
+            checks_passed.append("RATE_LIMIT_60S_OK")
+
+        # ------------------------------------------------------------------
         # Performance Gating: Rust Acceleration Path (< 100μs)
         # ------------------------------------------------------------------
         if HAS_RUST_CORE:
@@ -238,32 +257,11 @@ class PreTradeRiskValidator:
                 rust_account.add_position_direct(sym, float(qty), float(self._mid_prices.get(sym, Decimal("0"))))
 
             try:
+                # Primary Rust checks (Fat finger, Position, Concentration)
                 self._rust_engine.check_order(rust_order, rust_account, order_price_f, float(self._portfolio_value))
-                checks_passed.extend(["RUST_RATE_LIMIT_OK", "RUST_FAT_FINGER_OK", "RUST_POSITION_OK"])
+                checks_passed.extend(["RUST_FAT_FINGER_OK", "RUST_POSITION_OK"])
             except ValueError as e:
                 checks_failed.append(f"RUST_RISK_REJECT: {str(e)}")
-
-        else:
-            # Legacy Python Logic (Fallback)
-            # Check 7: Order rate limit (per second)
-            now = time.time()
-            self._order_timestamps.append(now)
-            recent_1s = sum(1 for t in self._order_timestamps if now - t < 1.0)
-            if recent_1s > self.config.max_orders_per_second:
-                checks_failed.append(
-                    f"RATE_LIMIT_1S: {recent_1s} > {self.config.max_orders_per_second}"
-                )
-            else:
-                checks_passed.append("RATE_LIMIT_1S_OK")
-
-            # Check 8: Order rate limit (per minute)
-            recent_60s = sum(1 for t in self._order_timestamps if now - t < 60.0)
-            if recent_60s > self.config.max_orders_per_minute:
-                checks_failed.append(
-                    f"RATE_LIMIT_60S: {recent_60s} > {self.config.max_orders_per_minute}"
-                )
-            else:
-                checks_passed.append("RATE_LIMIT_60S_OK")
 
         # Final decision
         approved = len(checks_failed) == 0

@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from qtrader.core.dynamic_config import config_manager
+from qtrader.core.config import settings
+from qtrader.core.dynamic_config import DynamicSettingsMixin, config_manager
+from qtrader.core.events import ForensicNoteEvent, ForensicNotePayload
 from qtrader.execution.paper_mixins import (
     FillMixin,
     PersistenceMixin,
@@ -21,20 +23,18 @@ from qtrader.execution.paper_models import AdaptiveConfig, OpenPosition, TradeRe
 
 _LOG = logging.getLogger("qtrader.paper")
 
-class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin):
-    """Paper Trading Engine with continuous simulation, SL/TP, and adaptive strategy.
+class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillMixin, PersistenceMixin):
+    """Event-Driven Simulation Engine with institutional-grade forensics.
     
-    Executes simulated orders against real Coinbase market data.
-    Tracks P&L, computes realistic slippage via Kyle's Lambda,
-    and supports continuous autonomous trading with adaptive parameters.
+    Provides high-fidelity execution simulation including slippage, 
+    latency, and technical signal generation.
     """
     def __init__(  # noqa: PLR0913
         self,
-        starting_capital: float = 1000.0,
-        fee_rate: float = 0.0, 
-        performance_fee: float = 0.15,
+        starting_capital: float = 100000.0,
+        performance_fee: float = 0.2,
         max_concurrent_positions: int = 10,
-        max_trades_history: int = 100_000,
+        max_trades_history: int = 1000,
         sl_pct: float = 0.02,
         tp_pct: float = 0.03,
         tick_interval: float = 0.2,
@@ -44,13 +44,6 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
     ) -> None:
         self._db_writer = db_writer
         self._session_id = session_id
-        self.TAKER_FEE: float = 0.0060 
-        self.MAKER_FEE: float = 0.0040 
-        
-        self.LATENCY_MIN_MS: int = 50
-        self.LATENCY_MAX_MS: int = 300
-        self.ERROR_PROBABILITY: float = 0.01  
-        self.SLIPPAGE_VOL_MULT: float = 0.5   
         
         self.starting_capital = starting_capital
         self.performance_fee = performance_fee
@@ -59,18 +52,32 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
         self._last_recorded_equity: float | None = None
         self._trade_history = self.closed_trades
         self._max_trades_history = max_trades_history
-        self.PRICE_HISTORY_LIMIT = 5000
-        self.PRICE_HISTORY_PRUNE = 2000
-        self.MIN_HISTORY_FOR_ANALYSIS = 20
-        self.RSI_PERIOD = 14
-        self.RSI_BULL_GATE = 45.0
-        self.RSI_BEAR_GATE = 55.0
-        self.RSI_OVERSOLD = 30.0 
-        self.RSI_OVERBOUGHT = 70.0 
-        self.REVERSAL_THRESHOLD = 0.35
-        self.MIN_TRADE_NOTIONAL = 10.0
-        self.EPSILON_QTY = 1e-8
-        self.THINKING_HISTORY_LIMIT = 100
+        
+        self._open_positions: dict[str, list[OpenPosition]] = {}
+        self._managed_positions: dict[str, list[OpenPosition]] = {}
+    
+        self.adaptive = AdaptiveConfig(
+            base_stop_loss_pct=sl_pct,
+            base_take_profit_pct=tp_pct,
+        )
+    
+        self._cash = starting_capital
+        self._total_commissions = 0.0
+        self._total_gross_pnl = 0.0
+        self._peak_equity = starting_capital
+        self._max_drawdown = 0.0
+        self._current_price = base_price
+        self._base_price = base_price
+        self._price_history: list[float] = []
+        self._volatility = 0.0003
+        self._running = False
+        self._tick_interval = tick_interval
+        self._last_external_tick = 0.0
+        self._start_time = time.time()
+        self._last_latency_ms = 0.0
+        self._last_thinking = "Awaiting first analysis..."
+        self._last_explanation = "Simulation engine is initializing market data buffer..."
+        self._thinking_history: list[dict[str, Any]] = []
     
         self._open_positions: dict[str, list[OpenPosition]] = {}
         self._managed_positions: dict[str, list[OpenPosition]] = {}
@@ -113,7 +120,7 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
         }
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
     
-        self.EXTERNAL_TICK_TIMEOUT = 2.0
+        self._tick_count = 0
 
     def add_update_listener(self, handler: Callable[[dict[str, Any]], None]) -> None:
         """Register a new listener for real-time simulation updates."""
@@ -264,57 +271,89 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
             ),
         }
 
+    def _on_tick(self) -> None:
+        """Event-driven simulation step. Triggered on market data updates.
+        
+        Complies with Zero Latency Rule (Rule 08) by avoiding asyncio.sleep.
+        """
+        if not self._running:
+            return
+
+        loop_start = time.time()
+        try:
+            self._tick_count += 1
+            self._simulate_price_tick()
+
+            exit_record = self._check_exit_conditions()
+            if exit_record:
+                self._emit(self._build_snapshot())
+            if len(self._price_history) >= self.MIN_HISTORY_FOR_ANALYSIS:
+                signal = self._generate_signal()
+                if self._managed_positions:
+                    dynamic_exit = self._check_dynamic_exit(signal)
+                    if dynamic_exit:
+                        self._emit(self._build_snapshot())
+                
+                if len(self._managed_positions) < self.max_concurrent_positions:
+                    if signal:
+                        sym = "BTC-USD"
+                        existing_lots = self._managed_positions.get(sym, [])
+                        if not existing_lots or any(
+                            lot.side != signal["action"] for lot in existing_lots
+                        ):
+                            opened = self._open_managed_position(
+                                signal["action"], 
+                                signal["strength"]
+                            )
+                            if opened:
+                                self._emit(self._build_snapshot())
+
+            if self._tick_count % 5 == 0:
+                self._persist_pnl_snapshot()
+                self._emit(self._build_snapshot())
+            
+            self._last_latency_ms = (time.time() - loop_start) * 1000
+            
+            # Rule 08 Compliance: Monitor simulation latency
+            if self._last_latency_ms > 100:
+                _LOG.warning(f"[PAPER] Latency violation: {self._last_latency_ms:.2f}ms")
+                
+                content = f"CRITICAL: Engine latency breach detected. Simulation step took {self._last_latency_ms:.2f}ms."
+                
+                # 1. Add to internal thinking history for snapshot
+                violation_note = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "thinking": "CRITICAL: Engine latency breach detected.",
+                    "explanation": content
+                }
+                self._thinking_history.append(violation_note)
+                if len(self._thinking_history) > self.THINKING_HISTORY_LIMIT:
+                    self._thinking_history.pop(0)
+
+                # 2. Emit ForensicNoteEvent for Auditor/Dashboard capture
+                self._publish_to_bus(
+                    ForensicNoteEvent(
+                        source="PaperTradingEngine",
+                        payload=ForensicNotePayload(
+                            content=content,
+                            note_type="ALERT",
+                            session_id=getattr(self, "_session_id", None)
+                        )
+                    )
+                )
+
+        except Exception as e:
+            _LOG.error(f"[PAPER] Simulation tick error: {e}", exc_info=True)
+
     async def run_continuous(self) -> None:
-        """Main continuous simulation loop."""
+        """DEPRECATED: Background loop. Now drive via handle_market_event.
+        
+        Maintained for legacy interface compatibility but essentially a no-op 
+        start marker.
+        """
         self._running = True
         self._start_time = time.time()
-        _LOG.info(f"[PAPER] Starting continuous simulation | capital=${self.starting_capital}")
-    
-        tick = 0
-        while self._running:
-            loop_start = time.time()
-            try:
-                tick += 1
-                self._simulate_price_tick()
-    
-                exit_record = self._check_exit_conditions()
-                if exit_record:
-                    self._emit(self._build_snapshot())
-    
-                if len(self._price_history) >= self.MIN_HISTORY_FOR_ANALYSIS:
-                    signal = self._generate_signal()
-                    
-                    if self._managed_positions:
-                        dynamic_exit = self._check_dynamic_exit(signal)
-                        if dynamic_exit:
-                            self._emit(self._build_snapshot())
-                    
-                    if len(self._managed_positions) < self.max_concurrent_positions:
-                        if signal:
-                            sym = "BTC-USD"
-                            existing_lots = self._managed_positions.get(sym, [])
-                            if not existing_lots or any(
-                                lot.side != signal["action"] for lot in existing_lots
-                            ):
-                                opened = self._open_managed_position(
-                                    signal["action"], 
-                                    signal["strength"]
-                                )
-                                if opened:
-                                    self._emit(self._build_snapshot())
-    
-                if tick % 5 == 0:
-                    self._persist_pnl_snapshot()
-                    self._emit(self._build_snapshot())
-                
-                self._last_latency_ms = (time.time() - loop_start) * 1000
-                await asyncio.sleep(self._tick_interval)
-    
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                _LOG.error(f"[PAPER] Simulation error: {e}", exc_info=True)
-                await asyncio.sleep(0.5)
+        _LOG.info("[PAPER] Simulation state marked as RUNNING")
 
     def stop(self) -> None:
         self._running = False
@@ -363,6 +402,9 @@ class PaperTradingEngine(SignalMixin, PositionMixin, FillMixin, PersistenceMixin
                     TradeRecord.SIGNIFICANT_PRICE_CHANGE
                 ):
                     self._emit(self._build_snapshot())
+                
+                # Drive simulation logic on every market tick (Zero Latency Compliance)
+                self._on_tick()
     
         except Exception as e:
             _LOG.error(f"[PAPER] Failed to handle external market data: {e}")

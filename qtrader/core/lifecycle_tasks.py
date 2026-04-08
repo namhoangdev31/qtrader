@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any, List
 
 from qtrader.core.dynamic_config import config_manager
+from qtrader.core.config import settings
 from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.persistence.db_writer import TradeDBWriter
 
@@ -28,9 +29,10 @@ class LifecycleTaskManager:
 
     async def sentiment_refresh_loop(self, simulate: bool) -> None:
         """Periodically refresh the global market sentiment embedding."""
-        logger.info("[LIFECYCLE] Sentiment Refresh loop active (600s interval)")
+        logger.info("[LIFECYCLE] Sentiment Refresh loop active")
         while self.is_running:
             try:
+                interval = config_manager.get("lifecycle_sentiment_interval")
                 symbol = self.symbols[0] if self.symbols else "BTC-USD"
                 quote = self.broker._quotes.get(symbol, {})
                 price = float(quote.get("price") or 0.0)
@@ -44,12 +46,14 @@ class LifecycleTaskManager:
                 embedding_manager.refresh_sentiment(narrative)
             except Exception as e:
                 logger.error(f"[LIFECYCLE] Sentiment refresh failed: {e}")
-            await asyncio.sleep(600)
+                interval = 600 # Fallback
+            await asyncio.sleep(interval)
 
     async def pnl_recording_loop(self, session_id: str) -> None:
         """Periodically record PnL snapshots to the database."""
         while self.is_running:
             try:
+                interval = config_manager.get("lifecycle_pnl_interval")
                 if session_id:
                     balance = await self.broker.get_paper_balance()
                     await self.db_writer.write_pnl_snapshot(
@@ -62,7 +66,8 @@ class LifecycleTaskManager:
                     )
             except Exception as e:
                 logger.error(f"[LIFECYCLE] PnL snapshot failed: {e}")
-            await asyncio.sleep(5)
+                interval = 5 # Fallback
+            await asyncio.sleep(interval)
 
     async def health_logging_loop(self, session_id: str, last_latency_provider: Any) -> None:
         """Periodically record system health metrics (CPU, MEM, Latency)."""
@@ -70,10 +75,10 @@ class LifecycleTaskManager:
         process = psutil.Process(os.getpid())
         while self.is_running:
             try:
+                interval = config_manager.get("lifecycle_health_interval")
                 if session_id:
                     cpu_pct = process.cpu_percent()
                     mem_pct = process.memory_percent()
-                    # last_latency_provider should be a lambda or object with an attribute
                     latency = getattr(last_latency_provider, "last_latency_ms", 0.0)
                     
                     await self.db_writer.write_system_health(
@@ -85,4 +90,5 @@ class LifecycleTaskManager:
                     )
             except Exception as e:
                 logger.error(f"[LIFECYCLE] Health logging failed: {e}")
-            await asyncio.sleep(10)
+                interval = 10 # Fallback
+            await asyncio.sleep(interval)

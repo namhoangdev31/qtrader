@@ -34,6 +34,8 @@ from qtrader.core.events import (
     MarketPayload,
     OrderEvent,
     OrderPayload,
+    RiskRejectedEvent,
+    RiskRejectedPayload,
 )
 from qtrader.core.latency_enforcer import LatencyEnforcer, latency_enforcer
 from qtrader.core.state_store import Position, StateStore
@@ -58,17 +60,18 @@ from qtrader.strategy.manager import StrategyManager
 from qtrader.strategy.signal_engine import SignalEngine
 from qtrader.oms.oms_adapter import ExecutionOMSAdapter
 from qtrader.core.types import AllocationWeights, RiskMetrics
+from qtrader.core.forensic_auditor import ForensicAuditor
 
 @dataclass
 class TradingSystemConfig:
     """Configuration for the Trading System (Legacy Wrapper for QTraderSettings)."""
     simulate: bool = settings.simulate_mode
     symbols: list[str] = field(default_factory=lambda: settings.trading_symbols)
-    max_position_usd: float = settings.ts_max_position_usd
-    max_drawdown_pct: float = settings.ts_max_drawdown_pct
+    max_position_usd: float = field(default_factory=lambda: config_manager.get("position_size_pct") * settings.starting_equity)
+    max_drawdown_pct: float = field(default_factory=lambda: config_manager.get("max_drawdown_limit"))
     max_order_qty: float = settings.ts_max_order_qty
     max_order_notional: float = settings.ts_max_order_notional
-    max_orders_per_second: float = settings.ts_max_orders_per_second
+    max_orders_per_second: float = field(default_factory=lambda: config_manager.get("ts_max_orders_per_second"))
     forecast_model_id: str = settings.ts_forecast_model
     risk_model_id: str = settings.ts_risk_model
     decision_model_id: str = settings.ts_decision_model
@@ -143,6 +146,7 @@ class TradingSystem:
         self.strategy_manager = StrategyManager(symbol=self.config.symbols[0])
         
         self.lifecycle = LifecycleTaskManager(self.broker, self.db_writer, self.config.symbols)
+        self.auditor = ForensicAuditor(self.event_bus, self.db_writer)
 
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -190,15 +194,20 @@ class TradingSystem:
         )
         
         self.lifecycle.is_running = True
+        self.auditor.session_id = self.active_session_id
+        if settings.ENABLE_AUTO_FORENSIC:
+            self.auditor.start()
+            
         self._tasks.add(asyncio.create_task(self.lifecycle.sentiment_refresh_loop(self.config.simulate)))
         self._tasks.add(asyncio.create_task(self.lifecycle.pnl_recording_loop(self.active_session_id)))
         self._tasks.add(asyncio.create_task(self.lifecycle.health_logging_loop(self.active_session_id, self)))
         
-        await self._run_pipeline()
+        self._tasks.add(asyncio.create_task(self._run_pipeline()))
 
     async def stop(self) -> None:
         self._running = False
         self.lifecycle.is_running = False
+        self.auditor.stop()
         self._shutdown_event.set()
         for t in self._tasks: t.cancel()
         await self.event_bus.stop()
@@ -268,8 +277,25 @@ class TradingSystem:
             else:
                 signal = self.signal_engine.generate_signal(symbol, ml_result)
                 if signal and self.signal_engine.check_trend_confirmation(symbol, signal["side"], self._market_data[symbol]):
-                    if self.pre_trade_risk.validate_order(symbol, signal["side"], Decimal(str(signal["position_size_multiplier"]))).approved:
+                    risk_result = self.pre_trade_risk.validate_order(
+                        symbol, signal["side"], Decimal(str(signal["position_size_multiplier"]))
+                    )
+                    if risk_result.approved:
                         await self._execute_order(signal)
+                    else:
+                        # [FORENSIC] Emit RiskRejectedEvent for auditor visibility
+                        await self.event_bus.publish(
+                            RiskRejectedEvent(
+                                source="TradingSystem",
+                                payload=RiskRejectedPayload(
+                                    order_id=f"REJECTED-{uuid4()}",
+                                    reason=risk_result.reason,
+                                    metric_value=0.0, # detailed metrics omitted for brevity
+                                    threshold=0.0,
+                                    metadata={"checks_failed": risk_result.checks_failed}
+                                )
+                            )
+                        )
 
         self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
         trace = self.latency_enforcer.get_pipeline_data(f"pipeline-{symbol}")

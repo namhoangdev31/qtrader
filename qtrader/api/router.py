@@ -55,7 +55,7 @@ def get_sim_engine() -> Any:
             fee_rate=0.04,
             sl_pct=0.02,
             tp_pct=0.03,
-            tick_interval=1.0,  # Baseline stabilized to 1.0s to reduce noise
+            tick_interval=1.0,
             base_price=50000.0,
         )
     return _simulation_engine
@@ -66,24 +66,20 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
     engine = get_sim_engine()
 
     if sys:
-        # 1. Ensure TradingSystem is started (to get session_id and activate DB persistence)
         if not sys._running:
             await sys.start()
             logger.info(f"[SIM] Started TradingSystem Orchestrator (Session: {sys.active_session_id})")
 
-        # 2. UNIFY Persistence: Share the same DB writer and Session ID
         if sys.db_writer and sys.active_session_id:
             engine.set_db_writer(sys.db_writer, sys.active_session_id)
-            logger.info(f"[SIM] Unified Persistence Layer for Session {sys.active_session_id}")
+            engine.set_event_bus(sys.event_bus)
+            logger.info(f"[SIM] Unified Persistence Layer & EventBus for Session {sys.active_session_id}")
 
         try:
-            # 3. UNIFY Broker: Inject this simulation engine into the TradingSystem's broker
             from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
             if isinstance(sys.broker, CoinbaseBrokerAdapter):
                 sys.broker.sim_engine = engine
                 logger.info("[SIM] Injected PaperTradingEngine into CoinbaseBrokerAdapter")
-
-            # 1. Initial manual sync
             symbol = "BTC-USD"
             quote = sys.broker._quotes.get(symbol, {})
             real_price = float(quote.get("price") or 0.0)
@@ -91,7 +87,6 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
                 engine.update_base_price(real_price, force_current=True)
                 logger.info(f"[SIM] Synced simulation to real price: {real_price:.2f}")
 
-            # 2. Subscribe for continuous real-time updates
             if not _is_subscribed:
                 sys.event_bus.subscribe(EventType.MARKET_DATA, engine.handle_market_event)
                 _is_subscribed = True
@@ -188,7 +183,6 @@ async def start_session(
     writer = TradeDBWriter()
     active = await writer.get_active_session()
     if active:
-        # If a session is already active (e.g. started by Orchestrator), join it
         return {
             "status": "started",
             "message": "Connected to active session",
@@ -196,8 +190,6 @@ async def start_session(
             "mode": active.get("mode", "UNKNOWN")
         }
 
-    # ACTIVATE the entire trading system manually
-    # This initializes Coinbase WebSockets, ML pipelines, and OMS
     await sys.start()
     
     return {

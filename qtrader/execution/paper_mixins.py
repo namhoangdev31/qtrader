@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from qtrader.core.events import FillEvent, FillPayload, OrderEvent
+from qtrader.core.events import FillEvent, FillPayload, OrderEvent, SignalEvent, SignalPayload
 from qtrader.execution.paper_models import OpenPosition, TradeRecord
 
 _LOG = logging.getLogger("qtrader.paper")
@@ -53,9 +53,9 @@ class SignalMixin:
         if len(self._price_history) < self.MIN_HISTORY_FOR_ANALYSIS:
             return None
         
-        recent = self._price_history[-20:]
-        sma_short = sum(recent[-5:]) / 5
-        sma_long = sum(recent[-10:]) / 10
+        recent = self._price_history[-self.SMA_LONG_WINDOW * 2:]
+        sma_short = sum(recent[-self.SMA_SHORT_WINDOW:]) / self.SMA_SHORT_WINDOW
+        sma_long = sum(recent[-self.SMA_LONG_WINDOW:]) / self.SMA_LONG_WINDOW
     
         rsi = 50.0
         if len(recent) >= self.RSI_PERIOD:
@@ -72,7 +72,7 @@ class SignalMixin:
                 rs = avg_g / max(avg_l, 0.0001)
                 rsi = 100 - 100 / (1 + rs)
     
-        if sma_short > sma_long * 1.0001 and rsi < self.RSI_BULL_GATE:
+        if sma_short > sma_long * (1 + self.CROSSOVER_THRESHOLD) and rsi < self.RSI_BULL_GATE:
             self._last_thinking = (
                 f"SMA Bullish Cross ({sma_short:.2f} > {sma_long:.2f}) | "
                 f"RSI Oversold ({rsi:.1f})"
@@ -82,7 +82,7 @@ class SignalMixin:
                 "Executing adaptive entry with confirmed momentum."
             )
             res = {"action": "BUY", "strength": 0.5 + random.SystemRandom().random() * 0.3}
-        elif sma_short < sma_long * 0.9999 and rsi > self.RSI_BEAR_GATE:
+        elif sma_short < sma_long * (1 - self.CROSSOVER_THRESHOLD) and rsi > self.RSI_BEAR_GATE:
             self._last_thinking = (
                 f"SMA Bearish Cross ({sma_short:.2f} < {sma_long:.2f}) | "
                 f"RSI Overbought ({rsi:.1f})"
@@ -133,7 +133,7 @@ class SignalMixin:
         self._last_trace["module_traces"]["AlphaEngine"] = self._last_trace["alpha"]
         self._last_trace["module_traces"]["alpha"] = self._last_trace["alpha"]
 
-        anomaly_threshold = 0.01  
+        anomaly_threshold = self.ANOMALY_THRESHOLD
         last_slip = getattr(self, "_last_slippage", 0.0)
         self._last_trace["module_traces"]["execution"] = {
             "name": "PaperEngine_Sim",
@@ -253,6 +253,24 @@ class PositionMixin:
         _LOG.info(
             f"[PAPER] OPEN {side} {sym} qty={qty:.6f} @ {price:.2f} | "
             f"SL={sl:.2f} TP={tp:.2f} | Notional=${notional:.2f}"
+        )
+        # Emit signal event to EventBus so ForensicAuditor captures it
+        self._publish_to_bus(
+            SignalEvent(
+                source="PaperTradingEngine",
+                payload=SignalPayload(
+                    symbol=sym,
+                    signal_type=side,
+                    strength=Decimal(str(round(strength, 4))),
+                    confidence=Decimal(str(round(min(strength, 1.0), 4))),
+                    metadata={
+                        "notional": notional, 
+                        "price": price,
+                        "thinking": getattr(self, "_last_thinking", ""),
+                        "explanation": getattr(self, "_last_explanation", "")
+                    },
+                ),
+            )
         )
         return pos
 
@@ -416,6 +434,23 @@ class PositionMixin:
     
         # Persist PnL snapshot with delta-check
         self._persist_pnl_snapshot()
+
+        # Emit fill event to EventBus so ForensicAuditor can record [FILL] and [CLOSE]
+        self._publish_to_bus(
+            FillEvent(
+                source="PaperTradingEngine",
+                payload=FillPayload(
+                    order_id=trade.trade_id or str(uuid.uuid4()),
+                    symbol=symbol,
+                    side=pos.side,
+                    quantity=Decimal(str(round(pos.qty, 8))),
+                    price=Decimal(str(round(exit_price, 2))),
+                    commission=Decimal(str(round(execution_fee + exit_perf_fee, 4))),
+                    session_id=getattr(self, "_session_id", None),
+                    metadata={"reason": reason, "pnl": round(net_pnl, 4)},
+                ),
+            )
+        )
     
         return trade
 
@@ -581,6 +616,25 @@ class PersistenceMixin:
         self._db_writer = db_writer
         self._session_id = session_id
         _LOG.info(f"[PAPER] DB persistence bridge activated (session={session_id})")
+
+    def set_event_bus(self, event_bus: Any) -> None:
+        """Inject EventBus so simulation events reach the ForensicAuditor.
+
+        Args:
+            event_bus: EventBus instance from the TradingSystem.
+        """
+        self._event_bus = event_bus
+        _LOG.info("[PAPER] EventBus bridge activated — ForensicAuditor will receive sim events")
+
+    def _publish_to_bus(self, event: Any) -> None:
+        """Fire-and-forget publish to EventBus if available."""
+        bus = getattr(self, "_event_bus", None)
+        if bus is None:
+            return
+        try:
+            asyncio.create_task(bus.publish(event))
+        except Exception as e:
+            _LOG.warning(f"[PAPER] Failed to publish event to bus: {e}")
 
     def _persist_fill(
         self,

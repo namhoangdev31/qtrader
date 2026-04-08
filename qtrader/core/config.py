@@ -91,6 +91,36 @@ class QTraderSettings(BaseSettings):
     db_path: str = "qtrader.db"
     timezone: str = "Asia/Ho_Chi_Minh"
     trading_symbols: list[str] = ["BTC/USDT", "ETH/USDT"]
+    enable_auto_forensic: bool = True
+
+    sim_taker_fee: float = 0.006
+    sim_maker_fee: float = 0.004
+    sim_latency_min_ms: int = 50
+    sim_latency_max_ms: int = 300
+    sim_error_probability: float = 0.01
+    sim_slippage_vol_mult: float = 0.5
+    
+    # Paper Engine Limits & RSI Gates
+    sim_price_history_limit: int = 5000
+    sim_price_history_prune: int = 2000
+    sim_min_history_for_analysis: int = 20
+    sim_rsi_period: int = 14
+    sim_rsi_bull_gate: float = 45.0
+    sim_rsi_bear_gate: float = 55.0
+    sim_rsi_oversold: float = 30.0
+    sim_rsi_overbought: float = 70.0
+    sim_reversal_threshold: float = 0.35
+    sim_min_trade_notional: float = 10.0
+    sim_epsilon_qty: float = 1e-8
+    sim_thinking_history_limit: int = 100
+    sim_external_tick_timeout: float = 2.0
+    sim_sma_short_window: int = 5
+    sim_sma_long_window: int = 10
+    sim_crossover_threshold: float = 0.0001
+    sim_anomaly_threshold: float = 0.01
+    lifecycle_pnl_interval: float = 5.0
+    lifecycle_sentiment_interval: float = 600.0
+    lifecycle_health_interval: float = 10.0
 
     # Alert Routing
     telegram_bot_token: str = ""
@@ -262,6 +292,102 @@ class QTraderSettings(BaseSettings):
     @property
     def DECISION_MODEL(self) -> str:
         return self.ts_decision_model
+
+    @property
+    def ENABLE_AUTO_FORENSIC(self) -> bool:
+        return self.enable_auto_forensic
+
+    @property
+    def SIM_TAKER_FEE(self) -> float:
+        return self.sim_taker_fee
+        
+    @property
+    def SIM_MAKER_FEE(self) -> float:
+        return self.sim_maker_fee
+
+    @property
+    def SIM_LATENCY_MIN_MS(self) -> int:
+        return self.sim_latency_min_ms
+
+    @property
+    def SIM_LATENCY_MAX_MS(self) -> int:
+        return self.sim_latency_max_ms
+
+    @property
+    def SIM_ERROR_PROBABILITY(self) -> float:
+        return self.sim_error_probability
+
+    @property
+    def SIM_SLIPPAGE_VOL_MULT(self) -> float:
+        return self.sim_slippage_vol_mult
+
+    @property
+    def SIM_PRICE_HISTORY_LIMIT(self) -> int:
+        return self.sim_price_history_limit
+
+    @property
+    def SIM_PRICE_HISTORY_PRUNE(self) -> int:
+        return self.sim_price_history_prune
+
+    @property
+    def SIM_MIN_HISTORY_FOR_ANALYSIS(self) -> int:
+        return self.sim_min_history_for_analysis
+
+    @property
+    def SIM_RSI_PERIOD(self) -> int:
+        return self.sim_rsi_period
+
+    @property
+    def SIM_RSI_BULL_GATE(self) -> float:
+        return self.sim_rsi_bull_gate
+
+    @property
+    def SIM_RSI_BEAR_GATE(self) -> float:
+        return self.sim_rsi_bear_gate
+
+    @property
+    def SIM_RSI_OVERSOLD(self) -> float:
+        return self.sim_rsi_oversold
+
+    @property
+    def SIM_RSI_OVERBOUGHT(self) -> float:
+        return self.sim_rsi_overbought
+
+    @property
+    def SIM_REVERSAL_THRESHOLD(self) -> float:
+        return self.sim_reversal_threshold
+
+    @property
+    def SIM_MIN_TRADE_NOTIONAL(self) -> float:
+        return self.sim_min_trade_notional
+
+    @property
+    def SIM_EPSILON_QTY(self) -> float:
+        return self.sim_epsilon_qty
+
+    @property
+    def SIM_THINKING_HISTORY_LIMIT(self) -> int:
+        return self.sim_thinking_history_limit
+
+    @property
+    def SIM_EXTERNAL_TICK_TIMEOUT(self) -> float:
+        return self.sim_external_tick_timeout
+
+    @property
+    def SIM_SMA_SHORT_WINDOW(self) -> int:
+        return self.sim_sma_short_window
+
+    @property
+    def SIM_SMA_LONG_WINDOW(self) -> int:
+        return self.sim_sma_long_window
+
+    @property
+    def SIM_CROSSOVER_THRESHOLD(self) -> float:
+        return self.sim_crossover_threshold
+
+    @property
+    def SIM_ANOMALY_THRESHOLD(self) -> float:
+        return self.sim_anomaly_threshold
 
     # Removed problematic attributes: RAY_ADDRESS, RAY_MEMORY, RAY_CPUS
 
