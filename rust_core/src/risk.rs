@@ -13,6 +13,7 @@ pub enum WarModeState {
 }
 
 #[pyclass]
+#[derive(Clone)]
 pub struct RiskEngine {
     pub core: RiskCore,
 }
@@ -74,6 +75,7 @@ impl RiskEngine {
 
 // --- Standalone Logic Core ---
 
+#[derive(Clone)]
 pub struct RiskCore {
     // Limits
     pub max_position_usd: f64,

@@ -1,11 +1,14 @@
 use pyo3::prelude::*;
 
 pub mod algo;
+pub mod execution;
 pub mod matching;
 pub mod math;
 pub mod microstructure;
+pub mod models;
 pub mod oms;
 pub mod risk;
+pub mod router;
 pub mod simulator;
 pub mod sizing;
 pub mod stats;
@@ -14,11 +17,14 @@ pub mod stats;
 mod tests;
 
 use crate::algo::TwapAlgo;
+use crate::execution::ExecutionEngine;
 use crate::matching::MatchingEngine;
 use crate::math::MathEngine;
 use crate::microstructure::MicrostructureEngine;
+use crate::models::{LatencyModel, SlippageModel};
 use crate::oms::{Account, Order, OrderStatus, OrderType, Position, Side};
 use crate::risk::{RiskEngine, WarModeState};
+use crate::router::{RoutingMode, SmartOrderRouter};
 use crate::simulator::{run_hft_simulation, run_simulation_1d, SimulatorConfig};
 use crate::sizing::SizingEngine;
 use crate::stats::StatsEngine;
@@ -38,6 +44,11 @@ fn qtrader_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Execution types
     m.add_class::<MatchingEngine>()?;
     m.add_class::<TwapAlgo>()?;
+    m.add_class::<ExecutionEngine>()?;
+    m.add_class::<SmartOrderRouter>()?;
+    m.add_class::<RoutingMode>()?;
+    m.add_class::<SlippageModel>()?;
+    m.add_class::<LatencyModel>()?;
 
     // Risk and Performance types
     m.add_class::<WarModeState>()?;

@@ -7,3 +7,4 @@ mod oms_tests;
 mod matching_tests;
 mod simulator_tests;
 mod algo_tests;
+mod execution_tests;

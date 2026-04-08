@@ -1,12 +1,11 @@
-"""Latency model for realistic trade simulation."""
 import logging
+from qtrader_core import LatencyModel as RustLatencyModel
 
 logger = logging.getLogger(__name__)
 
-class LatencyModel:
+class LatencyModel(RustLatencyModel):
     """
-    Zero-latency model for production and clean simulation.
-    All artificial delay simulation logic has been removed to ensure sub-1ms internal latency.
+    Rust-backed LatencyModel.
     """
 
     def __init__(
@@ -16,24 +15,24 @@ class LatencyModel:
         base_processing_latency_ms: float = 0.0,
         processing_jitter_ms: float = 0.0,
     ) -> None:
-        """Initialize zero-latency model. Arguments are ignored for backward compatibility."""
-        pass
+        """Initialize Rust latency model."""
+        super().__init__(
+            base_latency_ms=int(base_network_latency_ms + base_processing_latency_ms),
+            jitter_ms=int(network_jitter_ms + processing_jitter_ms)
+        )
 
     async def get_latency(self) -> float:
-        """Get latency in milliseconds. Consistently returns 0.0."""
-        return 0.0
+        """Get latency in milliseconds from Rust sample."""
+        return float(self.sample_latency())
 
     def predict(self) -> float:
-        """Synchronous version for quick simulation lookups. Consistently returns 0.0."""
-        return 0.0
+        """Synchronous version for quick simulation lookups."""
+        return float(self.sample_latency())
 
     def get_latency_statistics(self) -> dict[str, float]:
-        """Get zero-latency statistics."""
+        """Get latency statistics from Rust model."""
         return {
-            'mean_network_latency_ms': 0.0,
-            'network_latency_stddev_ms': 0.0,
-            'mean_processing_latency_ms': 0.0,
-            'processing_jitter_ms': 0.0,
-            'mean_total_latency_ms': 0.0,
-            'total_latency_stddev_ms': 0.0,
+            'mean_network_latency_ms': float(self.base_latency_ms),
+            'network_latency_stddev_ms': float(self.jitter_ms),
+            'mean_total_latency_ms': float(self.base_latency_ms),
         }

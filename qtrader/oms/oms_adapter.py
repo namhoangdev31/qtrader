@@ -174,8 +174,10 @@ class ExecutionOMSAdapter(OMSAdapter):
         )
 
         # Create the execution engine that uses the multi-exchange adapter
+        from qtrader.core.config import Config
         self.execution_engine = ExecutionEngine(
             exchange_adapter=self.multi_exchange_adapter,
+            max_orders_per_second=Config.ts_max_orders_per_second,
             logger=self.logger,
         )
 
