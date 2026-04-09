@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package qtrader.v2;
+
+import "google/protobuf/any.proto";
+
+message EventEnvelope {
+  string event_id = 1;      // Unique event UUID
+  string session_id = 2;    // Current session
+  string trace_id = 3;      // Propagation trace ID
+  string source = 4;        // Originating service name
+  int64 timestamp_ns = 5;   // Exact persistence time
+  string payload_type = 6;  // e.g., "SIGNAL", "FILL", "RISK_ALERT"
+  google.protobuf.Any payload = 7;
+}
