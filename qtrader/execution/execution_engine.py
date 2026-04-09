@@ -17,6 +17,7 @@ from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.core.types import LoggerProtocol
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine
+from qtrader.core.trace_authority import TraceAuthority
 
 import qtrader_core
 from qtrader_core import (
@@ -351,64 +352,74 @@ class ExecutionEngine:
         return None
 
     def _execution_worker_loop(self) -> None:
+        # Safely retrieve simulation parameters from adapter defaults if available
+        latency = 0.0
+        slippage = float(self.max_slippage * 10000) # Default from engine config
+        
+        if hasattr(self.exchange_adapter, "orderbook_simulator"):
+            latency = self.exchange_adapter.orderbook_simulator.latency_ms
+            slippage = float(self.exchange_adapter.orderbook_simulator.max_slippage_pct * 10000)
+
         self._rust_engine = RustExecutionEngine(
             risk_engine=self._rust_risk,
             initial_capital=1000000.0,
             routing_mode=RustRoutingMode.Smart,
             max_retries=self._max_retry_attempts,
-            latency_ms=self.orderbook_simulator.latency_ms,
-            slippage_bps=float(self.max_slippage * 10000), # 1% = 100 bps
+            latency_ms=latency,
+            slippage_bps=slippage,
         )
         loop = asyncio.new_event_loop() # For future completion if needed
-        while True:
-            try:
-                item = self._worker_queue.get()
-                if item is None:
-                    break
-                
-                cmd, data, future = item
-                
-                if cmd == "EXECUTE":
-                    order = data
-                    # Map to Rust using payload (Standash §2)
-                    rust_side = RustSide.Buy if order.payload.action == "BUY" else RustSide.Sell
-                    rust_type = RustOrderType.Market if order.payload.order_type == "MARKET" else RustOrderType.Limit
-                    rust_order = RustOrder(
-                        id=str(int(time.time() * 1000)),
-                        symbol=order.payload.symbol,
-                        side=rust_side,
-                        qty=float(order.payload.quantity),
-                        price=float(order.payload.price) if order.payload.price else 0.0,
-                        order_type=rust_type,
-                        timestamp_ms=int(time.time() * 1000)
-                    )
+        # Standash §4.2: Suppress trace warnings in background worker using TraceAuthority
+        with TraceAuthority.inject_trace("EXEC_WORKER_THREAD"):
+            while True:
+                try:
+                    item = self._worker_queue.get()
+                    if item is None:
+                        break
                     
-                    market_data = {order.payload.symbol: (100.0, 100.1)} # Simplified
+                    cmd, data, future = item
                     
-                    try:
-                        result = self._rust_engine.execute_order(
-                            rust_order,
-                            1000000.0, # Peak equity placeholder
-                            market_data
+                    if cmd == "EXECUTE":
+                        order = data
+                        # Map to Rust using payload (Standash §2)
+                        rust_side = RustSide.Buy if order.payload.action == "BUY" else RustSide.Sell
+                        rust_type = RustOrderType.Market if order.payload.order_type == "MARKET" else RustOrderType.Limit
+                        rust_order = RustOrder(
+                            id=str(int(time.time() * 1000)),
+                            symbol=order.payload.symbol,
+                            side=rust_side,
+                            qty=float(order.payload.quantity),
+                            price=float(order.payload.price) if order.payload.price else 0.0,
+                            order_type=rust_type,
+                            timestamp_ms=int(time.time() * 1000)
                         )
-                        future.get_loop().call_soon_threadsafe(future.set_result, result)
-                    except Exception as e:
-                        future.get_loop().call_soon_threadsafe(future.set_exception, e)
+                        
+                        market_data = {order.payload.symbol: (100.0, 100.1)} # Simplified
+                        
+                        try:
+                            result = self._rust_engine.execute_order(
+                                rust_order,
+                                1000000.0, # Peak equity placeholder
+                                market_data
+                            )
+                            future.get_loop().call_soon_threadsafe(future.set_result, result)
+                        except Exception as e:
+                            future.get_loop().call_soon_threadsafe(future.set_exception, e)
 
-                elif cmd == "FILL_UPDATE":
-                    fill_event = data
-                    rust_side = RustSide.Buy if fill_event.payload.side == "BUY" else RustSide.Sell
-                    self._rust_engine.update_fill(
-                        fill_event.payload.symbol,
-                        rust_side,
-                        float(fill_event.payload.quantity),
-                        float(fill_event.payload.price)
-                    )
+                    elif cmd == "FILL_UPDATE":
+                        fill_event = data
+                        rust_side = RustSide.Buy if fill_event.payload.side == "BUY" else RustSide.Sell
+                        self._rust_engine.update_fill(
+                            fill_event.payload.symbol,
+                            rust_side,
+                            float(fill_event.payload.quantity),
+                            float(fill_event.payload.price)
+                        )
 
-            except Exception as e:
-                self.logger.error(f"ExecutionWorker Error: {e}")
-            finally:
-                self._worker_queue.task_done()
+                except Exception as e:
+                    self.logger.error(f"ExecutionWorker Error: {e}")
+                finally:
+                    self._worker_queue.task_done()
 
     # Methods to be called by the exchange adapter or market data feed to update order status
     def _on_order_filled(self, order_id: str, fill_event: FillEvent) -> None:

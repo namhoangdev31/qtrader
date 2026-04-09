@@ -11,6 +11,7 @@ from qtrader.core.logger import logger
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
 from qtrader.oms.order_management_system import UnifiedOMS
+from qtrader_core import Order as RustOrder, Side as RustSide, OrderType as RustOrderType
 
 
 
@@ -239,7 +240,17 @@ class ExecutionOMSAdapter(OMSAdapter):
         )
 
         # [OMS_STATE_CENTRALIZATION]: Persist order to central OMS (delegated to Rust)
-        await self.oms.create_order(order_event)
+        # Standash §2.3: Map Pydantic payload to high-performance Rust struct
+        rust_order = RustOrder(
+            id=order_event.payload.order_id,
+            symbol=order_event.payload.symbol,
+            side=RustSide.Buy if order_event.payload.action == "BUY" else RustSide.Sell,
+            qty=float(order_event.payload.quantity),
+            price=float(order_event.payload.price) if order_event.payload.price else 0.0,
+            order_type=RustOrderType.Market if order_event.payload.order_type == "MARKET" else RustOrderType.Limit,
+            timestamp_ms=int(time.time() * 1000)
+        )
+        self.oms.create_order(rust_order)
 
         self.logger.debug(f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}")
 

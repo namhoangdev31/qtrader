@@ -28,6 +28,7 @@ from qtrader.analytics.pnl_attribution import PnLAttributionEngine
 from qtrader.core.config import settings
 from qtrader.core.dynamic_config import config_manager
 from qtrader.core.event_bus import EventBus
+from qtrader.core.trace_authority import TraceAuthority
 from qtrader.core.events import (
     EventType,
     MarketEvent,
@@ -271,44 +272,45 @@ class TradingSystem:
                 await asyncio.sleep(1)
 
     async def _process_symbol(self, symbol: str) -> None:
-        self.latency_enforcer.start_pipeline(f"pipeline-{symbol}")
-        
-        market_data = await self._get_market_data(symbol)
-        ml_result = await self._run_ml_alpha(symbol, market_data)
-        
-        if ml_result:
-            positions = self.broker.paper_account.get_positions().get(symbol, [])
-            exit_signal = self.signal_engine.check_exit_triggers(
-                symbol, market_data["price"], positions, 
-                settings.ts_min_sl_pct, settings.ts_max_sl_pct
-            )
+        with TraceAuthority.inject_trace():
+            self.latency_enforcer.start_pipeline(f"pipeline-{symbol}")
             
-            if exit_signal:
-                await self._execute_exit(symbol, exit_signal)
-            else:
-                signal = self.signal_engine.generate_signal(symbol, ml_result)
-                if signal and self.signal_engine.check_trend_confirmation(symbol, signal["side"], self._market_data[symbol]):
-                    risk_result = self.pre_trade_risk.validate_order(
-                        symbol, signal["side"], Decimal(str(signal["position_size_multiplier"]))
-                    )
-                    if risk_result.approved:
-                        await self._execute_order(signal)
-                    else:
-                        # [FORENSIC] Emit RiskRejectedEvent for auditor visibility
-                        await self.event_bus.publish(
-                            RiskRejectedEvent(
-                                source="TradingSystem",
-                                payload=RiskRejectedPayload(
-                                    order_id=f"REJECTED-{uuid4()}",
-                                    reason=risk_result.reason,
-                                    metric_value=0.0, # detailed metrics omitted for brevity
-                                    threshold=0.0,
-                                    metadata={"checks_failed": risk_result.checks_failed}
+            market_data = await self._get_market_data(symbol)
+            ml_result = await self._run_ml_alpha(symbol, market_data)
+            
+            if ml_result:
+                positions = self.broker.paper_account.get_positions().get(symbol, [])
+                exit_signal = self.signal_engine.check_exit_triggers(
+                    symbol, market_data["price"], positions, 
+                    settings.ts_min_sl_pct, settings.ts_max_sl_pct
+                )
+                
+                if exit_signal:
+                    await self._execute_exit(symbol, exit_signal)
+                else:
+                    signal = self.signal_engine.generate_signal(symbol, ml_result)
+                    if signal and self.signal_engine.check_trend_confirmation(symbol, signal["side"], self._market_data[symbol]):
+                        risk_result = self.pre_trade_risk.validate_order(
+                            symbol, signal["side"], Decimal(str(signal["position_size_multiplier"]))
+                        )
+                        if risk_result.approved:
+                            await self._execute_order(signal)
+                        else:
+                            # [FORENSIC] Emit RiskRejectedEvent for auditor visibility
+                            await self.event_bus.publish(
+                                RiskRejectedEvent(
+                                    source="TradingSystem",
+                                    payload=RiskRejectedPayload(
+                                        order_id=f"REJECTED-{uuid4()}",
+                                        reason=risk_result.reason,
+                                        metric_value=0.0, # detailed metrics omitted for brevity
+                                        threshold=0.0,
+                                        metadata={"checks_failed": risk_result.checks_failed}
+                                    )
                                 )
                             )
-                        )
-
-        self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
+    
+            self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
         trace = self.latency_enforcer.get_pipeline_data(f"pipeline-{symbol}")
         if trace: self.last_latency_ms = trace.total_latency_ms
         
@@ -317,7 +319,6 @@ class TradingSystem:
             self.guardrail_manager, self.allocator, self.recon, self.session_state
         )
         
-        # [DISTRIBUTED SYNC] Broadcast trace to other containers (Dashboard)
         from qtrader.core.events import DecisionTraceEvent, DecisionTracePayload
         await self.event_bus.publish(
             DecisionTraceEvent(

@@ -84,6 +84,21 @@ class TraceAuthority:
                 _trace_context.reset(self.token)
 
         return TraceContextManager(trace_id)
+    
+    @staticmethod
+    def inject_trace(trace_id: UUID | str | None = None):
+        """
+        Alias for wrap_with_trace with auto-generation and type conversion support.
+        Used for grouping background loops (Standash §4.2).
+        """
+        if trace_id is None:
+            trace_id = uuid4()
+        elif isinstance(trace_id, str):
+            try:
+                trace_id = UUID(trace_id)
+            except ValueError:
+                trace_id = uuid4()
+        return TraceAuthority.wrap_with_trace(trace_id)
 
     @staticmethod
     def generate() -> UUID:
