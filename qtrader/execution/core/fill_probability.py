@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.core.fill_probability")
 
+
 class FillProbabilityModel:
     def __init__(self, config: ExecutionConfig) -> None:
         micro_cfg = getattr(config, "microstructure", {}).get("queue_model", {})

@@ -19,6 +19,7 @@ from qtrader.execution.paper_models import AdaptiveConfig, OpenPosition, TradeRe
 
 _LOG = logging.getLogger("qtrader.paper")
 
+
 class PaperTradingEngine(
     DynamicSettingsMixin, SignalMixin, PositionMixin, FillMixin, PersistenceMixin
 ):

@@ -5,6 +5,7 @@ from typing import Any
 
 _LOG = logging.getLogger("qtrader.execution.routing.liquidity_model")
 
+
 class MultiVenueLiquidityModel:
     def __init__(self, n_levels: int = 5) -> None:
         self._n_levels = n_levels

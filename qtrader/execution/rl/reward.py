@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.rl.reward")
 
+
 class ExecutionRewardFunction:
     def __init__(self, config: ExecutionConfig) -> None:
         self._config = config

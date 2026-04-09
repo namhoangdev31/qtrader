@@ -12,10 +12,12 @@ from qtrader.core.errors import BaseError, CriticalError, RecoverableError, clas
 if TYPE_CHECKING:
     from qtrader.core.global_orchestrator import GlobalOrchestrator
 
+
 @dataclass
 class EscalationState:
     count: int = 0
     first_occurrence: float = field(default_factory=time.time)
+
 
 class FailFastEngine:
     def __init__(

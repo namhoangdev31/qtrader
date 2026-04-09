@@ -9,6 +9,7 @@ from qtrader.execution.algos.base import ChildOrder
 __all__ = ["POVAlgo"]
 _LOG = logging.getLogger("qtrader.execution.algos.pov")
 
+
 @dataclass(slots=True)
 class POVAlgo:
     participation_rate: float = 0.05

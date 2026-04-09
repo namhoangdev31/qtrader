@@ -12,12 +12,14 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.strategy.slicing")
 
+
 @dataclass(slots=True)
 class SlicingState:
     remaining_qty: float
     elapsed_time_sec: float
     total_duration_sec: float
     last_update: datetime
+
 
 class AdaptiveSlicer:
     def __init__(self, config: ExecutionConfig) -> None:

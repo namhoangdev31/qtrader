@@ -12,6 +12,7 @@ from qtrader.execution.trade_logger import TradeLogger
 
 logger = logging.getLogger(__name__)
 
+
 class ShadowFillEvent:
     def __init__(
         self,
@@ -44,6 +45,7 @@ class ShadowFillEvent:
             "slippage": self.slippage,
             "latency": self.latency,
         }
+
 
 class ShadowEngine:
     def __init__(self, config: dict[str, Any]) -> None:

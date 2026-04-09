@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
+import logging
+
 
 class OrderbookImbalance:
     def __init__(self, config: ExecutionConfig) -> None:

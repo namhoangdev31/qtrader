@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
+if TYPE_CHECKING:
+    from qtrader.features.base import Feature
 from qtrader.features.factors.lagged import LaggedReturn, ReturnVolatility
 from qtrader.features.factors.technical import ATR, MACD, ROC, RSI, BollingerBands, MomentumReturn
 from qtrader.features.factors.volume import OBV, VWAP, DollarVolume, ForceIndex, VolumeRatio
 
-if TYPE_CHECKING:
-    from qtrader.features.base import Feature
 __all__ = ["FeatureRegistry"]
 _LOG = logging.getLogger("qtrader.features.registry")
 _BUILT_IN: dict[str, type] = {}

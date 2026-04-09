@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import logging
 import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
+import logging
+
 
 class QueuePositionModel:
     def __init__(self, config: ExecutionConfig) -> None:

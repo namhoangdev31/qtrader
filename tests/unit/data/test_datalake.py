@@ -12,6 +12,7 @@ def temp_datalake():
     with tempfile.TemporaryDirectory() as tmpdir:
         yield DataLake(base_path=tmpdir)
 
+
 def test_datalake_save_load(temp_datalake):
 
     df = pl.DataFrame(
@@ -34,6 +35,7 @@ def test_datalake_save_load(temp_datalake):
     loaded_df = temp_datalake.load_data(symbol, timeframe)
     assert loaded_df.height == 5
     assert "close" in loaded_df.columns
+
 
 def test_datalake_list_symbols(temp_datalake):
     df = pl.DataFrame({"a": [1]})

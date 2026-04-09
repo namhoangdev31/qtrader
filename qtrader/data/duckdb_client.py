@@ -10,6 +10,7 @@ from qtrader.core.config import Config
 
 logger = logging.getLogger(__name__)
 
+
 class DuckDBClient:
     def __init__(
         self,

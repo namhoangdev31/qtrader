@@ -3,7 +3,6 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI

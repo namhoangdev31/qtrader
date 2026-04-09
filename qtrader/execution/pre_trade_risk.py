@@ -10,28 +10,11 @@ from typing import Any
 from qtrader.core.dynamic_config import DynamicSettingsMixin
 
 try:
+    import qtrader_core
     from qtrader_core import Account as RustAccount
     from qtrader_core import Order as RustOrder
     from qtrader_core import OrderType as RustOrderType
     from qtrader_core import Side as RustSide
-except ImportError:
-    HAS_RUST_CORE = False
-
-try:
-    import qtrader_core
-    from qtrader_core import (
-        Account as RustAccount,
-    )
-    from qtrader_core import (
-        Order as RustOrder,
-    )
-    from qtrader_core import (
-        OrderType as RustOrderType,
-    )
-    from qtrader_core import (
-        Side as RustSide,
-    )
-
     HAS_RUST_CORE = True
 except ImportError:
     HAS_RUST_CORE = False

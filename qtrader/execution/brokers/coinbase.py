@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from qtrader.security.order_signing import OrderSigner
 logger = logging.getLogger("qtrader.broker.coinbase")
 
+
 @dataclass
 class PaperAccount:
     initial_balance: Decimal = Decimal("100000.0")
@@ -136,6 +137,7 @@ class PaperAccount:
                 )
             ]
         return results
+
 
 class CoinbaseBrokerAdapter(BrokerAdapter):
     def __init__(

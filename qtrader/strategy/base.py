@@ -14,11 +14,13 @@ from qtrader.core.types import FillEvent, OrderEvent, SignalEvent
 __all__ = ["BaseStrategy", "Strategy"]
 _LOG = logging.getLogger("qtrader.strategy.base")
 
+
 @runtime_checkable
 class Strategy(Protocol):
     def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent: ...
 
     def on_signal(self, event: SignalEvent) -> list[OrderEvent]: ...
+
 
 @dataclass(slots=True)
 class BaseStrategy:

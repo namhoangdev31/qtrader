@@ -9,6 +9,7 @@ from sklearn.decomposition import PCA
 __all__ = ["FactorNeutralizer"]
 _LOG = logging.getLogger("qtrader.features.neutralization")
 
+
 class FactorNeutralizer:
     @staticmethod
     def sector_neutralize(

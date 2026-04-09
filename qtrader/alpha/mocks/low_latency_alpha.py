@@ -10,6 +10,7 @@ from qtrader.core.types import AlphaOutput, MarketData
 
 logger = logging.getLogger("qtrader.alpha.ml_alpha_engine")
 
+
 class MLAlphaEngine(BaseAlpha):
     def __init__(
         self,

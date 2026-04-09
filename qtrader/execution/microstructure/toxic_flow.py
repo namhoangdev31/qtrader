@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import logging
 from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
+import logging
+
 
 class ToxicFlowPredictor:
     def __init__(self, config: ExecutionConfig) -> None:

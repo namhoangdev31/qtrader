@@ -20,6 +20,7 @@ class ValidationResult:
     status: bool
     message: str
 
+
 class PreExecutionValidator:
     def __init__(self, root_path: str | None = None) -> None:
         self.root_path = Path(root_path or os.getcwd())

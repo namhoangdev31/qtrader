@@ -12,6 +12,7 @@ from qtrader.ml.vector_store import EliteExemplar, memory_store
 
 logger = logging.getLogger("qtrader.analytics.session")
 
+
 class SessionAnalyzer:
     def __init__(self) -> None:
         self.perf = PerformanceAnalytics()

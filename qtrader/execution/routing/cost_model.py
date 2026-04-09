@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.routing.cost_model")
 
+
 class RoutingCostModel:
     def __init__(self, config: ExecutionConfig) -> None:
         self._config = config

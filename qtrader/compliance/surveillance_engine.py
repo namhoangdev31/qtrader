@@ -8,12 +8,14 @@ from typing import Any, Final
 
 _LOG = logging.getLogger("qtrader.compliance.surveillance_engine")
 
+
 class ViolationType(Enum):
     WASH_TRADING = auto()
     SPOOFING = auto()
     LAYERING = auto()
     QUOTE_STUFFING = auto()
     FRONT_RUNNING = auto()
+
 
 @dataclass(slots=True, frozen=True)
 class ViolationAlert:
@@ -22,6 +24,7 @@ class ViolationAlert:
     user_id: str
     evidence: dict[str, Any]
     timestamp: float
+
 
 class SurveillanceEngine:
     def __init__(self, wash_window_ms: float = 100.0) -> None:

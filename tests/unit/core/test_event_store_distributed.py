@@ -20,6 +20,7 @@ def store():
     if os.path.exists(test_path):
         shutil.rmtree(test_path)
 
+
 @pytest.mark.asyncio
 async def test_event_idempotency(store):
     payload = MarketPayload(symbol="BTC/USDT", bid=50000.0, ask=50001.0, seq_id=1)
@@ -37,6 +38,7 @@ async def test_event_idempotency(store):
     assert offset2 is None
     assert store._index.total_event_count == 1
 
+
 @pytest.mark.asyncio
 async def test_partition_offsets(store):
     payload = MarketPayload(symbol="SOL/USDT", bid=150.0, ask=150.1)
@@ -53,6 +55,7 @@ async def test_partition_offsets(store):
     assert [e.offset for e in btc_events] == [0, 1, 2, 3, 4]
     eth_events = await store.get_events(partition="ETH")
     assert [e.offset for e in eth_events] == [0, 1, 2, 3, 4]
+
 
 @pytest.mark.asyncio
 async def test_startup_index_rebuild(store):
@@ -72,6 +75,7 @@ async def test_startup_index_rebuild(store):
     assert new_store._index.total_event_count == 1
     assert new_store._index.get_next_offset("LINK") == 1
 
+
 @pytest.mark.asyncio
 async def test_offset_range_query(store):
     partition = "ADA"
@@ -87,6 +91,7 @@ async def test_offset_range_query(store):
     assert len(range_events) == 5
     assert range_events[0].offset == 3
     assert range_events[-1].offset == 7
+
 
 @pytest.mark.asyncio
 async def test_write_latency_simulation(store):
