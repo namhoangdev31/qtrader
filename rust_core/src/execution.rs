@@ -10,6 +10,10 @@ pub struct ExecutionEngine {
     pub router: SmartOrderRouter,
     #[pyo3(get, set)]
     pub max_retries: usize,
+    #[pyo3(get, set)]
+    pub latency_ms: f64,
+    #[pyo3(get, set)]
+    pub slippage_bps: f64,
     pub account: Account,
     pub market_data: HashMap<String, f64>,
 }
@@ -17,12 +21,14 @@ pub struct ExecutionEngine {
 #[pymethods]
 impl ExecutionEngine {
     #[new]
-    #[pyo3(signature = (risk_engine, initial_capital=1000000.0, routing_mode=RoutingMode::Smart, max_retries=3))]
-    pub fn new(risk_engine: &RiskEngine, initial_capital: f64, routing_mode: RoutingMode, max_retries: usize) -> Self {
+    #[pyo3(signature = (risk_engine, initial_capital=1000000.0, routing_mode=RoutingMode::Smart, max_retries=3, latency_ms=0.0, slippage_bps=0.0))]
+    pub fn new(risk_engine: &RiskEngine, initial_capital: f64, routing_mode: RoutingMode, max_retries: usize, latency_ms: f64, slippage_bps: f64) -> Self {
         ExecutionEngine {
             risk_core: risk_engine.core.clone(),
             router: SmartOrderRouter::new(routing_mode, None, None),
             max_retries,
+            latency_ms,
+            slippage_bps,
             account: Account::new(initial_capital),
             market_data: HashMap::new(),
         }

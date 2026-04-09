@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from qtrader.core.config import settings
 from qtrader.core.dynamic_config import DynamicSettingsMixin, config_manager
 from qtrader.core.events import ForensicNoteEvent, ForensicNotePayload
+from qtrader.core.trace_authority import TraceAuthority
 from qtrader.execution.paper_mixins import (
     FillMixin,
     PersistenceMixin,
@@ -334,6 +335,9 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
 
         while self._running:
             try:
+                # Inject a unique trace ID for each simulation pulse
+                trace_id = TraceAuthority.start_trace()
+                
                 # 1. Self-drive the price simulation
                 self._on_tick()
 

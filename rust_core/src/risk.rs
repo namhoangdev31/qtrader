@@ -68,6 +68,26 @@ impl RiskEngine {
             .map_err(|e| PyValueError::new_err(e))
     }
 
+    #[getter]
+    pub fn max_position_usd(&self) -> f64 { self.core.max_position_usd }
+    #[setter]
+    pub fn set_max_position_usd(&mut self, val: f64) { self.core.max_position_usd = val; }
+
+    #[getter]
+    pub fn max_drawdown_pct(&self) -> f64 { self.core.max_drawdown_pct }
+    #[setter]
+    pub fn set_max_drawdown_pct(&mut self, val: f64) { self.core.max_drawdown_pct = val; }
+
+    #[getter]
+    pub fn max_order_qty(&self) -> f64 { self.core.max_order_qty }
+    #[setter]
+    pub fn set_max_order_qty(&mut self, val: f64) { self.core.max_order_qty = val; }
+
+    #[getter]
+    pub fn max_order_notional(&self) -> f64 { self.core.max_order_notional }
+    #[setter]
+    pub fn set_max_order_notional(&mut self, val: f64) { self.core.max_order_notional = val; }
+
     pub fn get_state(&self) -> WarModeState {
         self.core.state
     }

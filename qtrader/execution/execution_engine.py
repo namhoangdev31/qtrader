@@ -1,5 +1,6 @@
 # File: qtrader/execution/execution_engine.py
-from qtrader.core.events import FillPayload
+from __future__ import annotations
+
 import asyncio
 import time
 from abc import ABC, abstractmethod
@@ -12,7 +13,8 @@ import queue
 
 from qtrader.core.logger import logger
 from qtrader.core.state_store import Position, StateStore
-from qtrader.core.types import FillEvent, LoggerProtocol, OrderEvent
+from qtrader.core.events import FillEvent, FillPayload, OrderEvent
+from qtrader.core.types import LoggerProtocol
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine
 
@@ -354,6 +356,8 @@ class ExecutionEngine:
             initial_capital=1000000.0,
             routing_mode=RustRoutingMode.Smart,
             max_retries=self._max_retry_attempts,
+            latency_ms=self.orderbook_simulator.latency_ms,
+            slippage_bps=float(self.max_slippage * 10000), # 1% = 100 bps
         )
         loop = asyncio.new_event_loop() # For future completion if needed
         while True:
