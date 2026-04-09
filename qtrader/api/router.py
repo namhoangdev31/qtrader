@@ -4,6 +4,7 @@ import asyncio
 import logging
 import random
 import time
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -13,13 +14,17 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from qtrader.analytics.session_analyzer import SessionAnalyzer
 from qtrader.api.dependencies import get_system
 from qtrader.api.schemas import OrderRequest, PositionRow, SimulationConfig, StatusResponse
+from qtrader.core.db import DBClient
 from qtrader.core.events import (
+    BaseEvent,
     EventType,
     ForensicNoteEvent,
     ForensicNotePayload,
     OrderEvent,
     OrderPayload,
 )
+from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
+from qtrader.execution.paper_engine import PaperTradingEngine
 from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.trading_system import TradingSystem
@@ -34,17 +39,13 @@ _simulation_engine: Any | None = None
 _simulation_task: asyncio.Task | None = None
 _is_subscribed: bool = False
 
-
 def get_sim_engine() -> Any:
     global _simulation_engine
     if _simulation_engine is None:
-        from qtrader.execution.paper_engine import PaperTradingEngine
-
         _simulation_engine = PaperTradingEngine(
             starting_capital=1000.0, sl_pct=0.02, tp_pct=0.03, tick_interval=1.0
         )
     return _simulation_engine
-
 
 async def start_simulation(sys: TradingSystem | None = None) -> None:
     global _simulation_task, _is_subscribed
@@ -62,8 +63,6 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
                 f"[SIM] Unified Persistence Layer & EventBus for Session {sys.active_session_id}"
             )
         try:
-            from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
-
             if isinstance(sys.broker, CoinbaseBrokerAdapter):
                 sys.broker.sim_engine = engine
                 logger.info("[SIM] Injected PaperTradingEngine into CoinbaseBrokerAdapter")
@@ -85,7 +84,6 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
     if _simulation_task is None or _simulation_task.done():
         _simulation_task = asyncio.create_task(engine.run_continuous())
 
-
 async def stop_simulation() -> None:
     global _simulation_task
     if _simulation_task and (not _simulation_task.done()):
@@ -95,7 +93,6 @@ async def stop_simulation() -> None:
         except asyncio.CancelledError:
             pass
         _simulation_task = None
-
 
 @sim_router.get("/status")
 async def get_sim_status() -> dict[str, Any]:
@@ -110,30 +107,25 @@ async def get_sim_status() -> dict[str, Any]:
         "total_trades": len(engine._trade_history),
     }
 
-
 @sim_router.get("/snapshot")
 async def get_sim_snapshot() -> dict[str, Any]:
     engine = get_sim_engine()
     return engine._build_snapshot()
-
 
 @sim_router.get("/trades")
 async def get_trade_history(limit: int = 100) -> list[dict[str, Any]]:
     engine = get_sim_engine()
     return engine.trade_history[-limit:]
 
-
 @sim_router.post("/start")
 async def start_sim_endpoint(sys: TradingSystem = Depends(get_system)) -> dict[str, str]:
     await start_simulation(sys)
     return {"status": "started"}
 
-
 @sim_router.post("/stop")
 async def stop_sim_endpoint() -> dict[str, str]:
     await stop_simulation()
     return {"status": "stopped"}
-
 
 @sim_router.post("/reset")
 async def reset_sim_endpoint() -> dict[str, str]:
@@ -142,13 +134,11 @@ async def reset_sim_endpoint() -> dict[str, str]:
     engine.reset()
     return {"status": "reset"}
 
-
 @sim_router.post("/config")
 async def update_sim_config(cfg: SimulationConfig) -> dict[str, Any]:
     global _simulation_task
     await stop_simulation()
     global _simulation_engine
-    from qtrader.execution.paper_engine import PaperTradingEngine
 
     _simulation_engine = PaperTradingEngine(
         starting_capital=cfg.initial_balance,
@@ -158,7 +148,6 @@ async def update_sim_config(cfg: SimulationConfig) -> dict[str, Any]:
         base_price=cfg.base_price,
     )
     return {"status": "configured", "message": "Simulation restarted with new config"}
-
 
 @session_router.post("/start")
 async def start_session(
@@ -180,7 +169,6 @@ async def start_session(
         "mode": "PAPER" if sys.config.simulate else "LIVE",
     }
 
-
 @session_router.post("/stop")
 async def stop_session(
     session_id: str | None = None, sys: TradingSystem = Depends(get_system)
@@ -198,19 +186,16 @@ async def stop_session(
     report = await analyzer.analyze_session(s_id, "2000-01-01")
     return {"status": "completed", "report": report}
 
-
 @session_router.get("/active")
 async def get_active_session() -> dict[str, Any]:
     writer = TradeDBWriter()
     active = await writer.get_active_session()
     return {"active": active is not None, "session": active}
 
-
 @session_router.get("/history")
 async def get_session_history(limit: int = 10) -> list[dict[str, Any]]:
     writer = TradeDBWriter()
     return await writer.get_session_history(limit)
-
 
 @session_router.post("/purge")
 async def purge_database_endpoint() -> dict[str, str]:
@@ -222,7 +207,6 @@ async def purge_database_endpoint() -> dict[str, str]:
         logger.error(f"[API] Purge failed: {e}")
         raise HTTPException(status_code=500, detail=f"Purge failed: {e!s}")
 
-
 @session_router.get("/{session_id}/report")
 async def get_session_report(session_id: str) -> dict[str, Any]:
     writer = TradeDBWriter()
@@ -231,21 +215,16 @@ async def get_session_report(session_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "report": session.get("summary")}
 
-
 @health_router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "healthy", "service": "API_DASHBOARD"}
-
 
 @router.get("/status", response_model=StatusResponse)
 async def get_status(sys: TradingSystem = Depends(get_system)) -> dict[str, Any]:
     return sys.get_status()
 
-
 @router.get("/forensic_notes")
 async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, Any]]:
-    from qtrader.core.db import DBClient
-
     try:
         if session_id:
             rows = await DBClient.fetch(
@@ -268,7 +247,6 @@ async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, An
     except Exception as e:
         logger.error(f"[API] Failed to fetch notes: {e}")
         return []
-
 
 @router.post("/forensic_notes")
 async def add_forensic_note(
@@ -301,7 +279,6 @@ async def add_forensic_note(
         logger.error(f"[API] Failed to save note: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @router.get("/positions", response_model=list[PositionRow])
 async def get_positions(sys: TradingSystem = Depends(get_system)) -> list[dict[str, Any]]:
     positions = await sys.state_store.get_positions()
@@ -320,13 +297,10 @@ async def get_positions(sys: TradingSystem = Depends(get_system)) -> list[dict[s
             )
     return rows
 
-
 @router.post("/order")
 async def place_order(
     req: OrderRequest, sys: TradingSystem = Depends(get_system)
 ) -> dict[str, Any]:
-    import uuid
-
     order = OrderEvent(
         source="api_dashboard",
         payload=OrderPayload(
@@ -348,7 +322,6 @@ async def place_order(
     except Exception as e:
         logger.error(f"Failed to place manual order: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-
 
 @router.get("/history")
 async def get_market_history(
@@ -379,7 +352,6 @@ async def get_market_history(
         )
         temp_price = o
     return sorted(candles, key=lambda x: x["time"])
-
 
 @ws_router.websocket("/ws/trading")
 async def trading_updates(websocket: WebSocket) -> None:
@@ -447,7 +419,7 @@ async def trading_updates(websocket: WebSocket) -> None:
     queue: asyncio.Queue[bool] = asyncio.Queue()
     engine.add_update_listener(lambda x: queue.put_nowait(True))
 
-    async def handler(event):
+    async def handler(event: BaseEvent) -> None:
         await queue.put(True)
 
     sys.event_bus.subscribe(EventType.FILL, handler)
@@ -461,7 +433,6 @@ async def trading_updates(websocket: WebSocket) -> None:
     finally:
         sys.event_bus.unsubscribe(EventType.FILL, handler)
         sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
-
 
 @ws_router.websocket("/ws/forensics")
 async def forensics_updates(websocket: WebSocket) -> None:
@@ -484,7 +455,7 @@ async def forensics_updates(websocket: WebSocket) -> None:
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
 
-    async def handler(event):
+    async def handler(event: BaseEvent) -> None:
         if event.event_type == EventType.DECISION_TRACE:
             sys._last_module_traces = getattr(event.payload, "module_traces", {})
         await queue.put(True)
@@ -505,7 +476,6 @@ async def forensics_updates(websocket: WebSocket) -> None:
     finally:
         sys.event_bus.unsubscribe(EventType.SIGNAL, handler)
         sys.event_bus.unsubscribe(EventType.DECISION_TRACE, handler)
-
 
 @ws_router.websocket("/ws/telemetry")
 async def telemetry_updates(websocket: WebSocket) -> None:
@@ -545,7 +515,7 @@ async def telemetry_updates(websocket: WebSocket) -> None:
     queue: asyncio.Queue[bool] = asyncio.Queue()
     engine.add_update_listener(lambda x: queue.put_nowait(True))
 
-    async def handler(event):
+    async def handler(event: BaseEvent) -> None:
         await queue.put(True)
 
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
@@ -562,7 +532,6 @@ async def telemetry_updates(websocket: WebSocket) -> None:
     finally:
         sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
         sys.event_bus.unsubscribe(EventType.MARKET_DATA, handler)
-
 
 @ws_router.websocket("/ws/simulation")
 async def simulation_updates(websocket: WebSocket) -> None:
@@ -602,7 +571,6 @@ async def simulation_updates(websocket: WebSocket) -> None:
     except Exception as e:
         logger.error(f"[WS/SIM] Unexpected error: {e}", exc_info=True)
 
-
 @ws_router.websocket("/ws/audit")
 async def audit_updates(websocket: WebSocket) -> None:
     await websocket.accept()
@@ -610,7 +578,6 @@ async def audit_updates(websocket: WebSocket) -> None:
     engine = get_sim_engine()
 
     async def get_audit_snapshot():
-        from qtrader.core.db import DBClient
 
         try:
             notes_rows = await DBClient.fetch(

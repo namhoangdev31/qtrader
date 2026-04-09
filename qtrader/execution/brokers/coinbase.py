@@ -23,6 +23,9 @@ try:
 except ImportError:
     redis_lib = None
     HAS_REDIS = False
+
+from collections import namedtuple
+
 from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.execution.brokers.base import BrokerAdapter
 from qtrader.execution.brokers.coinbase_jwt import build_rest_jwt
@@ -35,7 +38,6 @@ if TYPE_CHECKING:
     from qtrader.risk.kill_switch import GlobalKillSwitch
     from qtrader.security.order_signing import OrderSigner
 logger = logging.getLogger("qtrader.broker.coinbase")
-
 
 @dataclass
 class PaperAccount:
@@ -118,7 +120,6 @@ class PaperAccount:
             self.avg_entry_prices.pop(asset, None)
 
     def get_positions(self) -> dict[str, list[Any]]:
-        from collections import namedtuple
 
         Lot = namedtuple("Lot", ["avg_price", "qty", "side", "trade_id"])
         results: dict[str, list[Any]] = {}
@@ -135,7 +136,6 @@ class PaperAccount:
                 )
             ]
         return results
-
 
 class CoinbaseBrokerAdapter(BrokerAdapter):
     def __init__(
@@ -602,8 +602,6 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
 
             async def redis_market_listener():
                 try:
-                    from qtrader.core.events import EventType
-
                     pubsub = self._redis.pubsub()
                     channel = f"{settings.redis_prefix}:{EventType.MARKET_DATA.value}"
                     await pubsub.subscribe(channel)

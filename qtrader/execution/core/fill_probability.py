@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.core.fill_probability")
 
-
 class FillProbabilityModel:
     def __init__(self, config: ExecutionConfig) -> None:
         micro_cfg = getattr(config, "microstructure", {}).get("queue_model", {})
@@ -34,8 +33,6 @@ class FillProbabilityModel:
         except (ZeroDivisionError, OverflowError):
             return 1.0
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("FillProbabilityModel: computation failed", exc_info=True)
             return 0.0

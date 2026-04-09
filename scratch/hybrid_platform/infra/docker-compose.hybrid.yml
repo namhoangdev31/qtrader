@@ -1,0 +1,55 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: qtrader_hybrid
+    ports:
+      - "5432:5432"
+
+  nestjs-api-gateway:
+    build: ../services/nestjs-api-gateway
+    environment:
+      SESSION_URL: http://nestjs-session-control:3010
+      OMS_URL: http://nestjs-oms-workflow:3020
+    ports:
+      - "3000:3000"
+    depends_on:
+      - nestjs-session-control
+      - nestjs-oms-workflow
+
+  nestjs-session-control:
+    build: ../services/nestjs-session-control
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3010:3010"
+    depends_on:
+      - redis
+
+  nestjs-oms-workflow:
+    build: ../services/nestjs-oms-workflow
+    environment:
+      EXECUTION_URL: http://python-execution-core:8002
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3020:3020"
+    depends_on:
+      - redis
+      - python-execution-core
+
+  python-alpha-ml:
+    build: ../services/python-alpha-ml
+    ports:
+      - "8001:8001"
+
+  python-execution-core:
+    build: ../services/python-execution-core
+    ports:
+      - "8002:8002"

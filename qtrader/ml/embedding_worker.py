@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime
 from typing import Any
 
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
@@ -79,7 +80,6 @@ class AsyncEmbeddingManager:
                     if embedding:
                         await self.db_writer.update_note_embedding(note_id, embedding)
                         session_id = task.get("session_id", "manual_intervention")
-                        from datetime import datetime
 
                         exemplar = EliteExemplar(
                             session_id=session_id,
@@ -94,7 +94,8 @@ class AsyncEmbeddingManager:
                         memory_store.save_exemplar(exemplar)
                         duration = (asyncio.get_event_loop().time() - t0) * 1000
                         logger.info(
-                            f"[ASYNC_EMBED] Note {note_id} embedded and synced to RAG in {duration:.2f}ms"
+                            f"[ASYNC_EMBED] Note {note_id} embedded and "
+                            f"synced to RAG in {duration:.2f}ms"
                         )
                     else:
                         logger.error(
@@ -108,7 +109,8 @@ class AsyncEmbeddingManager:
                         self.current_sentiment_vector = embedding
                         duration = (asyncio.get_event_loop().time() - t0) * 1000
                         logger.info(
-                            f"[ASYNC_EMBED] Sentiment vector updated successfully in {duration:.2f}ms"
+                            f"[ASYNC_EMBED] Sentiment vector updated successfully "
+                            f"in {duration:.2f}ms"
                         )
                     else:
                         logger.error("[ASYNC_EMBED] Failed to generate sentiment embedding")

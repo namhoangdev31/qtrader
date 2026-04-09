@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+import duckdb
 import polars as pl
 
-if TYPE_CHECKING:
-    import duckdb
 __all__ = ["FeatureStore"]
 _LOG = logging.getLogger("qtrader.features.store")
-
 
 class FeatureStore:
     def __init__(
@@ -29,8 +26,6 @@ class FeatureStore:
 
     def _init_duckdb(self) -> None:
         try:
-            import duckdb
-
             self._conn = duckdb.connect(self.duckdb_path)
             _LOG.debug("DuckDB feature store initialized at %s", self.duckdb_path)
         except Exception as exc:

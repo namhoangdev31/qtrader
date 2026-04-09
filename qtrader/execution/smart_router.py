@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 
 from qtrader_core import RoutingMode as RustRoutingMode
 from qtrader_core import SmartOrderRouter as RustSmartOrderRouter
@@ -7,7 +8,13 @@ logger = logging.getLogger(__name__)
 
 
 class SmartOrderRouter(RustSmartOrderRouter):
-    def __init__(self, exchanges=None, routing_mode="smart", max_order_size=None, split_size=None):
+    def __init__(
+        self,
+        exchanges: list[str] | None = None,
+        routing_mode: str = "smart",
+        max_order_size: float | Decimal | None = None,
+        split_size: float | Decimal | None = None,
+    ) -> None:
         mode_map = {
             "manual": RustRoutingMode.Manual,
             "best_price": RustRoutingMode.BestPrice,

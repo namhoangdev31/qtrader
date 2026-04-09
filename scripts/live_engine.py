@@ -11,6 +11,7 @@ from scripts.verify_v4_autonomous import verify_v4_autonomous_intelligence
 
 logger = logging.getLogger("LiveEngine")
 
+
 class LiveEngine:
     def __init__(self):
         self.running = True
@@ -32,10 +33,10 @@ class LiveEngine:
         """Main autonomous trading logic."""
         logger.info("🚀 QTrader v4 Autonomous Live Engine Starting...")
         stats["status"] = "Initializing"
-        
+
         # Initial health check
         await verify_v4_autonomous_intelligence()
-        
+
         stats["status"] = "Running"
         iteration = 0
         while self.running:
@@ -43,39 +44,39 @@ class LiveEngine:
             now = datetime.now()
             stats["iteration"] = iteration
             stats["last_heartbeat"] = now
-            
+
             try:
                 logger.info(f"🔄 Loop #{iteration} | Heartbeat | Time: {now}")
-                
+
                 # Update mock stats for the API
                 stats["regime"] = "Bull" if iteration % 2 == 0 else "Sideways"
-                stats["active_model"] = "Model_Bull" if stats["regime"] == "Bull" else "Model_Sideways"
+                stats["active_model"] = (
+                    "Model_Bull" if stats["regime"] == "Bull" else "Model_Sideways"
+                )
                 stats["exposure_btc"] = 0.5 + (iteration * 0.01)
-                
+
                 await asyncio.sleep(1)
-                
+
                 pool = await DBClient.get_pool()
                 await pool.fetchval("SELECT 1")
-                
+
             except Exception as e:
                 logger.error(f"⚠️ Error in loop: {e}")
                 stats["status"] = f"Error: {str(e)}"
                 await asyncio.sleep(5)
-                
+
             await asyncio.sleep(9)
 
     async def main(self):
         # Run both the API and the Trading loop concurrently
-        await asyncio.gather(
-            self.run_api(),
-            self.trading_loop()
-        )
+        await asyncio.gather(self.run_api(), self.trading_loop())
+
 
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s | %(levelname)-8s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format="%(asctime)s | %(levelname)-8s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     engine = LiveEngine()
     try:

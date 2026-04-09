@@ -1,4 +1,5 @@
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from pathlib import Path
@@ -8,7 +9,6 @@ import polars as pl
 from qtrader.core.config import Config
 
 logger = logging.getLogger(__name__)
-
 
 class DuckDBClient:
     def __init__(
@@ -32,7 +32,6 @@ class DuckDBClient:
 
     def _configure_duckdb(self, memory_limit_mb: int | None = None) -> None:
         self.con.execute("SET enable_progress_bar = FALSE")
-        import os
 
         num_threads = os.cpu_count() or 4
         self.con.execute(f"SET threads = {num_threads}")

@@ -13,13 +13,17 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from qtrader.core.event_bus import EventBus
-    from qtrader.core.events import RiskEvent
     from qtrader.risk.kill_switch import GlobalKillSwitch
+
+from qtrader.core.events import RiskEvent, RiskPayload
+
 __all__ = ["RealTimeRiskEngine"]
 _LOG = logging.getLogger("qtrader.risk.realtime")
+
 try:
     import qtrader_core
-    from qtrader_core import RiskEngine, WarModeState
+    from qtrader_core import RiskEngine
+    from qtrader_core import WarModeState as RustWarModeState
 
     stats_engine = qtrader_core.StatsEngine()
     math_engine = qtrader_core.MathEngine()
@@ -134,7 +138,8 @@ class RealTimeRiskEngine:
         return abs(float(es_ret * self.equity))
 
     def compute_ruin_probability(self) -> float:
-        if self.pnl_history.len() < 10:
+        min_pnl_history = 10
+        if self.pnl_history.len() < min_pnl_history:
             return 0.0
         wins = self.pnl_history.filter(self.pnl_history > 0).len()
         losses = self.pnl_history.filter(self.pnl_history < 0).len()
@@ -184,7 +189,6 @@ class RealTimeRiskEngine:
                 risk_type = "DRAWDOWN"
             if "LEVERAGE" in reason.upper():
                 risk_type = "EXPOSURE"
-            from qtrader.core.events import RiskPayload
 
             breaches.append(
                 RiskEvent(

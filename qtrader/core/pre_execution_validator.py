@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,6 @@ class ValidationResult:
     name: str
     status: bool
     message: str
-
 
 class PreExecutionValidator:
     def __init__(self, root_path: str | None = None) -> None:
@@ -104,7 +104,6 @@ class PreExecutionValidator:
     def _generate_reports(self, is_ready: bool) -> None:
         audit_dir = self.root_path / "qtrader/audit"
         audit_dir.mkdir(parents=True, exist_ok=True)
-        from datetime import datetime, timezone
 
         report = {
             "timestamp": datetime.now(timezone.utc).isoformat(),

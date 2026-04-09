@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
+from cryptography.fernet import Fernet
+
 from qtrader.security.rbac import Permission, RBACProcessor
 
 _LOG = logging.getLogger("qtrader.security.secret_manager")
@@ -27,7 +29,6 @@ class SecretManager:
         storage_path: str | None = None,
         key_path: str | None = None,
     ) -> None:
-        from cryptography.fernet import Fernet
 
         self._key_path = Path(key_path) if key_path else None
         if self._key_path and self._key_path.exists():

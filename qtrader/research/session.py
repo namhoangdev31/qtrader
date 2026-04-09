@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import logging
-from enum import Enum
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    import httpx
 from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any
 
+import httpx
 import numpy as np
 import polars as pl
 from loguru import logger
 
+from qtrader.analytics.ev_calculator import EVCalculator
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.tearsheet import TearsheetGenerator
@@ -20,6 +19,16 @@ from qtrader.data.datalake import DataLake
 from qtrader.data.datalake_universal import UniversalDataLake
 from qtrader.data.duckdb_client import DuckDBClient
 from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
+from qtrader.execution.paper_engine import PaperTradingEngine
+from qtrader.features.store import FeatureStore
+from qtrader.research.report import ReportBuilder
+
+try:
+    from scripts.generate_test_data import generate_synthetic_data
+except ImportError:
+    generate_synthetic_data = None
+
+API_SUCCESS_CODE = 200
 
 
 class RoleContext(str, Enum):
@@ -67,13 +76,10 @@ class AnalystSession:
 
     def sample_ohlcv(self, symbol: str = "AAPL", days: int = 5) -> pl.DataFrame:
         self._log.warning(f"⚠️ DATA_SOURCE: Generating SYNTHETIC data for {symbol}.")
-        try:
-            from scripts.generate_test_data import generate_synthetic_data
-
+        if generate_synthetic_data:
             return generate_synthetic_data(symbol=symbol, days=days)
-        except ImportError:
-            self._log.error("generate_synthetic_data function missing. Return empty df.")
-            return pl.DataFrame()
+        self._log.error("generate_synthetic_data function missing. Return empty df.")
+        return pl.DataFrame()
 
     async def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
         self._log.info(f"Requesting {days} days of live data for {symbol}...")
@@ -113,9 +119,6 @@ class AnalystSession:
     async def run_paper_simulation(
         self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7
     ) -> Any:
-        from qtrader.analytics.ev_calculator import EVCalculator
-        from qtrader.execution.paper_engine import PaperTradingEngine
-
         df = await self.load_live_ohlcv(symbol, timeframe, days)
         engine = PaperTradingEngine(starting_capital=10000.0)
         for row in df.iter_rows(named=True):
@@ -132,8 +135,6 @@ class AnalystSession:
         return calculator.diagnose(symbol)
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
-        from qtrader.features.store import FeatureStore
-
         store = FeatureStore()
         df = store.load_features(symbol=symbol, timeframe=timeframe)
         if df.is_empty():
@@ -296,18 +297,14 @@ class AnalystSession:
 
     def ping_live_api(self, host: str = "localhost", port: int = 8000) -> bool:
         try:
-            import httpx
-
             r = httpx.get(f"http://{host}:{port}/health", timeout=2.0)
-            return r.status_code == 200
+            return r.status_code == API_SUCCESS_CODE
         except Exception:
             return False
 
     def export_report(
         self, title: str, sections: dict[str, Any], path: str = "analyst_report.html"
     ) -> str:
-        from qtrader.research.report import ReportBuilder
-
         rb = ReportBuilder(title)
         for heading, content in sections.items():
             if isinstance(content, str):
@@ -328,9 +325,32 @@ class AnalystSession:
 
     def info(self) -> None:
         guides = {
-            RoleContext.ANALYST: "📊 Quant Analyst Workflow\n  1. load_ohlcv / sample_ohlcv → load market data\n  2. make_returns + add_rolling_features → prepare features\n  3. run_vector_backtest → backtest a signal\n  4. compute_extended_metrics → Sharpe, Sortino, Calmar, Win Rate\n  5. export_report → save interactive HTML report\n\n  📓 Notebooks: notebooks/analyst/01_EDA_Report.ipynb, ...\n",
-            RoleContext.RESEARCHER: "🔬 Quant Researcher Workflow\n  1. load_ohlcv → raw OHLCV\n  2. add_rolling_features → compute & store features via FeatureStore\n  3. run_alpha_score → forward-return scoring\n  4. Use MLflow for experiment tracking (see notebooks/researcher/)\n  5. load_features → pull pre-computed features\n\n  📓 Notebooks: notebooks/researcher/01_Feature_Lab.ipynb, ...\n",
-            RoleContext.TRADER: "⚡ Quant Trader Workflow\n  1. ping_live_api → check if bot is running\n  2. connect_live_api → fetch live status (P&L, regime, active model)\n  3. load_ohlcv + fills → execution audit\n  4. compute_extended_metrics on live equity curve\n\n  📓 Notebooks: notebooks/trader/01_Live_Monitor.ipynb, ...\n",
+            RoleContext.ANALYST: (
+                "📊 Quant Analyst Workflow\n"
+                "  1. load_ohlcv / sample_ohlcv → load market data\n"
+                "  2. make_returns + add_rolling_features → prepare features\n"
+                "  3. run_vector_backtest → backtest a signal\n"
+                "  4. compute_extended_metrics → Sharpe, Sortino, Calmar, Win Rate\n"
+                "  5. export_report → save interactive HTML report\n"
+                "  📓 Notebooks: notebooks/analyst/01_EDA_Report.ipynb"
+            ),
+            RoleContext.RESEARCHER: (
+                "🔬 Quant Researcher Workflow\n"
+                "  1. load_ohlcv → raw OHLCV\n"
+                "  2. add_rolling_features → compute features via FeatureStore\n"
+                "  3. run_alpha_score → forward-return scoring\n"
+                "  4. MLflow for tracking (see notebooks/researcher/)\n"
+                "  5. load_features → pull pre-computed features\n"
+                "  📓 Notebooks: notebooks/researcher/01_Feature_Lab.ipynb"
+            ),
+            RoleContext.TRADER: (
+                "⚡ Quant Trader Workflow\n"
+                "  1. ping_live_api → check if bot is running\n"
+                "  2. connect_live_api → fetch live status\n"
+                "  3. load_ohlcv + fills → execution audit\n"
+                "  4. compute_extended_metrics on live curve\n"
+                "  📓 Notebooks: notebooks/trader/01_Live_Monitor.ipynb"
+            ),
         }
         logger.info(guides.get(self.role, "QTrader AnalystSession ready."))
 

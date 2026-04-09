@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -11,12 +12,10 @@ from qtrader.core.errors import BaseError, CriticalError, RecoverableError, clas
 if TYPE_CHECKING:
     from qtrader.core.global_orchestrator import GlobalOrchestrator
 
-
 @dataclass
 class EscalationState:
     count: int = 0
     first_occurrence: float = field(default_factory=time.time)
-
 
 class FailFastEngine:
     def __init__(
@@ -72,7 +71,6 @@ class FailFastEngine:
             logger.error(
                 "[FAIL-FAST] ORCHESTRATOR MISSING - Performing process-level emergency exit."
             )
-            import sys
 
             sys.exit(1)
 

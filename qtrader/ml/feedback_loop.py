@@ -40,7 +40,8 @@ class FeedbackController:
         if slippage_bps > self._max_slippage or fill_pct < self._min_fill:
             self._stats["filtered"] += 1
             _LOG.warning(
-                f"[FEEDBACK] Noise Filtered | Signal: {signal['id']} | Slip: {slippage_bps:.1f}bps | Fill: {fill_pct:.1%}"
+                f"[FEEDBACK] Noise Filtered | Signal: {signal['id']} | "
+                f"Slip: {slippage_bps:.1f}bps | Fill: {fill_pct:.1%}"
             )
             return None
         pnl = (trade["exit_price"] - trade["entry_price"]) * trade["filled_qty"]

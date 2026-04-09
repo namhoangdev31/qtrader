@@ -102,18 +102,43 @@ class OllamaDecisionAdapter:
         system_state: dict[str, Any] | None,
         rag_context: list[dict[str, Any]] | None = None,
     ) -> str:
-        instruct = "System: Act as an institutional quantitative trading engine. Analyze inputs and provide a trading decision in strict JSON format.\n"
+        instruct = (
+            "System: Act as an institutional quantitative trading engine. "
+            "Analyze inputs and provide a trading decision in strict JSON format.\n"
+        )
         if rag_context:
-            instruct += "RAG INSTITUTIONAL MEMORY:\nThe following 'Elite Exemplars' (past success) or 'Forensic Interventions' (live human directives) were retrieved:\n"
+            instruct += (
+                "RAG INSTITUTIONAL MEMORY:\n"
+                "The following 'Elite Exemplars' (past success) or "
+                "'Forensic Interventions' (live human directives) were retrieved:\n"
+            )
             for i, match in enumerate(rag_context, 1):
                 role = (
                     "FORENSIC INTERVENTION"
                     if match.get("regime") == "forensic_intervention"
                     else "HISTORICAL SUCCESS"
                 )
-                instruct += f"Match {i} [{role}] (Similarity: {match['similarity']:.2f}):\n  Parameters/Context: {json.dumps(match['parameters'])}\n  Expert Note: {match['notes']}\n"
-            instruct += "\nIMPORTANT: Prioritize 'FORENSIC INTERVENTION' as these are immediate human directives for the current market state. Use them to override or bias your decision.\n"
-        instruct += 'IMPORTANT: Response must be a single, valid JSON object only. No conversational filler, no markdown blocks, no prefix/suffix. Follow this schema exactly:\n\n{"action": "BUY/SELL/HOLD/HEDGE", "confidence": float, "reasoning": string, "risk_adjustment": float, "position_size_multiplier": float, "stop_loss_pct": float, "take_profit_pct": float, "time_horizon": "short/medium/long", "explanation": string,"config_overrides": {"MIN_CONFIDENCE": float, "STOP_LOSS_PCT": float, "TAKE_PROFIT_PCT": float}}\n\n'
+                instruct += (
+                    f"Match {i} [{role}] (Similarity: {match['similarity']:.2f}):\n"
+                    f"  Parameters/Context: {json.dumps(match['parameters'])}\n"
+                    f"  Expert Note: {match['notes']}\n"
+                )
+            instruct += (
+                "\nIMPORTANT: Prioritize 'FORENSIC INTERVENTION' as these are immediate "
+                "human directives for the current market state. "
+                "Use them to override or bias your decision.\n"
+            )
+        instruct += (
+            "IMPORTANT: Response must be a single, valid JSON object only. "
+            "No conversational filler, no markdown blocks, no prefix/suffix. "
+            "Follow this schema exactly:\n\n"
+            '{"action": "BUY/SELL/HOLD/HEDGE", "confidence": float, "reasoning": string, '
+            '"risk_adjustment": float, "position_size_multiplier": float, '
+            '"stop_loss_pct": float, "take_profit_pct": float, '
+            '"time_horizon": "short/medium/long", "explanation": string,'
+            '"config_overrides": {"MIN_CONFIDENCE": float, "STOP_LOSS_PCT": float, '
+            '"TAKE_PROFIT_PCT": float}}\n\n'
+        )
         data_block = {
             "chronos_2_forecast": chronos_forecast,
             "tabpfn_risk_analysis": tabpfn_risk,

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from qtrader_core import Order as RustOrder
 from qtrader_core import OrderType as RustOrderType
@@ -13,7 +14,7 @@ from qtrader_core import UnifiedOMS as RustUnifiedOMS
 from qtrader.core.events import FillEvent, OrderEvent, SystemEvent, SystemPayload
 from qtrader.core.state_store import Order, Position, StateStore
 from qtrader.oms.event_store import EventStore
-from qtrader.oms.order_fsm import OrderFSM, OrderState
+from qtrader.oms.order_fsm import OrderFSM, OrderState, get_state_from_status
 
 if TYPE_CHECKING:
     from qtrader.core.types import EventBusProtocol
@@ -86,7 +87,10 @@ class UnifiedOMS:
         rust_order = self._rust_oms.on_reject(order_id)
         await self._sync_order_state(rust_order)
         await self._record_and_publish(
-            "ORDER_REJECTED", reason, {"order_id": order_id}, trace_id=None
+            "ORDER_REJECTED",
+            reason,
+            {"order_id": order_id},
+            trace_id=None,
         )
         self._log.error(f"OMS | Order Rejected: {order_id} - Reason: {reason}")
 
@@ -123,8 +127,6 @@ class UnifiedOMS:
         self._log.info(f"OMS | Order Fill: {fill_event.order_id} | Qty: {fill_event.quantity}")
 
     async def _sync_order_state(self, rust_order: RustOrder) -> None:
-        from qtrader.oms.order_fsm import get_state_from_status
-
         next_state = get_state_from_status(rust_order.status)
         await self.state_store.update_order(
             rust_order.id, lambda o: setattr(o, "status", next_state)
@@ -133,8 +135,6 @@ class UnifiedOMS:
     async def _record_and_publish(
         self, action: str, reason: str, metadata: dict[str, Any], trace_id: str | None = None
     ) -> None:
-        from uuid import uuid4
-
         event = SystemEvent(
             source="UnifiedOMS",
             trace_id=trace_id or str(uuid4()),

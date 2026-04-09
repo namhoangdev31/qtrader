@@ -17,6 +17,8 @@ import sys
 
 from loguru import logger
 
+from qtrader.trading_system import create_trading_system
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="QTrader Trading System")
@@ -37,8 +39,6 @@ def parse_args() -> argparse.Namespace:
 async def main() -> None:
     """Main function to run the QTrader Trading System."""
     args = parse_args()
-
-    from qtrader.trading_system import create_trading_system
 
     symbols = [s.strip() for s in args.symbols.split(",")]
     simulate = not args.live

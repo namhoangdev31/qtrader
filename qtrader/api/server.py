@@ -3,6 +3,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI
@@ -10,12 +11,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from qtrader.api.dependencies import get_system
-from qtrader.api.router import health_router, router, session_router, sim_router, ws_router
+from qtrader.api.router import (
+    get_sim_engine,
+    health_router,
+    router,
+    session_router,
+    sim_router,
+    start_simulation,
+    stop_simulation,
+    ws_router,
+)
 
 logger = logging.getLogger("qtrader.api.server")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -40,8 +49,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     session_id = None
     if sim_mode:
         try:
-            from decimal import Decimal
-
             await system.db_writer.initialize()
             balance = await system.broker.get_paper_balance()
             session_id = await system.db_writer.start_session(
@@ -53,7 +60,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info(f"[SIM] DB session created: {session_id}")
         except Exception as e:
             logger.error(f"[SIM] Failed to create DB session: {e}")
-        from qtrader.api.router import get_sim_engine, start_simulation
 
         await start_simulation(system)
         engine = get_sim_engine()
@@ -64,10 +70,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     if session_id:
         try:
-            from decimal import Decimal
-
-            from qtrader.api.router import get_sim_engine
-
             engine = get_sim_engine()
             await system.db_writer.stop_session(
                 session_id=session_id,
@@ -79,13 +81,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await system.stop()
     if bg_task:
         bg_task.cancel()
-    from qtrader.api.router import stop_simulation
 
     await stop_simulation()
 
-
 async def _ui_heartbeat(system: Any) -> None:
-    from qtrader.core.events import EventType, SystemEvent, SystemPayload
 
     while True:
         try:
@@ -110,7 +109,6 @@ async def _ui_heartbeat(system: Any) -> None:
         except Exception as e:
             logger.error(f"[HEARTBEAT] Error in UI heartbeat: {e}", exc_info=True)
 
-
 app = FastAPI(
     title="QTrader API",
     description="FastAPI Backend for Paper Trading UI",
@@ -131,7 +129,6 @@ app.include_router(sim_router)
 app.include_router(session_router)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
-
 @app.get("/", response_class=HTMLResponse, response_model=None)
 async def index() -> HTMLResponse:
     html_path = os.path.join(TEMPLATES_DIR, "index.html")
@@ -139,7 +136,6 @@ async def index() -> HTMLResponse:
         with open(html_path, encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     return HTMLResponse(content="<h1>QTrader UI: index.html not found!</h1>", status_code=404)
-
 
 if __name__ == "__main__":
     import uvicorn

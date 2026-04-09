@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from qtrader.core.events import RiskEvent, RiskPayload
 
@@ -63,7 +63,7 @@ class MaxDrawdownLimit:
                 value=Decimal(str(drawdown)),
                 threshold=Decimal(str(self._pct)),
                 metadata={
-                    "reason": f"Max drawdown limit breached: {drawdown:.2%} > {self._pct:.2%}",
+                    "reason": (f"Max drawdown limit breached: {drawdown:.2%} > {self._pct:.2%}"),
                     "equity": state.equity,
                     "hwm": state.hwm,
                     "source": "RUST_CORE",
@@ -90,7 +90,7 @@ class DailyLossLimit:
                 value=Decimal(str(loss)),
                 threshold=Decimal(str(self._usd)),
                 metadata={
-                    "reason": f"Daily loss limit breached: ${loss:,.2f} > ${self._usd:,.2f}",
+                    "reason": (f"Daily loss limit breached: ${loss:,.2f} > ${self._usd:,.2f}"),
                     "equity": state.equity,
                     "source": "RUST_CORE",
                 },
@@ -143,7 +143,10 @@ class GrossExposureLimit:
                 value=Decimal(str(leverage)),
                 threshold=Decimal(str(self._max_leverage)),
                 metadata={
-                    "reason": f"Gross exposure limit breached: {leverage:.2f}x > {self._max_leverage:.2f}x",
+                    "reason": (
+                        f"Gross exposure limit breached: "
+                        f"{leverage:.2f}x > {self._max_leverage:.2f}x"
+                    ),
                     "gross_exposure": gross_exposure,
                     "equity": state.equity,
                     "source": "RUST_CORE",
@@ -162,13 +165,6 @@ class VaRBreachLimit:
         var_fraction = state.var_95 / state.equity
         if var_fraction <= self._var_threshold_pct:
             return None
-        metadata: dict[str, Any] = {
-            "limit": "VAR_BREACH",
-            "threshold_pct": self._var_threshold_pct,
-            "var_95": state.var_95,
-            "var_fraction": var_fraction,
-            "equity": state.equity,
-        }
         return RiskEvent(
             source="VaRBreachLimit",
             payload=RiskPayload(

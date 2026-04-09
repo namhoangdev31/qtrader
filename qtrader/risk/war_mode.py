@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 _LOG = logging.getLogger("qtrader.risk.war_mode")
 try:
-    import qtrader_core
     from qtrader_core import WarModeState as RustWarModeState
 except ImportError as e:
     _LOG.error(
@@ -82,6 +82,4 @@ class WarModeEngine:
 
     @staticmethod
     def _now() -> float:
-        import time
-
         return time.time()

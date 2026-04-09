@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 from typing import Any
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +18,6 @@ class CPUAffinityManager:
 
     def _detect_support(self) -> bool:
         try:
-            import psutil
-
             p = psutil.Process(os.getpid())
             self._available_cores = list(p.cpu_affinity())
             logger.info(
@@ -40,8 +41,6 @@ class CPUAffinityManager:
             )
             return False
         try:
-            import psutil
-
             p = psutil.Process(os.getpid())
             p.cpu_affinity(valid_cores)
             self._pinned_cores = valid_cores
@@ -58,9 +57,6 @@ class CPUAffinityManager:
             logger.warning("CPU_AFFINITY | Thread pinning requires Linux")
             return False
         try:
-            import ctypes
-
-            libc = ctypes.CDLL("libc.so.6")
             mask = 1 << core_id
             result = libc.sched_setaffinity(0, 8, ctypes.byref(ctypes.c_ulong(mask)))
             if result == 0:

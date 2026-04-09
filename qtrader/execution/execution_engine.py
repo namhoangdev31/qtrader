@@ -5,6 +5,7 @@ import queue
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
@@ -17,11 +18,19 @@ from qtrader_core import RiskEngine as RustRiskEngine
 from qtrader_core import RoutingMode as RustRoutingMode
 from qtrader_core import Side as RustSide
 
-from qtrader.core.events import FillEvent, FillPayload, OrderEvent
+from qtrader.core.events import (
+    EventType,
+    FillEvent,
+    FillPayload,
+    OrderEvent,
+    OrderPayload,
+    RetryOrderEvent,
+)
 from qtrader.core.logger import logger
 from qtrader.core.state_store import Position, StateStore
 from qtrader.core.trace_authority import TraceAuthority
 from qtrader.core.types import LoggerProtocol
+from qtrader.execution.trade_logger import TradeLogger
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine
 
@@ -92,7 +101,7 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
     def set_price(self, symbol: str, price: Decimal) -> None:
         self.prices[symbol] = price
 
-    def set_fill_callback(self, callback) -> None:
+    def set_fill_callback(self, callback: Callable[[str, FillEvent], None]) -> None:
         self._fill_callback = callback
 
     async def _async_notify_fill(self, order_id: str, fill_event: FillEvent) -> None:
@@ -212,9 +221,8 @@ class ExecutionEngine:
         self._worker_thread = threading.Thread(
             target=self._execution_worker_loop, daemon=True, name="ExecutionWorker"
         )
+        self.logger.info("Syncing stats with StateStore...")
         if self._event_bus:
-            from qtrader.core.events import EventType
-
             self._event_bus.subscribe(EventType.RETRY_ORDER, self._on_retry_order)
         self._is_running = False
 
@@ -231,9 +239,6 @@ class ExecutionEngine:
         self._worker_thread.join(timeout=2.0)
         self.logger.info("ExecutionEngine stopped")
 
-    from qtrader.core.latency import enforce_latency
-
-    @enforce_latency(threshold_ms=2.0)
     async def execute_order(self, order: OrderEvent, attempt: int = 1) -> tuple[bool, str | None]:
         if not self.rate_limiter.consume():
             self.logger.warning(f"Rate limit exceeded for {order.symbol}, deferring...")
@@ -246,8 +251,6 @@ class ExecutionEngine:
             all_success = True
             last_id = None
             for r_order, exchange in routed_orders:
-                from qtrader.core.events import OrderPayload
-
                 dispatch_order = OrderEvent(
                     source="ExecutionEngine",
                     timestamp=int(time.time() * 1000000),
@@ -276,9 +279,7 @@ class ExecutionEngine:
             self.logger.error(f"Execution failure: {e}", exc_info=True)
             return (False, str(e))
 
-    async def _on_retry_order(self, event: Any) -> None:
-        from qtrader.core.events import RetryOrderEvent
-
+    async def _on_retry_order(self, event: RetryOrderEvent) -> None:
         if isinstance(event, RetryOrderEvent):
             await self.execute_order(event.order, attempt=event.attempt)
 
@@ -363,13 +364,7 @@ class ExecutionEngine:
 
     def _on_order_filled(self, order_id: str, fill_event: FillEvent) -> None:
         self._worker_queue.put(("FILL_UPDATE", fill_event, None))
-        from qtrader.execution.trade_logger import TradeLogger
-
-        trace_id = getattr(
-            fill_event,
-            "trace_id",
-            getattr(fill_event.payload, "metadata", {}).get("trace_id", "no_trace"),
-        )
+        trace_id = getattr(fill_event, "trace_id", "no_trace")
         metadata = getattr(fill_event.payload, "metadata", {})
         TradeLogger.log_trade(
             symbol=fill_event.payload.symbol,
@@ -377,7 +372,7 @@ class ExecutionEngine:
             quantity=float(fill_event.payload.quantity),
             price=float(fill_event.payload.price),
             trace_id=str(trace_id),
-            timestamp=getattr(fill_event, "timestamp", time.time()),
+            timestamp=getattr(fill_event, "timestamp", int(time.time() * 1000000)),
             sl=float(metadata.get("sl", 0.0)),
             tp=float(metadata.get("tp", 0.0)),
             reason=metadata.get("reason", "SIGNAL"),

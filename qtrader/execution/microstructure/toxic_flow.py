@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
-
 
 class ToxicFlowPredictor:
     def __init__(self, config: ExecutionConfig) -> None:
@@ -31,8 +31,6 @@ class ToxicFlowPredictor:
             raw_tau = float(numerator / denominator)
             return (raw_tau + 1.0) / 2.0
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             return 0.5
 

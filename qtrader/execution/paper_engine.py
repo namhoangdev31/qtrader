@@ -12,13 +12,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 from qtrader.core.config import settings
 from qtrader.core.dynamic_config import DynamicSettingsMixin, config_manager
-from qtrader.core.events import ForensicNoteEvent, ForensicNotePayload
+from qtrader.core.events import ForensicNoteEvent, ForensicNotePayload, MarketEvent, MarketPayload
 from qtrader.core.trace_authority import TraceAuthority
 from qtrader.execution.paper_mixins import FillMixin, PersistenceMixin, PositionMixin, SignalMixin
 from qtrader.execution.paper_models import AdaptiveConfig, OpenPosition, TradeRecord
 
 _LOG = logging.getLogger("qtrader.paper")
-
 
 class PaperTradingEngine(
     DynamicSettingsMixin, SignalMixin, PositionMixin, FillMixin, PersistenceMixin
@@ -285,7 +284,6 @@ class PaperTradingEngine(
             _LOG.error(f"[PAPER] Simulation tick error: {e}", exc_info=True)
 
     async def run_continuous(self) -> None:
-        from qtrader.core.events import MarketEvent, MarketPayload
 
         self._running = True
         self._start_time = time.time()

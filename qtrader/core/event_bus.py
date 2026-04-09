@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from typing import TYPE_CHECKING, Any
 
 from qtrader.core.backpressure_controller import BackpressureController
-from qtrader.core.events import BaseEvent, EventType
+from qtrader.core.events import EVENT_TYPE_MAP, BaseEvent, EventType
 from qtrader.core.partition_manager import PartitionManager
 
 try:
@@ -146,11 +147,7 @@ class EventBus:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message and message["type"] == "message":
                     data_json = message["data"]
-                    from qtrader.core.events import EVENT_TYPE_MAP, BaseEvent, EventType
-
                     try:
-                        import json
-
                         raw_data = json.loads(data_json)
                         et_str = raw_data.get("event_type")
                         et = EventType(et_str) if et_str else None

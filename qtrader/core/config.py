@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+from pathlib import Path
 from typing import Any
 
 from pydantic import model_validator
@@ -121,7 +120,6 @@ class QTraderSettings(BaseSettings):
 
     @model_validator(mode="after")
     def resolve_paths(self) -> QTraderSettings:
-        from pathlib import Path
 
         root = Path(__file__).parent.parent.parent
         if not Path(self.datalake_uri).is_absolute():

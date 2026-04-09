@@ -70,7 +70,9 @@ class GlobalKillSwitch:
                 if cancel_tasks:
                     await asyncio.gather(*cancel_tasks, return_exceptions=True)
                     _LOG.info(
-                        f"[KILL_SWITCH] Cancel orders complete: {results['cancel_orders']['success']} OK, {results['cancel_orders']['failed']} FAILED"
+                        f"[KILL_SWITCH] Cancel orders complete: "
+                        f"{results['cancel_orders']['success']} OK, "
+                        f"{results['cancel_orders']['failed']} FAILED"
                     )
                 results["cancel_orders"]["success"] += 1
                 self._actions_executed.append("CANCEL_ALL_OPEN_ORDERS_GLOBAL")
@@ -86,7 +88,9 @@ class GlobalKillSwitch:
                     self._liquidate_all_positions(results), timeout=self._liquidation_timeout_s
                 )
                 _LOG.info(
-                    f"[KILL_SWITCH] Liquidation complete: {results['liquidate_positions']['success']} OK, {results['liquidate_positions']['failed']} FAILED"
+                    f"[KILL_SWITCH] Liquidation complete: "
+                    f"{results['liquidate_positions']['success']} OK, "
+                    f"{results['liquidate_positions']['failed']} FAILED"
                 )
                 self._actions_executed.append("LIQUIDATE_ALL_POSITIONS_MARKET")
             except asyncio.TimeoutError:
@@ -204,7 +208,8 @@ class GlobalKillSwitch:
             self._kill_reason = reason
             self._kill_timestamp = time.time()
             _LOG.critical(
-                f"[KILL_SWITCH] TRIGGERED | {reason} | SHUTDOWN_SEQUENCE_INITIATED | NAV_LOSS: {current_absolute_loss:,.2f}"
+                f"[KILL_SWITCH] TRIGGERED | {reason} | SHUTDOWN_SEQUENCE_INITIATED | "
+                f"NAV_LOSS: {current_absolute_loss:,.2f}"
             )
         latency_ms = (time.time() - eval_start) * 1000
         artifact = {
@@ -245,7 +250,8 @@ class GlobalKillSwitch:
         self._kill_reason = f"CRITICAL_FAILURE: {error_type} — {error_message}"
         self._kill_timestamp = time.time()
         _LOG.critical(
-            f"[KILL_SWITCH] TRIGGERED BY CRITICAL FAILURE | {error_type} | {error_message} | SHUTDOWN_SEQUENCE_INITIATED"
+            f"[KILL_SWITCH] TRIGGERED BY CRITICAL FAILURE | {error_type} | "
+            f"{error_message} | SHUTDOWN_SEQUENCE_INITIATED"
         )
         self._actions_executed.append(f"CRITICAL_FAILURE_TRIGGER: {error_type}")
 

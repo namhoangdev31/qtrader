@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Final
 
 _LOG = logging.getLogger("qtrader.compliance.surveillance_engine")
-
 
 class ViolationType(Enum):
     WASH_TRADING = auto()
@@ -15,7 +15,6 @@ class ViolationType(Enum):
     QUOTE_STUFFING = auto()
     FRONT_RUNNING = auto()
 
-
 @dataclass(slots=True, frozen=True)
 class ViolationAlert:
     type: ViolationType
@@ -23,7 +22,6 @@ class ViolationAlert:
     user_id: str
     evidence: dict[str, Any]
     timestamp: float
-
 
 class SurveillanceEngine:
     def __init__(self, wash_window_ms: float = 100.0) -> None:
@@ -88,7 +86,6 @@ class SurveillanceEngine:
         return alerts
 
     def _detect_quote_stuffing(self, events: list[dict[str, Any]]) -> list[ViolationAlert]:
-        from collections import defaultdict
 
         alerts: list[ViolationAlert] = []
         user_events: dict[str, list[dict]] = defaultdict(list)

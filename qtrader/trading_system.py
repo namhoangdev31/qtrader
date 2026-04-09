@@ -16,6 +16,8 @@ from qtrader.core.config import settings
 from qtrader.core.dynamic_config import config_manager
 from qtrader.core.event_bus import EventBus
 from qtrader.core.events import (
+    DecisionTraceEvent,
+    DecisionTracePayload,
     EventType,
     MarketEvent,
     MarketPayload,
@@ -73,6 +75,7 @@ class TradingSystemConfig:
     reference_price: float = settings.ts_reference_price
 
 
+PRICE_SHIFT_THRESHOLD = 0.01
 MAX_HISTORY_LEN = 1000
 MIN_HISTORY_FOR_ANALYSIS = 20
 ALPHA_LOOKBACK_WINDOW = 100
@@ -195,7 +198,9 @@ class TradingSystem:
         if settings.ENABLE_AUTO_FORENSIC:
             self.auditor.start()
         self.lifecycle.start(session_id=self.active_session_id, last_latency_provider=self)
-        self._tasks.add(asyncio.create_task(self._heartbeat_loop()))
+        task = asyncio.create_task(self._heartbeat_loop())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def stop(self) -> None:
         self._running = False
@@ -222,13 +227,11 @@ class TradingSystem:
         if price > 0 and symbol:
             self.broker._quotes[symbol] = {"price": price}
             self.config.reference_price = float(price)
-            from qtrader.core.config import settings
-
             old_ref = settings.ts_reference_price
             settings.ts_reference_price = float(price)
             config_manager.update("current_market_price", float(price))
             self.pre_trade_risk.update_mid_price(symbol, price)
-            if abs(float(price) - old_ref) / old_ref > 0.01:
+            if abs(float(price) - old_ref) / old_ref > PRICE_SHIFT_THRESHOLD:
                 logger.info(f"[TS] Reference Price shifted > 1%: {old_ref:.2f} -> {price:.2f}")
             try:
                 await self.event_bus.publish(
@@ -275,7 +278,9 @@ class TradingSystem:
         symbol = event.payload.symbol
         if symbol not in self.config.symbols:
             return
-        asyncio.create_task(self._process_symbol(symbol))
+        task = asyncio.create_task(self._process_symbol(symbol))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def _process_symbol(self, symbol: str) -> None:
         with TraceAuthority.inject_trace():
@@ -330,7 +335,6 @@ class TradingSystem:
             self.recon,
             self.session_state,
         )
-        from qtrader.core.events import DecisionTraceEvent, DecisionTracePayload
 
         await self.event_bus.publish(
             DecisionTraceEvent(

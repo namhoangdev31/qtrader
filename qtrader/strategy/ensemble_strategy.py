@@ -20,7 +20,7 @@ _LOG = container.get("logger")
 
 
 class EnsembleStrategy:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         strategies: list,
         performance_window: int = 20,
@@ -158,41 +158,31 @@ class EnsembleStrategy:
                 ]
 
     def _rebalance_weights(self) -> None:
-        avg_performance = {}
-        for i, performance_list in self._strategy_performance.items():
-            if performance_list:
-                avg_performance[i] = sum(performance_list) / len(performance_list)
-            else:
-                avg_performance[i] = 0.0
-        if all(p <= 0 for p in avg_performance.values()):
-            equal_weight = 1.0 / len(self.strategies)
-            for i in range(len(self.strategies)):
-                self._strategy_weights[i] = equal_weight
+        avg_p = {i: sum(p) / len(p) if p else 0.0 for i, p in self._strategy_performance.items()}
+
+        if all(v <= 0 for v in avg_p.values()):
+            eq = 1.0 / len(self.strategies)
+            self._strategy_weights = {i: eq for i in range(len(self.strategies))}
             return
-        min_perf = min(avg_performance.values())
-        shifted_perf = {i: perf - min_perf + 1e-08 for (i, perf) in avg_performance.items()}
-        total_shifted = sum(shifted_perf.values())
-        if total_shifted > 0:
-            raw_weights = {i: perf / total_shifted for (i, perf) in shifted_perf.items()}
+
+        min_p = min(avg_p.values())
+        shifted = {i: v - min_p + 1e-08 for i, v in avg_p.items()}
+        total = sum(shifted.values())
+
+        raw = {
+            i: v / total if total > 0 else 1.0 / len(self.strategies) for i, v in shifted.items()
+        }
+
+        # Apply constraints
+        cons = {i: max(self.min_weight, min(self.max_weight, w)) for i, w in raw.items()}
+
+        s_cons = sum(cons.values())
+        if s_cons > 0:
+            self._strategy_weights = {i: v / s_cons for i, v in cons.items()}
         else:
-            equal_weight = 1.0 / len(self.strategies)
-            raw_weights = {i: equal_weight for i in range(len(self.strategies))}
-        constrained_weights = {}
-        for i, weight in raw_weights.items():
-            if weight < self.min_weight:
-                constrained_weights[i] = self.min_weight
-            elif weight > self.max_weight:
-                constrained_weights[i] = self.max_weight
-            else:
-                constrained_weights[i] = weight
-        weight_sum = sum(constrained_weights.values())
-        if weight_sum > 0:
-            for i in range(len(self.strategies)):
-                self._strategy_weights[i] = constrained_weights[i] / weight_sum
-        else:
-            equal_weight = 1.0 / len(self.strategies)
-            for i in range(len(self.strategies)):
-                self._strategy_weights[i] = equal_weight
+            eq = 1.0 / len(self.strategies)
+            self._strategy_weights = {i: eq for i in range(len(self.strategies))}
+
         _LOG.debug(f"Rebalanced ensemble weights: {self._strategy_weights}")
 
     def _combine_signals(self, strategy_signals: dict, weights: dict[int, float]) -> dict:

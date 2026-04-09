@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.strategy.scheduler")
 
-
 class ExecutionScheduler:
     def __init__(self, config: ExecutionConfig) -> None:
         sched_cfg = getattr(config, "routing", {}).get("scheduler", {})
@@ -39,8 +38,6 @@ class ExecutionScheduler:
                 return [float(q * multiplier) for q in q_star]
             return [float(total_qty / horizon_steps)] * horizon_steps
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("ExecutionScheduler: optimization failed, using TWAP", exc_info=True)
             return [float(total_qty / horizon_steps)] * horizon_steps

@@ -207,7 +207,10 @@ class MLflowManager:
             drawdown = metrics.get("max_drawdown", 1.0)
             hit_rate = metrics.get("hit_rate", 0.0)
             self.logger.info(
-                f"Evaluating strategy {strategy_name} (run {run_id}): Sharpe={sharpe:.3f} (>{sharpe_threshold}), Drawdown={drawdown:.3f} (<{drawdown_threshold}), Hit Rate={hit_rate:.3f} (>{hit_rate_threshold})"
+                f"Evaluating strategy {strategy_name} (run {run_id}): "
+                f"Sharpe={sharpe:.3f} (>{sharpe_threshold}), "
+                f"Drawdown={drawdown:.3f} (<{drawdown_threshold}), "
+                f"Hit Rate={hit_rate:.3f} (>{hit_rate_threshold})"
             )
             if (
                 sharpe > sharpe_threshold
@@ -233,7 +236,8 @@ class MLflowManager:
                 return True
             else:
                 self.logger.info(
-                    f"Strategy {strategy_name} did not meet promotion criteria. Keeping in Staging or failing."
+                    f"Strategy {strategy_name} did not meet promotion criteria. "
+                    f"Keeping in Staging or failing."
                 )
                 return False
         except Exception as e:
@@ -273,7 +277,10 @@ class MLflowManager:
             drawdown = shadow_metrics.get("max_drawdown", 1.0)
             hit_rate = shadow_metrics.get("hit_rate", 0.0)
             self.logger.info(
-                f"Evaluating shadow strategy {strategy_name} (run {shadow_run_id}): Sharpe={sharpe:.3f} (>{cfg.sharpe_threshold}), Drawdown={drawdown:.3f} (<{cfg.drawdown_threshold}), Hit Rate={hit_rate:.3f} (>{cfg.hit_rate_threshold})"
+                f"Evaluating shadow strategy {strategy_name} (run {shadow_run_id}): "
+                f"Sharpe={sharpe:.3f} (>{cfg.sharpe_threshold}), "
+                f"Drawdown={drawdown:.3f} (<{cfg.drawdown_threshold}), "
+                f"Hit Rate={hit_rate:.3f} (>{cfg.hit_rate_threshold})"
             )
             if not (
                 sharpe > cfg.sharpe_threshold
@@ -291,7 +298,8 @@ class MLflowManager:
             prod_versions = client.get_latest_versions(model_name, stages=["Production"])
             if not prod_versions:
                 self.logger.info(
-                    f"No production version found for {model_name}. Promoting based on absolute thresholds only."
+                    f"No production version found for {model_name}. "
+                    f"Promoting based on absolute thresholds only."
                 )
                 staging_versions = client.get_latest_versions(model_name, stages=["Staging"])
                 if not staging_versions:
@@ -349,7 +357,8 @@ class MLflowManager:
                     archive_existing_versions=True,
                 )
                 self.logger.info(
-                    f"Promoted {model_name} version {version} from shadow run {shadow_run_id} to Production, archived version {prod_version.version}"
+                    f"Promoted {model_name} version {version} from shadow run {shadow_run_id} "
+                    f"to Production, archived version {prod_version.version}"
                 )
                 return True
             else:

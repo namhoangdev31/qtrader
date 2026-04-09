@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from qtrader.ml.chronos_adapter import ChronosForecastAdapter
+from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
 from qtrader.ml.ollama_forecast_adapter import OllamaForecastAdapter
 from qtrader.ml.ollama_risk_adapter import OllamaRiskAdapter
@@ -125,7 +126,7 @@ class AtomicTrioPipeline:
         risk_results = None
         risk_latency = 0.0
 
-        async def run_forecast():
+        async def run_forecast() -> None:
             nonlocal forecast_results, forecast_latency
             if (
                 historical_prices
@@ -149,7 +150,7 @@ class AtomicTrioPipeline:
                 except Exception as e:
                     logger.warning(f"[ATOMIC_TRIO] Forecast stage failed: {e}")
 
-        async def run_risk():
+        async def run_risk() -> None:
             nonlocal risk_results, risk_latency
             if market_features and self._risk_engine is not None:
                 try:
@@ -172,7 +173,6 @@ class AtomicTrioPipeline:
                     float(risk_results.get("risk_score", 0.5)) if risk_results else 0.5,
                     float(self._run_count % 100) / 100.0,
                 ]
-                from qtrader.ml.embedding_worker import embedding_manager
 
                 rag_context = memory_store.retrieve_similar(
                     market_vector=m_vector,
@@ -277,8 +277,8 @@ async def predict(req: PredictRequest) -> dict[str, Any]:
         return result.to_dict()
     except Exception as e:
         logger.error(f"[SERVER] Prediction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8001)  # noqa: S104

@@ -12,14 +12,12 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.strategy.slicing")
 
-
 @dataclass(slots=True)
 class SlicingState:
     remaining_qty: float
     elapsed_time_sec: float
     total_duration_sec: float
     last_update: datetime
-
 
 class AdaptiveSlicer:
     def __init__(self, config: ExecutionConfig) -> None:
@@ -64,8 +62,6 @@ class AdaptiveSlicer:
                 scheduled_at=datetime.now().timestamp(),
             )
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("AdaptiveSlicer: failed to generate slice", exc_info=True)
             return None

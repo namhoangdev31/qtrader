@@ -40,7 +40,8 @@ class RiskAdaptivePositionSizer:
         self._cumulative_size += applied_size
         self._cumulative_volatility += volatility
         _LOG.info(
-            f"[POSITION] SIZE_ADAPTED | Vol: {volatility:.4f} | Factor: {modulation_factor:.4f} | Final: {applied_size:.4f}"
+            f"[POSITION] SIZE_ADAPTED | Vol: {volatility:.4f} | "
+            f"Factor: {modulation_factor:.4f} | Final: {applied_size:.4f}"
         )
         artifact = {
             "status": "SIZING_COMPLETE",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from typing import Any
 
@@ -8,7 +9,6 @@ from qtrader.alpha.base import BaseAlpha
 from qtrader.core.types import AlphaOutput, MarketData
 
 logger = logging.getLogger("qtrader.alpha.ml_alpha_engine")
-
 
 class MLAlphaEngine(BaseAlpha):
     def __init__(
@@ -42,7 +42,6 @@ class MLAlphaEngine(BaseAlpha):
             elif change > 0.0005:
                 decision_action = "SELL"
                 confidence = 0.8
-        import random
 
         if random.random() < 0.1:
             decision_action = random.choice(["BUY", "SELL"])

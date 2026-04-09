@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from qtrader.core.execution_guard import gate_registry, require_initialized
 from qtrader.core.system_state import SystemState, state_manager
+import json
 
 
 @pytest.fixture(autouse=True)
@@ -11,16 +12,13 @@ def reset_state():
     gate_registry._blocked_attempts = 0
     yield
 
-
 @require_initialized
 def dummy_sync_function():
     return "SUCCESS"
 
-
 @require_initialized
 async def dummy_async_function():
     return "SUCCESS"
-
 
 def test_guard_blocks_in_init():
     state_manager.set_state(SystemState.INIT)
@@ -28,7 +26,6 @@ def test_guard_blocks_in_init():
         dummy_sync_function()
     assert "requires INITIALIZED system state" in str(exc.value)
     assert gate_registry._blocked_attempts == 1
-
 
 @pytest.mark.asyncio
 async def test_guard_blocks_async_in_init():
@@ -38,12 +35,10 @@ async def test_guard_blocks_async_in_init():
     assert "requires INITIALIZED system state" in str(exc.value)
     assert gate_registry._blocked_attempts == 1
 
-
 def test_guard_allows_in_ready():
     state_manager.set_state(SystemState.READY)
     assert dummy_sync_function() == "SUCCESS"
     assert gate_registry._blocked_attempts == 0
-
 
 @pytest.mark.asyncio
 async def test_guard_allows_in_running():
@@ -51,14 +46,12 @@ async def test_guard_allows_in_running():
     assert await dummy_async_function() == "SUCCESS"
     assert gate_registry._blocked_attempts == 0
 
-
 def test_report_generation():
     state_manager.set_state(SystemState.INIT)
     try:
         dummy_sync_function()
     except RuntimeError:
         pass
-    import json
 
     with open("qtrader/audit/guard_report.json") as f:
         report = json.load(f)

@@ -1,0 +1,33 @@
+flowchart LR
+    UI[Frontend / Trader UI]
+
+    subgraph NestJS Control Plane
+        GW[nestjs-api-gateway]
+        SC[nestjs-session-control]
+        OMS[nestjs-oms-workflow]
+    end
+
+    subgraph Python Compute Plane
+        AML[python-alpha-ml\nPolars + ML]
+        EXE[python-execution-core\nRisk/Execution + Rust bridge]
+    end
+
+    subgraph Infra
+        REDIS[(Redis Event Bus)]
+        PG[(Postgres)]
+    end
+
+    UI --> GW
+    GW --> SC
+    GW --> OMS
+
+    OMS <--> REDIS
+    SC <--> REDIS
+
+    OMS --> EXE
+    SC --> AML
+    AML --> REDIS
+    EXE --> REDIS
+
+    OMS --> PG
+    SC --> PG

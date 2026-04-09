@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from chronos import Chronos2Pipeline
 
 logger = logging.getLogger("qtrader.ml.chronos")
 TREND_THRESHOLD = 0.001
@@ -76,10 +77,7 @@ class ChronosForecastAdapter:
     def _load_model(self) -> None:
         if self._is_loaded:
             return
-        logger.info(f"[CHRONOS] Loading {self.model_id} from HuggingFace...")
         try:
-            from chronos import Chronos2Pipeline
-
             load_kwargs: dict[str, Any] = {}
             if self.device != "auto":
                 load_kwargs["device_map"] = self.device
@@ -90,7 +88,8 @@ class ChronosForecastAdapter:
             logger.info(f"[CHRONOS] Model loaded: {self.model_id}")
         except ImportError:
             logger.warning(
-                "[CHRONOS] chronos-forecasting not installed. Install with: pip install 'chronos-forecasting>=2.0'"
+                "[CHRONOS] chronos-forecasting not installed. "
+                "Install with: pip install 'chronos-forecasting>=2.0'"
             )
             self._pipeline = None
             self._is_loaded = True

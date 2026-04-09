@@ -1,4 +1,5 @@
 import os
+import re
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -30,9 +31,8 @@ class ExecutionConfig:
 
     @staticmethod
     def _replace_env_vars(text: str) -> str:
-        import re
 
-        def replace(match):
+        def replace(match: re.Match[str]) -> str:
             var_name = match.group(1)
             return os.getenv(var_name, match.group(0))
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import torch
 from loguru import logger
 
 
@@ -44,15 +45,13 @@ class SeedManager:
         random.seed(self.global_seed)
         np.random.seed(self.global_seed)
         try:
-            import torch
-
             torch.manual_seed(self.global_seed)
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(self.global_seed)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
-        except ImportError:
-            logger.debug("[SEED] PyTorch not available — skipping torch seeding")
+        except Exception as e:
+            logger.debug(f"[SEED] Torch seeding skipped or failed: {e}")
         self._is_applied = True
         logger.success(
             "[SEED] Deterministic Fortress Engaged | Modules seeded: random, numpy, torch"

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import logging
 import statistics
 from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
-
 
 class SpreadDynamicsModel:
     def __init__(self, config: ExecutionConfig) -> None:
@@ -32,8 +32,6 @@ class SpreadDynamicsModel:
             min_spread = 1e-08
             return max(min_spread, predicted)
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             if self._spreads:
                 return float(sum(self._spreads) / len(self._spreads))

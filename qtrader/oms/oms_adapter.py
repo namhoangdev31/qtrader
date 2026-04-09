@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
 
+from qtrader.core.config import settings
+from qtrader.core.events import OrderPayload
 from qtrader.core.execution_guard import require_initialized
 from qtrader.core.logger import logger
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
@@ -15,6 +17,7 @@ class OMSAdapter(ABC):
     def __init__(self, name: str = "OMSAdapter") -> None:
         self.name = name
         self.logger = logger
+        self._tasks: set[asyncio.Task[Any]] = set()
 
     @require_initialized
     @abstractmethod
@@ -25,7 +28,7 @@ class OMSAdapter(ABC):
 
     @require_initialized
     @abstractmethod
-    async def cancel_all_orders(self):
+    async def cancel_all_orders(self) -> None:
         pass
 
     def _get_highest_weight(
@@ -45,7 +48,6 @@ class OMSAdapter(ABC):
             if hasattr(timestamp, "timestamp")
             else int(time.time() * 1000000)
         )
-        from qtrader.core.events import OrderPayload
 
         return OrderEvent(
             source="OMSAdapter",
@@ -72,7 +74,6 @@ class SimpleOMSAdapter(OMSAdapter):
         if symbol is None or weight <= Decimal("0"):
             return self._create_empty_order(allocation_weights.timestamp)
         side = "BUY"
-        from qtrader.core.events import OrderPayload
 
         ts_val = int(allocation_weights.timestamp.timestamp() * 1000000)
         return OrderEvent(
@@ -114,7 +115,6 @@ class ExecutionOMSAdapter(OMSAdapter):
         self.routing_mode = routing_mode
         self.max_order_size = max_order_size
         self.split_size = split_size
-        from qtrader.core.config import settings
 
         main_adapter = next(iter(exchange_adapters.values())) if exchange_adapters else None
         self.execution_engine = ExecutionEngine(
@@ -147,7 +147,6 @@ class ExecutionOMSAdapter(OMSAdapter):
             return self._create_empty_order(allocation_weights.timestamp)
         order_size = weight
         side = "BUY"
-        from qtrader.core.events import OrderPayload
 
         ts_val = int(allocation_weights.timestamp.timestamp() * 1000000)
         order_event = OrderEvent(
@@ -173,7 +172,9 @@ class ExecutionOMSAdapter(OMSAdapter):
         self.logger.debug(
             f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}"
         )
-        asyncio.create_task(self._submit_order(order_event))
+        task = asyncio.create_task(self._submit_order(order_event))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return order_event
 
     async def _submit_order(self, order_event: OrderEvent) -> None:

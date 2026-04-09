@@ -36,12 +36,9 @@ async def run_live_trader(args: argparse.Namespace) -> None:
 
     symbols = [s.strip() for s in args.symbols.split(",")] if args.symbols else ["BTC-USD"]
     simulate_mode = os.getenv("SIMULATE_MODE", "true").lower() == "true"
-    
+
     # === 1. Khởi tạo TradingSystem (Bộ não) ===
-    system = create_trading_system(
-        simulate=simulate_mode,
-        symbols=symbols
-    )
+    system = create_trading_system(simulate=simulate_mode, symbols=symbols)
 
     # === 2. Đăng ký tín hiệu Shutdown ===
     def signal_handler() -> None:
@@ -84,7 +81,7 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("QTRADER_SYMBOLS", "BTC-USD"),
         help="Comma-separated list of trading symbols",
     )
-    
+
     return parser.parse_args()
 
 

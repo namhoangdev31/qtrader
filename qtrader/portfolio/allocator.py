@@ -22,13 +22,13 @@ except ImportError:
 
 
 class CapitalAllocationEngine:
-    def __init__(self, max_cap: Decimal = d("0.2")) -> None:
-        self._max_cap = max_cap
+    def __init__(self, max_cap: Decimal | None = None) -> None:
+        self._max_cap = max_cap or d("0.2")
         if not _HAS_RUST:
             raise RuntimeError("ALLOCATOR | Rust core (qtrader_core) is required.")
         self._rust_allocator = RustAllocator(max_cap=float(max_cap))
         self._current_distribution: dict[str, Decimal] = {}
-        self._capital_concentration: Decimal = d(0)
+        self._capital_concentration: Decimal | None = None
         self._last_trace: dict[str, Any] = {}
 
     def allocate_capital(
@@ -85,8 +85,10 @@ class CapitalAllocationEngine:
         proposed_qty: Decimal,
         price: Decimal,
         total_portfolio_value: Decimal,
-        current_position_qty: Decimal = d(0),
+        current_position_qty: Decimal | None = None,
     ) -> tuple[Decimal, str]:
+        if current_position_qty is None:
+            current_position_qty = d(0)
         if total_portfolio_value <= 0:
             return (proposed_qty, "INITIAL_ALLOCATION")
         new_total_qty = current_position_qty + proposed_qty
@@ -99,7 +101,10 @@ class CapitalAllocationEngine:
         remaining_notional = max(d(0), allowed_notional - current_notional)
         scaled_qty = remaining_notional / price if price > 0 else d(0)
         scaled_qty = scaled_qty.quantize(Decimal("0.00000001"))
-        reason = f"CONCENTRATION_GUARD | Scaled from {proposed_qty} to {scaled_qty} (Cap: {self._max_cap:.0%})"
+        reason = (
+            f"CONCENTRATION_GUARD | Scaled from {proposed_qty} to {scaled_qty} "
+            f"(Cap: {self._max_cap:.0%})"
+        )
         self._last_trace = {
             "symbol": symbol,
             "proposed_qty": float(proposed_qty),

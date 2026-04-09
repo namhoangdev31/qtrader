@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import deque
 
 
@@ -24,8 +25,6 @@ class HiddenLiquidityDetector:
             self._history.append(h_signal)
             return self._aggregate_signal()
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             return 0.0
 

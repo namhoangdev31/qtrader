@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.rl.reward")
 
-
 class ExecutionRewardFunction:
     def __init__(self, config: ExecutionConfig) -> None:
         self._config = config
@@ -35,8 +34,6 @@ class ExecutionRewardFunction:
             reward_cap = 1000.0
             return float(max(-reward_cap, min(reward_cap, total_reward)))
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("ExecutionRewardFunction: failed to compute reward", exc_info=True)
             return 0.0

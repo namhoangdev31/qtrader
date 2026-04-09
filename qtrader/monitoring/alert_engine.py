@@ -3,11 +3,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import smtplib
+import time
 from dataclasses import dataclass, field
+from email.mime.text import MIMEText
 from enum import Enum
 from typing import Any
 
+import aiohttp
+
 logger = logging.getLogger("qtrader.monitoring.alerting")
+HTTP_OK = 200
+HTTP_ACCEPTED = 202
+DEFAULT_TIMEOUT = 10
 
 
 class AlertSeverity(str, Enum):
@@ -27,8 +35,6 @@ class AlertMessage:
 
     def __post_init__(self) -> None:
         if not self.timestamp:
-            import time
-
             self.timestamp = time.time()
 
 
@@ -95,13 +101,13 @@ class AlertEngine:
                     {"title": key, "value": str(value), "short": True}
                 )
         try:
-            import aiohttp
-
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    self._slack_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+                    self._slack_url,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
                 ) as resp:
-                    if resp.status != 200:
+                    if resp.status != HTTP_OK:
                         raise RuntimeError(f"Slack webhook returned {resp.status}")
         except ImportError:
             logger.warning("[ALERT] aiohttp not installed — Slack alert skipped")
@@ -113,9 +119,6 @@ class AlertEngine:
         if not self._smtp_config:
             return
         try:
-            import smtplib
-            from email.mime.text import MIMEText
-
             config = self._smtp_config
             msg = MIMEText(
                 f"Severity: {alert.severity.value}\n\n{alert.message}\n\nSource: {alert.source}\nMetadata: {json.dumps(alert.metadata, indent=2)}",
@@ -154,15 +157,13 @@ class AlertEngine:
             },
         }
         try:
-            import aiohttp
-
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     "https://events.pagerduty.com/v2/enqueue",
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
-                    if resp.status not in (200, 202):
+                    if resp.status not in (HTTP_OK, HTTP_ACCEPTED):
                         raise RuntimeError(f"PagerDuty returned {resp.status}")
         except ImportError:
             logger.warning("[ALERT] aiohttp not installed — PagerDuty alert skipped")

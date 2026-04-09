@@ -6,10 +6,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from qtrader.core.events import SystemEvent
 from qtrader.core.types import FillEvent, MarketData, SignalEvent
+from qtrader.execution.trade_logger import TradeLogger
 
 logger = logging.getLogger(__name__)
-
 
 class ShadowFillEvent:
     def __init__(
@@ -43,7 +44,6 @@ class ShadowFillEvent:
             "slippage": self.slippage,
             "latency": self.latency,
         }
-
 
 class ShadowEngine:
     def __init__(self, config: dict[str, Any]) -> None:
@@ -232,7 +232,6 @@ class ShadowEngine:
             self.recent_shadow_fills[signal_id] = shadow_fill
             await self._write_shadow_fill(shadow_fill)
             self._update_shadow_inventory(shadow_fill)
-            from qtrader.execution.trade_logger import TradeLogger
 
             TradeLogger.log_trade(
                 symbol=shadow_fill.symbol,
@@ -293,8 +292,6 @@ class ShadowEngine:
             return
         gap_pct = comparison.get("execution_gap_pct", 0.0)
         if gap_pct < -20.0:
-            from qtrader.core.types import SystemEvent
-
             reason = f"SHADOW_AUTO_DISABLE | Execution Gap Breach: {gap_pct:.2f}%"
             logger.critical(reason)
             asyncio.create_task(
@@ -307,8 +304,6 @@ class ShadowEngine:
         if shadow_count > 10:
             miss_rate = abs(live_count - shadow_count) / shadow_count
             if miss_rate > 0.3:
-                from qtrader.core.types import SystemEvent
-
                 reason = f"SHADOW_AUTO_DISABLE | High Tracking Error: {miss_rate:.2%} miss rate"
                 logger.critical(reason)
                 asyncio.create_task(

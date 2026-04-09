@@ -1,9 +1,11 @@
-from __future__ import annotations
-
 import logging
+import os
 import time
 
+import psutil
+
 from qtrader.core.dynamic_config import config_manager
+from qtrader.core.events import EventType, SystemEvent
 from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.persistence.db_writer import TradeDBWriter
 
@@ -33,15 +35,12 @@ class LifecycleTaskManager:
         self._active_session_id = session_id
         self._last_latency_provider = last_latency_provider
         if self.event_bus:
-            from qtrader.core.events import EventType
-
             self.event_bus.subscribe(EventType.SYSTEM, self._on_system_event)
         self.is_running = True
 
     async def _on_system_event(self, event: Any) -> None:
         if not self.is_running:
             return
-        from qtrader.core.events import SystemEvent
 
         if isinstance(event, SystemEvent) and event.payload.action == "HEARTBEAT":
             now = time.time()
@@ -85,10 +84,6 @@ class LifecycleTaskManager:
             logger.error(f"[LIFECYCLE] PnL snapshot failed: {e}")
 
     async def _do_health_log(self, session_id: str) -> None:
-        import os
-
-        import psutil
-
         process = psutil.Process(os.getpid())
         try:
             cpu_pct = process.cpu_percent()

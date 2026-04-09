@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import polars as pl
+from qtrader_core import StatsEngine
 
 from qtrader.risk.base import RiskModule
 
@@ -42,15 +43,13 @@ class VolatilityTargeting(RiskModule):
         if len(closes) < self.lookback:
             return pl.Series(name="volatility_scaling", values=[0.0] * len(closes))
         returns = [closes[i] / closes[i - 1] - 1.0 for i in range(1, len(closes))]
-        returns = [0.0] + returns
+        returns = [0.0, *returns]
         vol_scaling = []
         for i in range(len(returns)):
             if i < self.lookback:
                 vol_scaling.append(0.0)
                 continue
             window = returns[i - self.lookback + 1 : i + 1]
-            from qtrader_core import StatsEngine
-
             stats = StatsEngine()
             vol = stats.calculate_std(window)
             if self.annualize:

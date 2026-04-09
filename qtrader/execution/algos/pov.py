@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 from qtrader.execution.algos.base import ChildOrder
 
 __all__ = ["POVAlgo"]
 _LOG = logging.getLogger("qtrader.execution.algos.pov")
-
 
 @dataclass(slots=True)
 class POVAlgo:
@@ -28,7 +28,6 @@ class POVAlgo:
         child_qty = min(participate_qty, remaining_qty)
         if child_qty <= 0:
             return None
-        import time
 
         return ChildOrder(
             parent_id=parent_id,

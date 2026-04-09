@@ -4,10 +4,18 @@ import base64
 import io
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import polars as pl
+
+try:
+    import matplotlib.pyplot as plt
+
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
 
 log = logging.getLogger("qtrader.research.report")
 
@@ -19,7 +27,27 @@ class _Section:
 
 
 class ReportBuilder:
-    _CSS = "\n    <style>\n    body{font-family:Inter,system-ui,sans-serif;margin:0;padding:32px;background:#0f1117;color:#e2e8f0;}\n    h1{color:#7dd3fc;border-bottom:2px solid #1e40af;padding-bottom:8px;}\n    h2{color:#a5f3fc;margin-top:40px;}\n    h3{color:#94a3b8;}\n    table{border-collapse:collapse;width:100%;margin:16px 0;border-radius:8px;overflow:hidden;}\n    th{background:#1e3a5f;color:#bae6fd;padding:10px 14px;text-align:left;font-size:13px;}\n    td{padding:9px 14px;border-bottom:1px solid #1e293b;font-size:13px;color:#cbd5e1;}\n    tr:hover td{background:#1e293b;}\n    img{max-width:100%;border-radius:8px;margin:12px 0;border:1px solid #334155;}\n    .section{margin-bottom:40px;}\n    .meta{font-size:12px;color:#64748b;margin-top:-4px;margin-bottom:24px;}\n    </style>\n    "
+    _CSS = (
+        "<style>\n"
+        "body { font-family: Inter, system-ui, sans-serif; margin: 0; padding: 32px; "
+        "background: #0f1117; color: #e2e8f0; }\n"
+        "h1 { color: #7dd3fc; border-bottom: 2px solid #1e40af; padding-bottom: 8px; }\n"
+        "h2 { color: #a5f3fc; margin-top: 40px; }\n"
+        "h3 { color: #94a3b8; }\n"
+        "table { border-collapse: collapse; width: 100%; margin: 16px 0; "
+        "border-radius: 8px; overflow: hidden; }\n"
+        "th { background: #1e3a5f; color: #bae6fd; padding: 10px 14px; "
+        "text-align: left; font-size: 13px; }\n"
+        "td { padding: 9px 14px; border-bottom: 1px solid #1e293b; "
+        "font-size: 13px; color: #cbd5e1; }\n"
+        "tr:hover td { background: #1e293b; }\n"
+        "img { max-width: 100%; border-radius: 8px; margin: 12px 0; "
+        "border: 1px solid #334155; }\n"
+        ".section { margin-bottom: 40px; }\n"
+        ".meta { font-size: 12px; color: #64748b; margin-top: -4px; "
+        "margin-bottom: 24px; }\n"
+        "</style>"
+    )
 
     def __init__(self, title: str) -> None:
         self.title = title
@@ -43,10 +71,8 @@ class ReportBuilder:
         return self
 
     def add_figure(self, heading: str, fig: Any) -> ReportBuilder:
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            log.warning("matplotlib not installed – skipping figure '%s'", heading)
+        if not HAS_MATPLOTLIB:
+            log.warning("matplotlib not installed - skipping figure '%s'", heading)
             return self
         buf = io.BytesIO()
         fig.savefig(buf, format="png", bbox_inches="tight", dpi=150, facecolor="#0f1117")
@@ -57,10 +83,8 @@ class ReportBuilder:
         return self
 
     def add_polars_plot(self, heading: str, series: pl.Series) -> ReportBuilder:
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            log.warning("matplotlib not installed – skipping plot '%s'", heading)
+        if not HAS_MATPLOTLIB:
+            log.warning("matplotlib not installed - skipping plot '%s'", heading)
             return self
         (fig, ax) = plt.subplots(figsize=(10, 4))
         ax.plot(series.to_numpy(), linewidth=1.5, color="#38bdf8")
@@ -77,11 +101,22 @@ class ReportBuilder:
         return self
 
     def build_html(self) -> str:
-        from datetime import datetime
-
         body = "\n".join(f'<div class="section">{s.content_html}</div>' for s in self._sections)
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        return f'<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>{self.title}</title>\n  {self._CSS}\n</head>\n<body>\n  <h1>{self.title}</h1>\n  <p class="meta">Generated: {ts} | QTrader Analyst Platform</p>\n  {body}\n</body>\n</html>'
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{self.title}</title>
+  {self._CSS}
+</head>
+<body>
+  <h1>{self.title}</h1>
+  <p class="meta">Generated: {ts} | QTrader Analyst Platform</p>
+  {body}
+</body>
+</html>"""
 
     def save(self, path: str | Path) -> Path:
         p = Path(path)

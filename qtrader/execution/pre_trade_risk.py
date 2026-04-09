@@ -9,15 +9,34 @@ from typing import Any
 
 from qtrader.core.dynamic_config import DynamicSettingsMixin
 
-logger = logging.getLogger("qtrader.execution.pre_trade_risk")
+try:
+    from qtrader_core import Account as RustAccount
+    from qtrader_core import Order as RustOrder
+    from qtrader_core import OrderType as RustOrderType
+    from qtrader_core import Side as RustSide
+except ImportError:
+    HAS_RUST_CORE = False
+
 try:
     import qtrader_core
-    from qtrader_core import Side as RustSide
+    from qtrader_core import (
+        Account as RustAccount,
+    )
+    from qtrader_core import (
+        Order as RustOrder,
+    )
+    from qtrader_core import (
+        OrderType as RustOrderType,
+    )
+    from qtrader_core import (
+        Side as RustSide,
+    )
 
     HAS_RUST_CORE = True
 except ImportError:
     HAS_RUST_CORE = False
 
+logger = logging.getLogger("qtrader.execution.pre_trade_risk")
 
 @dataclass(slots=True)
 class PreTradeRiskConfig:
@@ -31,7 +50,6 @@ class PreTradeRiskConfig:
     max_orders_per_minute: float = 100.0
     max_concentration_pct: float = 0.05
 
-
 @dataclass(slots=True)
 class PreTradeRiskResult:
     approved: bool
@@ -43,7 +61,6 @@ class PreTradeRiskResult:
     def __post_init__(self) -> None:
         if not self.timestamp:
             self.timestamp = time.time()
-
 
 class PreTradeRiskValidator(DynamicSettingsMixin):
     def __init__(self, config: PreTradeRiskConfig | None = None) -> None:
@@ -178,11 +195,6 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         else:
             checks_passed.append("RATE_LIMIT_60S_OK")
         if HAS_RUST_CORE:
-            from qtrader_core import Account as RustAccount
-            from qtrader_core import Order as RustOrder
-            from qtrader_core import OrderType as RustOrderType
-            from qtrader_core import Side as RustSide
-
             rust_side = RustSide.Buy if side.upper() == "BUY" else RustSide.Sell
             order_price_f = float(price or self._mid_prices.get(symbol, Decimal("0")))
             rust_order = RustOrder(

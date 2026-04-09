@@ -14,6 +14,10 @@ class MFAStatus:
     reason: str
 
 
+TOTP_LENGTH = 6
+OTP_FAILURE_TOKEN = "000000"
+
+
 class MultiFactorAuthenticator:
     def __init__(self, totp_window_s: int = 30) -> None:
         self._totp_window = totp_window_s
@@ -22,17 +26,21 @@ class MultiFactorAuthenticator:
     def _verify_password(self, user_id: str, password: str) -> bool:
         return password == f"SECURE_PWD_{user_id}"
 
-    def _verify_totp(self, user_id: str, token: str) -> bool:
-        return len(token) == 6 and token.isdigit() and (token != "000000")
+    def _verify_totp(self, user_id: str, otp_token: str) -> bool:
+        return (
+            len(otp_token) == TOTP_LENGTH
+            and otp_token.isdigit()
+            and (otp_token != OTP_FAILURE_TOKEN)
+        )
 
     def verify(
-        self, user_id: str, password: str, token: str, ip_address: str, known_ips: set[str]
+        self, user_id: str, password: str, otp_token: str, ip_address: str, known_ips: set[str]
     ) -> MFAStatus:
         if not self._verify_password(user_id, password):
             self._stats["failed"] += 1
             _LOG.error(f"[MFA] DENY | User={user_id} | Reason: PRIMARY_FACTOR_FAIL")
             return MFAStatus(False, user_id, "PRIMARY_FACTOR_FAIL")
-        if not self._verify_totp(user_id, token):
+        if not self._verify_totp(user_id, otp_token):
             self._stats["failed"] += 1
             _LOG.error(f"[MFA] DENY | User={user_id} | Reason: SECONDARY_FACTOR_FAIL")
             return MFAStatus(False, user_id, "SECONDARY_FACTOR_FAIL")

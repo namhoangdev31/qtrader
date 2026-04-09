@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
 _LOG = logging.getLogger("qtrader.execution.routing.cost_model")
 
-
 class RoutingCostModel:
     def __init__(self, config: ExecutionConfig) -> None:
         self._config = config
@@ -50,8 +49,6 @@ class RoutingCostModel:
             c_fee = order_size * best_price * fee_rate
             return float(c_spread + c_slippage + c_fee)
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error(f"RoutingCostModel: failed to compute cost for {venue_name}", exc_info=True)
             failsafe_penalty = 1e18

@@ -6,10 +6,12 @@ from decimal import Decimal
 from typing import Any
 
 from qtrader.core.events import EventType, FillEvent, SystemEvent, SystemPayload
-from qtrader.core.state_store import StateStore
+, StateStore
 from qtrader.core.types import EventBusProtocol
 from qtrader.oms.order_management_system import UnifiedOMS
 from qtrader.risk.kill_switch import GlobalKillSwitch
+from datetime import datetime
+from qtrader.core.state_store import Position
 
 
 class ReconciliationEngine:
@@ -56,7 +58,6 @@ class ReconciliationEngine:
     async def _on_system_event(self, event: Any) -> None:
         if not self._running:
             return
-        from qtrader.core.events import SystemEvent
 
         if isinstance(event, SystemEvent) and event.payload.action == "HEARTBEAT":
             now = time.time()
@@ -87,9 +88,6 @@ class ReconciliationEngine:
                         self._log.info(
                             f"PERIODIC_RECON | First-run sync: {symbol} -> {exchange_qty}"
                         )
-                        from datetime import datetime
-
-                        from qtrader.core.state_store import Position
 
                         pos = Position(
                             symbol=symbol,

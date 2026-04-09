@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
+
+from aiohttp import web
 
 logger = logging.getLogger("qtrader.monitoring.prometheus")
 
@@ -79,8 +82,6 @@ class PrometheusMetricsExporter:
         self._server_task: Any = None
 
     def start(self) -> None:
-        import asyncio
-
         self._running = True
         self._server_task = asyncio.create_task(self._run_server())
         logger.info(f"[PROMETHEUS] Metrics exporter started on port {self.port}")
@@ -97,7 +98,6 @@ class PrometheusMetricsExporter:
 
     async def _run_server(self) -> None:
         try:
-            from aiohttp import web
 
             async def handle_metrics(request: Any) -> web.Response:
                 return web.Response(
@@ -112,7 +112,7 @@ class PrometheusMetricsExporter:
             app.router.add_get("/health", handle_health)
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, "0.0.0.0", self.port)
+            site = web.TCPSite(runner, "0.0.0.0", self.port)  # noqa: S104
             await site.start()
             logger.info(f"[PROMETHEUS] HTTP server running on 0.0.0.0:{self.port}")
             while self._running:

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
 import polars as pl
+from sklearn.decomposition import PCA
 
 __all__ = ["FactorNeutralizer"]
 _LOG = logging.getLogger("qtrader.features.neutralization")
-
 
 class FactorNeutralizer:
     @staticmethod
@@ -79,8 +80,7 @@ class FactorNeutralizer:
         if missing:
             raise ValueError(f"Missing factor columns: {missing}")
         try:
-            import numpy as np
-            from sklearn.decomposition import PCA
+            mat = df.select(factor_cols).to_numpy()
         except ImportError as exc:
             raise ImportError(
                 "orthogonalize requires scikit-learn: pip install scikit-learn"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 
 class Microprice:
     @staticmethod
@@ -11,7 +13,5 @@ class Microprice:
                 return (bid + ask) / 2.0
             return (bid * v_ask + ask * v_bid) / total_vol
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             return (bid + ask) / 2.0

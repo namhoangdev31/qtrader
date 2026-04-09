@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
     from qtrader.execution.config import ExecutionConfig
-
 
 class OrderbookImbalance:
     def __init__(self, config: ExecutionConfig) -> None:
@@ -28,8 +28,6 @@ class OrderbookImbalance:
                 return 0.0
             return float((weighted_bid_vol - weighted_ask_vol) / total_vol)
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             return 0.0
 

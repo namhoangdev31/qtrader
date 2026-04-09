@@ -1,10 +1,14 @@
 import asyncio
+import json
+import logging
 import os
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+
+import polars as pl
 
 from qtrader.core.container import container
 from qtrader.core.enforcement_engine import enforcement_engine, guard
@@ -42,6 +46,7 @@ from qtrader.analytics.accounting import FundAccountingEngine
 from qtrader.analytics.drift import DriftMonitor
 from qtrader.analytics.tca_engine import TCAEngine
 from qtrader.core.config import settings
+from qtrader.core.cpu_affinity import CPUPinningConfig, apply_cpu_pinning
 from qtrader.core.decimal_adapter import math_authority
 from qtrader.core.dynamic_config import DynamicConfigManager
 from qtrader.core.execution_wrapper import execution_wrapper
@@ -54,6 +59,7 @@ from qtrader.core.runtime_gatekeeper import runtime_gatekeeper
 from qtrader.core.state_store import Position, StateStore
 from qtrader.core.system_state import SystemState, state_manager
 from qtrader.core.trace_authority import TraceAuthority
+from qtrader.core.types import RiskMetrics
 from qtrader.execution.latency_model import LatencyModel
 from qtrader.execution.microstructure.microprice import Microprice
 from qtrader.execution.order_id import OrderIDGenerator
@@ -72,13 +78,17 @@ from qtrader.portfolio.drawdown_controller import LiveDrawdownController
 from qtrader.portfolio.nav_engine import NAVEngine
 from qtrader.portfolio.position_sizing import PositionSizer as PortfolioPositionSizer
 from qtrader.portfolio.risk_monitor import RealTimeRiskMonitor
+from qtrader.strategy.validation.feature_validator import FeatureValidator
 
 try:
-    from qtrader_core import LedgerEngine, LedgerEntry
+    from qtrader_core import LedgerEngine, LedgerEntry, Transaction
 
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False
+    Transaction = None
+    LedgerEngine = None
+    LedgerEntry = None
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.monitoring_engine import MonitoringEngine
 from qtrader.risk.network_kill_switch import NetworkKillSwitch
@@ -86,7 +96,6 @@ from qtrader.risk.recovery_system import RecoverySystem
 from qtrader.risk.regime_adapter import RegimeAdapter
 from qtrader.risk.runtime import RuntimeRiskEngine
 from qtrader.strategy.ensemble_strategy import EnsembleStrategy
-from qtrader.strategy.validation.feature_validator import FeatureValidator
 
 
 class TradingOrchestrator:
@@ -214,8 +223,6 @@ class TradingOrchestrator:
         self.accounting_engine = FundAccountingEngine()
         self.tca_engine = TCAEngine()
         self.strategy_fsm: Any = None
-        import logging
-
         self.network_kill_switch = NetworkKillSwitch(
             oms_adapter=oms_adapter, logger_instance=logging.getLogger("kill_switch")
         )
@@ -260,8 +267,6 @@ class TradingOrchestrator:
                     f"[ORCHESTRATOR] Determinism engaged | Seed: {self.seed_manager.global_seed}"
                 )
             try:
-                from qtrader.core.cpu_affinity import CPUPinningConfig, apply_cpu_pinning
-
                 pinning_config = CPUPinningConfig(
                     orchestrator_cores=[0, 1], execution_cores=[2, 3], ml_cores=[4, 5, 6, 7]
                 )
@@ -316,7 +321,6 @@ class TradingOrchestrator:
         logger.info("ORCHESTRATOR_VALIDATION | Post-init compliance 100%.")
 
     def _write_boot_log(self, start_time: float, status: str) -> None:
-        import json
 
         boot_log = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -725,7 +729,6 @@ class TradingOrchestrator:
         if not risk_data:
             log.warning("No approved risk metrics available in StateStore for order")
             return
-        from qtrader.core.types import RiskMetrics
 
         risk_metrics = RiskMetrics(
             portfolio_var=math_authority.d(risk_data["portfolio_var"]),
@@ -785,8 +788,6 @@ class TradingOrchestrator:
                 amount=-(fill_amount - fee_amount),
                 entry_type="CONTRA",
             )
-            from qtrader_core import Transaction
-
             tx = Transaction(entries=[entry_cash, entry_contra])
             try:
                 self.ledger_engine.record_transaction(tx)
@@ -889,8 +890,6 @@ class TradingOrchestrator:
                                 k: v[:target_len] for (k, v) in reference_data.items()
                             }
                             final_live_data = {k: v[:target_len] for (k, v) in live_data.items()}
-                            import polars as pl
-
                             reference_df = pl.DataFrame(final_ref_data)
                             live_df = pl.DataFrame(final_live_data)
                             columns = list(final_ref_data.keys())

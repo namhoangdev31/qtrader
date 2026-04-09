@@ -21,12 +21,22 @@ class OllamaForecastAdapter:
         self.timeout_seconds = timeout_seconds
         self._is_loaded = True
 
+    def _build_forecast_prompt(self, prices: list[float], prediction_length: int) -> str:
+        return (
+            "IMPORTANT: Response must be a single, valid JSON object only. "
+            "No conversational filler. Follow this schema exactly:\n\n"
+            f"Input History: {prices}\n"
+            f"Prediction Length: {prediction_length}\n"
+            '{"forecast": [val1, val2, ...]}\n\n'
+            "Response:"
+        )
+
     async def predict(
         self, historical_prices: list[float] | np.ndarray, prediction_length: int = 10
     ) -> ForecastResult:
         prices = np.asarray(historical_prices, dtype=np.float64)
         start_time = time.time()
-        prompt = f'IMPORTANT: Response must be a single, valid JSON object only. No conversational filler. Follow this schema exactly:\n\nInput History: {prices.tolist()[-50:]}\nPrediction Length: {prediction_length}\n{{"forecast": [val1, val2, ...]}}\n\nResponse:'
+        prompt = self._build_forecast_prompt(prices.tolist()[-50:], prediction_length)
         try:
             response_text = await self._generate(prompt)
             forecast_data = self._parse_forecast(response_text)
@@ -94,10 +104,11 @@ class OllamaForecastAdapter:
             raise KeyError("No valid numeric array found in JSON")
         except Exception as e:
             snippet = text[:100].replace("\n", " ")
-            raise ValueError(f"Failed to parse forecast from: {snippet}... Error: {e}")
+            raise ValueError(f"Failed to parse forecast from: {snippet}... Error: {e}") from e
 
     def _fallback_forecast(self, prices: np.ndarray, length: int) -> np.ndarray:
-        if len(prices) < 2:
+        min_samples = 2
+        if len(prices) < min_samples:
             return np.full(length, prices[0] if len(prices) > 0 else 0)
         trend = (prices[-1] - prices[0]) / len(prices)
         return np.array([prices[-1] + trend * (i + 1) for i in range(length)])

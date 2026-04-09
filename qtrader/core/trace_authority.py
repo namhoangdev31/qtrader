@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextvars
+from types import TracebackType
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -58,7 +59,12 @@ class TraceAuthority:
                 self.token = _trace_context.set(self.tid)
                 return self.tid
 
-            def __exit__(self, exc_type, exc_val, exc_tb):
+            def __exit__(
+                self,
+                exc_type: type[BaseException] | None,
+                exc_val: BaseException | None,
+                exc_tb: TracebackType | None,
+            ) -> None:
                 _trace_context.reset(self.token)
 
         return TraceContextManager(trace_id)

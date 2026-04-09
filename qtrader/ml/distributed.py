@@ -29,7 +29,8 @@ class RayCompute:
     def __init__(self) -> None:
         if not _HAS_RAY:
             raise ImportError(
-                "Ray is not installed. Please install 'qtrader[ray]' or use the 'production-ml' Docker image."
+                "Ray is not installed. Please install 'qtrader[ray]' "
+                "or use the 'production-ml' Docker image."
             )
         if not ray.is_initialized():
             ray.init(

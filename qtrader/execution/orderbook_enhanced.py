@@ -287,7 +287,7 @@ class OrderbookEnhanced:
         ask_depth_5: Decimal = sum((Decimal(str(level[1])) for level in asks[:5]), Decimal("0"))
         ask_depth_10: Decimal = sum((Decimal(str(level[1])) for level in asks[:10]), Decimal("0"))
 
-        def weighted_avg_price(levels):
+        def weighted_avg_price(levels: list[list[Decimal]]) -> Decimal:
             if not levels:
                 return Decimal("0")
             total_value: Decimal = sum(

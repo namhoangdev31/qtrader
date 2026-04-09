@@ -9,6 +9,14 @@ from typing import Any, Literal
 import numpy as np
 import polars as pl
 
+try:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    HAS_PLOTLY = True
+except ImportError:
+    HAS_PLOTLY = False
+
 __all__ = ["TearsheetGenerator", "TearsheetMetrics"]
 _LOG = logging.getLogger("qtrader.backtest.tearsheet")
 
@@ -233,10 +241,7 @@ class TearsheetGenerator:
         rolling_window: int = 21,
         periods_per_year: int = 252,
     ) -> str:
-        try:
-            import plotly.graph_objects as go
-            from plotly.subplots import make_subplots
-        except ImportError:
+        if not HAS_PLOTLY:
             _LOG.debug("Plotly not installed; skipping charts (install analyst deps for charts).")
             return ""
         required = {"timestamp", "equity_curve", "drawdown", "net_return"}

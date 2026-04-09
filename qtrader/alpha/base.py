@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Protocol, runtime_checkable
 
@@ -12,7 +13,6 @@ class Alpha(Protocol):
 
     def compute(self, df: pl.DataFrame) -> pl.Series:
         pass
-
 
 class BaseAlpha(ABC):
     def __init__(self, name: str, standardize: bool = False, standardize_window: int = 100) -> None:
@@ -32,8 +32,6 @@ class BaseAlpha(ABC):
         try:
             raw = self._compute_raw(df)
         except Exception as e:
-            import logging
-
             logging.getLogger(f"qtrader.alpha.{self.name}").error(
                 f"Alpha {self.name} computation failed, returning neutral fallback: {e}"
             )
@@ -46,7 +44,6 @@ class BaseAlpha(ABC):
             raw = _zscore(raw, self.standardize_window)
         raw = raw.fill_nan(0.0).fill_null(0.0)
         return raw.rename(self.name)
-
 
 def _zscore(series: pl.Series, window: int) -> pl.Series:
     if window <= 1 or series.len() == 0:

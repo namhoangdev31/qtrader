@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from typing import Any
 
 import polars as pl
@@ -10,7 +11,6 @@ from qtrader.core.db import DBClient
 from qtrader.ml.vector_store import EliteExemplar, memory_store
 
 logger = logging.getLogger("qtrader.analytics.session")
-
 
 class SessionAnalyzer:
     def __init__(self) -> None:
@@ -154,7 +154,6 @@ class SessionAnalyzer:
         total_commissions = 0.0
         win_count = 0
         loss_count = 0
-        from collections import defaultdict
 
         sym_fills = defaultdict(list)
         for f in fills:

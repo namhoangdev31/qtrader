@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from qtrader.core.session_state import SessionState
 
 from qtrader.core.dynamic_config import config_manager
-from qtrader.core.session_state import SessionState
 
 logger = logging.getLogger("qtrader.strategy.signal")
 try:

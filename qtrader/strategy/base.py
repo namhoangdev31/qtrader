@@ -8,18 +8,17 @@ from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
 
+from qtrader.core.events import OrderPayload
 from qtrader.core.types import FillEvent, OrderEvent, SignalEvent
 
 __all__ = ["BaseStrategy", "Strategy"]
 _LOG = logging.getLogger("qtrader.strategy.base")
-
 
 @runtime_checkable
 class Strategy(Protocol):
     def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent: ...
 
     def on_signal(self, event: SignalEvent) -> list[OrderEvent]: ...
-
 
 @dataclass(slots=True)
 class BaseStrategy:
@@ -137,7 +136,6 @@ class BaseStrategy:
     ) -> OrderEvent:
         timestamp = datetime.now()
         order_id = f"{self.symbol}_{int(timestamp.timestamp())}"
-        from qtrader.core.events import OrderPayload
 
         return OrderEvent(
             source=f"Strategy:{self.__class__.__name__}",

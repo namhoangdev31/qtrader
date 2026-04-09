@@ -5,7 +5,6 @@ from typing import Any
 
 _LOG = logging.getLogger("qtrader.execution.routing.liquidity_model")
 
-
 class MultiVenueLiquidityModel:
     def __init__(self, n_levels: int = 5) -> None:
         self._n_levels = n_levels
@@ -49,8 +48,6 @@ class MultiVenueLiquidityModel:
                 l_v += volume * self._weights[i]
             return l_v
         except Exception as e:
-            import logging
-
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("MultiVenueLiquidityModel: failed to compute venue liquidity", exc_info=True)
             return 0.0

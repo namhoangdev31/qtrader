@@ -1,3 +1,8 @@
+import polars as pl
+
+from qtrader.risk.base import RiskModule
+from qtrader.risk.volatility import VolatilityTargeting
+
 try:
     import qtrader_core
     from qtrader_core import SizingEngine

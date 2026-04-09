@@ -82,7 +82,19 @@ class OllamaRiskAdapter:
                 return str(data.get("response", ""))
 
     def _build_risk_prompt(self, features: dict[str, float]) -> str:
-        instruct = 'System: Act as an institutional quantitative risk analyst. Analyze market features and classify current market risk into: SAFE, WARNING, or DANGER.\nClassification Rules:\n- SAFE: Trending market, stable volatility, low spread.\n- WARNING: High volatility, abnormal volume, or widening spreads.\n- DANGER: Extreme volatility, price crashes, or severe order imbalance.\n\nIMPORTANT: Response must be a single, valid JSON object only. No conversational filler. Follow this schema exactly:\n\n{"class_label": "SAFE/WARNING/DANGER", "confidence": float, "risk_score": float, "reasoning": string}\n\n'
+        instruct = (
+            "System: Act as an institutional quantitative risk analyst. "
+            "Analyze market features and classify current market risk into: "
+            "SAFE, WARNING, or DANGER.\n"
+            "Classification Rules:\n"
+            "- SAFE: Trending market, stable volatility, low spread.\n"
+            "- WARNING: High volatility, abnormal volume, or widening spreads.\n"
+            "- DANGER: Extreme volatility, price crashes, or severe order imbalance.\n\n"
+            "IMPORTANT: Response must be a single, valid JSON object only. "
+            "No conversational filler. Follow this schema exactly:\n\n"
+            '{"class_label": "SAFE/WARNING/DANGER", "confidence": float, '
+            '"risk_score": float, "reasoning": string}\n\n'
+        )
         return f"{instruct}Market Features:\n{json.dumps(features)}\n\nOutput JSON:"
 
     def _parse_risk_response(self, response: str) -> RiskClassificationResult:
