@@ -50,8 +50,8 @@ class ReconciliationEngine:
     async def start(self) -> None:
         """Subscribe to necessary events and start periodic reconciliation."""
         self.event_bus.subscribe(EventType.FILL, self._on_fill)
+        self.event_bus.subscribe(EventType.SYSTEM, self._on_system_event)
         self._running = True
-        self._periodic_task = asyncio.create_task(self._periodic_recon_loop())
         self._log.info(
             f"RECONCILIATION_ENGINE | Monitoring started | "
             f"Periodic interval: {self.recon_interval_s}s"
@@ -68,16 +68,18 @@ class ReconciliationEngine:
                 pass
         self._log.info("RECONCILIATION_ENGINE | Stopped")
 
-    async def _periodic_recon_loop(self) -> None:
-        """Standash §4.9: Periodic reconciliation every N seconds."""
-        while self._running:
-            try:
-                await asyncio.sleep(self.recon_interval_s)
-                await self._run_periodic_reconciliation()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self._log.error(f"Periodic reconciliation error: {e}", exc_info=True)
+    async def _on_system_event(self, event: Any) -> None:
+        """Handle system heartbeat events for periodic reconciliation."""
+        if not self._running:
+            return
+
+        from qtrader.core.events import SystemEvent
+
+        if isinstance(event, SystemEvent) and event.payload.action == "HEARTBEAT":
+            now = time.time()
+            if now - self._last_recon_time >= self.recon_interval_s:
+                # Trigger periodic reconciliation (Standash §4.9)
+                asyncio.create_task(self._run_periodic_reconciliation())
 
     async def _run_periodic_reconciliation(self) -> None:
         """Full portfolio reconciliation across all symbols."""
@@ -168,16 +170,14 @@ class ReconciliationEngine:
             )
             await self.event_bus.publish(halt_event)
         else:
-            self._log.info(
-                f"Recon #{self._recon_count}"
-            )
-        
+            self._log.info(f"Recon #{self._recon_count}")
+
         self._last_audit = {
             "timestamp": self._last_recon_time,
             "mismatches": mismatches,
             "mismatch_count": len(mismatches),
             "total_symbols": len(oms_positions),
-            "status": "ERROR" if mismatches else "OK"
+            "status": "ERROR" if mismatches else "OK",
         }
 
     def get_last_audit(self) -> dict[str, Any]:

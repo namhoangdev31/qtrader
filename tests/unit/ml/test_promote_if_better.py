@@ -36,7 +36,9 @@ def test_promote_if_better_than_production_no_production(manager_mocked, mock_cl
     ]
 
     result = manager_mocked._promote_if_better_than_production_sync(
-        "TestStrat", "shadow_run_123", PromotionConfig(sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5)
+        "TestStrat",
+        "shadow_run_123",
+        PromotionConfig(sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5),
     )
 
     assert result is True
@@ -75,7 +77,9 @@ def test_promote_if_better_than_production_better_than_production(manager_mocked
     ]
 
     result = manager_mocked._promote_if_better_than_production_sync(
-        "TestStrat", "shadow_run_123", PromotionConfig(sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5)
+        "TestStrat",
+        "shadow_run_123",
+        PromotionConfig(sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5),
     )
 
     assert result is True
@@ -119,7 +123,14 @@ def test_promote_if_better_than_production_not_better_enough(manager_mocked, moc
 
     # Require at least 0.2 improvement in Sharpe ratio
     result = manager_mocked._promote_if_better_than_production_sync(
-        "TestStrat", "shadow_run_123", PromotionConfig(sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5, sharpe_improvement=0.2)
+        "TestStrat",
+        "shadow_run_123",
+        PromotionConfig(
+            sharpe_threshold=1.0,
+            drawdown_threshold=0.1,
+            hit_rate_threshold=0.5,
+            sharpe_improvement=0.2,
+        ),
     )
 
     assert result is False

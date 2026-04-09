@@ -14,22 +14,24 @@ from qtrader.core.trace_authority import TraceAuthority
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+
 def execution_wrapper(source: str) -> Callable[[F], F]:
     """
     Standardizes execution behavior and error handling across the QTrader pipeline.
-    
+
     Provides:
     1. Automatic Trace ID propagation/generation.
     2. Contextual Logger binding.
     3. Failure interception and FailFastEngine escalation.
     4. Latency telemetry.
-    
+
     Args:
         source: The name of the pipeline stage or component (e.g., 'handle_market_data').
-        
+
     Returns:
         Callable: The wrapped function.
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def async_wrapped(*args: Any, **kwargs: Any) -> Any:
@@ -38,13 +40,13 @@ def execution_wrapper(source: str) -> Callable[[F], F]:
             # or generate a new one.
             trace_id = TraceAuthority.generate()
             if args and hasattr(args[0], "get"):
-                 trace_id = args[0].get("trace_id", trace_id)
+                trace_id = args[0].get("trace_id", trace_id)
             elif args and hasattr(args[0], "trace_id"):
-                 trace_id = getattr(args[0], "trace_id", trace_id)
+                trace_id = getattr(args[0], "trace_id", trace_id)
 
             log = logger.bind(trace_id=trace_id, source=source)
             start_time = time.time()
-            
+
             # The 'self' instance (usually TradingOrchestrator) is args[0]
             # It MUST have self.fail_fast_engine
             instance = args[0] if args else None
@@ -64,6 +66,7 @@ def execution_wrapper(source: str) -> Callable[[F], F]:
                 else:
                     # Last resort if engine is missing
                     raise e
-                    
+
         return cast("F", async_wrapped)
+
     return decorator

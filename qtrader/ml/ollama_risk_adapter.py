@@ -136,14 +136,14 @@ class OllamaRiskAdapter:
         try:
             # 1. Basic Cleaning
             clean = response.strip()
-            
+
             # 2. Extract block between first { and last }
             start_idx = clean.find("{")
             end_idx = clean.rfind("}")
-            
+
             if start_idx != -1 and end_idx != -1:
                 clean = clean[start_idx : end_idx + 1]
-            
+
             # 3. Handle truncation
             if clean.startswith("{") and not clean.endswith("}"):
                 clean += '"}' if '":' in clean else "}"

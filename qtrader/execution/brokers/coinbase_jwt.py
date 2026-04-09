@@ -5,7 +5,9 @@ from urllib.parse import urlparse
 import jwt
 
 
-def build_rest_jwt(*, rest_base: str, method: str, path: str, key_name: str, private_key_pem: str) -> str:
+def build_rest_jwt(
+    *, rest_base: str, method: str, path: str, key_name: str, private_key_pem: str
+) -> str:
     """
     Build a Coinbase CDP JWT for Advanced Trade REST.
 
@@ -30,4 +32,3 @@ def build_rest_jwt(*, rest_base: str, method: str, path: str, key_name: str, pri
     token = jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
     # pyjwt may return bytes in older versions; normalize to str.
     return token.decode("utf-8") if isinstance(token, bytes) else token
-

@@ -85,6 +85,7 @@ class FeaturePipeline(Protocol):
 # Mixin for concrete feature implementations
 # ---------------------------------------------------------------------------
 
+
 class BaseFeature:
     """Optional mixin providing default validate_inputs() for concrete features.
 
@@ -109,13 +110,11 @@ class BaseFeature:
         missing = [c for c in self.required_cols if c not in df.columns]
         if missing:
             raise ValueError(
-                f"[{self.name}] Missing required columns: {missing}. "
-                f"Available: {df.columns}"
+                f"[{self.name}] Missing required columns: {missing}. Available: {df.columns}"
             )
         if df.height < self.min_periods:
             raise ValueError(
-                f"[{self.name}] Requires at least {self.min_periods} rows, "
-                f"got {df.height}."
+                f"[{self.name}] Requires at least {self.min_periods} rows, got {df.height}."
             )
 
 

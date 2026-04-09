@@ -114,7 +114,6 @@ class AlphaEngine:
         self._ic[alpha_name] = ic_val
 
 
-
 """
 Pytest-style examples (conceptual):
 

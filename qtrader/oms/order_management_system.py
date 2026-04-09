@@ -7,17 +7,20 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from qtrader.core.decimal_adapter import d
+from qtrader_core import Order as RustOrder
+from qtrader_core import OrderType as RustOrderType
+from qtrader_core import Side as RustSide
+from qtrader_core import UnifiedOMS as RustUnifiedOMS
+
 from qtrader.core.events import (
     FillEvent,
     OrderEvent,
     SystemEvent,
     SystemPayload,
 )
-from qtrader_core import UnifiedOMS as RustUnifiedOMS, Order as RustOrder, OrderStatus, Side as RustSide, OrderType as RustOrderType
-from qtrader.oms.order_fsm import OrderFSM, OrderState
-from qtrader.core.state_store import StateStore, Order, Position
+from qtrader.core.state_store import Order, Position, StateStore
 from qtrader.oms.event_store import EventStore
+from qtrader.oms.order_fsm import OrderFSM, OrderState
 
 if TYPE_CHECKING:
     from qtrader.core.types import EventBusProtocol
@@ -34,7 +37,12 @@ class UnifiedOMS:
     Delegates all execution and position logic to the Rust core.
     """
 
-    def __init__(self, state_store: StateStore, event_bus: EventBusProtocol, initial_capital: float = 1_000_000.0) -> None:
+    def __init__(
+        self,
+        state_store: StateStore,
+        event_bus: EventBusProtocol,
+        initial_capital: float = 1_000_000.0,
+    ) -> None:
         self.state_store = state_store
         self.event_bus = event_bus
         self.event_store = EventStore()
@@ -50,9 +58,13 @@ class UnifiedOMS:
         """Create a new order and record its initial state."""
         # 1. Rust Execution
         rust_side = RustSide.Buy if order_event.side == "BUY" else RustSide.Sell
-        rust_type = RustOrderType.Limit if order_event.order_type == "LIMIT" else \
-                    RustOrderType.Stop if order_event.order_type == "STOP" else \
-                    RustOrderType.Market
+        rust_type = (
+            RustOrderType.Limit
+            if order_event.order_type == "LIMIT"
+            else RustOrderType.Stop
+            if order_event.order_type == "STOP"
+            else RustOrderType.Market
+        )
 
         rust_order = RustOrder(
             order_event.order_id,
@@ -61,7 +73,7 @@ class UnifiedOMS:
             float(order_event.quantity),
             float(order_event.price) if order_event.price else 0.0,
             rust_type,
-            order_event.timestamp
+            order_event.timestamp,
         )
         self._rust_oms.create_order(rust_order)
 
@@ -79,10 +91,10 @@ class UnifiedOMS:
 
         # 3. Persistence & Notifications
         await self._record_and_publish(
-            "ORDER_CREATED", 
-            f"New order: {order_event.symbol}", 
+            "ORDER_CREATED",
+            f"New order: {order_event.symbol}",
             {"order_id": order_event.order_id, "symbol": order_event.symbol},
-            trace_id=getattr(order_event, "trace_id", None)
+            trace_id=getattr(order_event, "trace_id", None),
         )
         self._log.info(f"OMS | Order Created: {order_event.order_id} [{order_event.symbol}]")
 
@@ -96,10 +108,10 @@ class UnifiedOMS:
         rust_order = self._rust_oms.on_reject(order_id)
         await self._sync_order_state(rust_order)
         await self._record_and_publish(
-            "ORDER_REJECTED", 
-            reason, 
+            "ORDER_REJECTED",
+            reason,
             {"order_id": order_id},
-            trace_id=None # We typically don't have trace_id on Reject if it comes from exchange later
+            trace_id=None,  # We typically don't have trace_id on Reject if it comes from exchange later
         )
         self._log.error(f"OMS | Order Rejected: {order_id} - Reason: {reason}")
 
@@ -125,11 +137,13 @@ class UnifiedOMS:
         )
         await self.state_store.set_position(py_pos)
 
-        await self.state_store.set_portfolio_value(Decimal(str(rust_cash))) # Should use equity() in real scenario
+        await self.state_store.set_portfolio_value(
+            Decimal(str(rust_cash))
+        )  # Should use equity() in real scenario
 
         await self._record_and_publish(
-            "ORDER_FILLED", 
-            f"Fill: {fill_event.payload.symbol}", 
+            "ORDER_FILLED",
+            f"Fill: {fill_event.payload.symbol}",
             {
                 "order_id": fill_event.order_id,
                 "symbol": fill_event.payload.symbol,
@@ -137,7 +151,7 @@ class UnifiedOMS:
                 "price": str(fill_event.payload.price),
                 "side": fill_event.payload.side,
             },
-            trace_id=getattr(fill_event, "trace_id", None)
+            trace_id=getattr(fill_event, "trace_id", None),
         )
         self._log.info(f"OMS | Order Fill: {fill_event.order_id} | Qty: {fill_event.quantity}")
 
@@ -145,15 +159,18 @@ class UnifiedOMS:
         """Helper to sync Rust order state back to Python StateStore."""
         # Map Rust OrderStatus back to Python OrderState
         from qtrader.oms.order_fsm import get_state_from_status
+
         next_state = get_state_from_status(rust_order.status)
         await self.state_store.update_order(
             rust_order.id, lambda o: setattr(o, "status", next_state)
         )
 
-    async def _record_and_publish(self, action: str, reason: str, metadata: dict[str, Any], trace_id: str | None = None) -> None:
+    async def _record_and_publish(
+        self, action: str, reason: str, metadata: dict[str, Any], trace_id: str | None = None
+    ) -> None:
         """Unified logging and event bus publication."""
         from uuid import uuid4
-        
+
         event = SystemEvent(
             source="UnifiedOMS",
             trace_id=trace_id or str(uuid4()),

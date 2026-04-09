@@ -4,6 +4,7 @@ Covers: MLflowManager (model registry, promotion, rollback, stale-model preventi
 FactorEngine (batch compute, multi-symbol, compute_latest).
 Focus: Garbage-in/garbage-out prevention, model staleness, correctness of promotion gates.
 """
+
 from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
@@ -17,6 +18,7 @@ from qtrader.ml.mlflow_manager import MLflowManager
 # ===========================================================================
 # MLflowManager
 # ===========================================================================
+
 
 @pytest.fixture
 def manager_disabled() -> MLflowManager:
@@ -44,6 +46,7 @@ def manager_mocked(mock_client: MagicMock) -> MLflowManager:
 # ---------------------------------------------------------------------------
 # Disabled mode — must not crash
 # ---------------------------------------------------------------------------
+
 
 def test_manager_disabled_is_not_enabled(manager_disabled):
     assert manager_disabled.is_enabled() is False
@@ -82,6 +85,7 @@ def test_get_model_status_returns_error_when_disabled(manager_disabled):
 # Promotion gate — must respect thresholds exactly
 # ---------------------------------------------------------------------------
 
+
 def test_promotion_gate_passes_all_criteria(manager_mocked, mock_client):
     """Model meeting all thresholds should be promoted to Production."""
     run = MagicMock()
@@ -117,7 +121,11 @@ def test_promotion_gate_fails_on_drawdown(manager_mocked, mock_client):
     run.data.metrics = {"sharpe_ratio": 2.0, "max_drawdown": 0.25, "hit_rate": 0.60}
     mock_client.get_run.return_value = run
     result = manager_mocked._evaluate_and_promote_sync(
-        "TestStrat", "run_bad_dd", sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5
+        "TestStrat",
+        "run_bad_dd",
+        sharpe_threshold=1.0,
+        drawdown_threshold=0.1,
+        hit_rate_threshold=0.5,
     )
     assert result is False
 
@@ -127,7 +135,11 @@ def test_promotion_gate_fails_on_hit_rate(manager_mocked, mock_client):
     run.data.metrics = {"sharpe_ratio": 2.0, "max_drawdown": 0.05, "hit_rate": 0.45}
     mock_client.get_run.return_value = run
     result = manager_mocked._evaluate_and_promote_sync(
-        "TestStrat", "run_lowhr", sharpe_threshold=1.0, drawdown_threshold=0.1, hit_rate_threshold=0.5
+        "TestStrat",
+        "run_lowhr",
+        sharpe_threshold=1.0,
+        drawdown_threshold=0.1,
+        hit_rate_threshold=0.5,
     )
     assert result is False
 
@@ -136,11 +148,9 @@ def test_promotion_gate_no_staging_version_returns_false(manager_mocked, mock_cl
     run = MagicMock()
     run.data.metrics = {"sharpe_ratio": 2.0, "max_drawdown": 0.03, "hit_rate": 0.7}
     mock_client.get_run.return_value = run
-    mock_client.get_latest_versions.return_value = []   # No staging version
+    mock_client.get_latest_versions.return_value = []  # No staging version
 
-    result = manager_mocked._evaluate_and_promote_sync(
-        "NoStaging", "run_id", 1.0, 0.1, 0.5
-    )
+    result = manager_mocked._evaluate_and_promote_sync("NoStaging", "run_id", 1.0, 0.1, 0.5)
     assert result is False
 
 
@@ -148,13 +158,17 @@ def test_promotion_gate_no_staging_version_returns_false(manager_mocked, mock_cl
 # Rollback — must restore previous production
 # ---------------------------------------------------------------------------
 
+
 def test_rollback_archives_current_and_restores_previous(manager_mocked, mock_client):
-    prod_v = MagicMock(); prod_v.version = "5"
-    arch_v3 = MagicMock(); arch_v3.version = "3"
-    arch_v4 = MagicMock(); arch_v4.version = "4"
+    prod_v = MagicMock()
+    prod_v.version = "5"
+    arch_v3 = MagicMock()
+    arch_v3.version = "3"
+    arch_v4 = MagicMock()
+    arch_v4.version = "4"
 
     mock_client.get_latest_versions.side_effect = [
-        [prod_v],            # Production query
+        [prod_v],  # Production query
         [arch_v3, arch_v4],  # Archived query
     ]
     result = manager_mocked._rollback_to_previous_production_sync("Strat")
@@ -175,7 +189,8 @@ def test_rollback_no_production_returns_false(manager_mocked, mock_client):
 
 
 def test_rollback_no_archived_returns_false(manager_mocked, mock_client):
-    prod_v = MagicMock(); prod_v.version = "2"
+    prod_v = MagicMock()
+    prod_v.version = "2"
     mock_client.get_latest_versions.side_effect = [[prod_v], []]
     assert manager_mocked._rollback_to_previous_production_sync("Strat") is False
 
@@ -184,8 +199,10 @@ def test_rollback_no_archived_returns_false(manager_mocked, mock_client):
 # Load production model — stale model prevention
 # ---------------------------------------------------------------------------
 
+
 def test_load_production_model_returns_uri(manager_mocked, mock_client):
-    v = MagicMock(); v.version = "3"
+    v = MagicMock()
+    v.version = "3"
     mock_client.get_latest_versions.return_value = [v]
     uri = manager_mocked._load_production_model_sync("MyStrat")
     assert uri == "models:/strategy_MyStrat/3"

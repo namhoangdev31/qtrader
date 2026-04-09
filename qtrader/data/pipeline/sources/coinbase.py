@@ -96,4 +96,3 @@ class CoinbaseConnector:
 
     def stop(self) -> None:
         self.is_running = False
-

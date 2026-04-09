@@ -28,13 +28,13 @@ class QTraderLogger:
         """Configures loguru to use a custom structured JSON sink."""
         # 1. Remove default sink
         logger.remove()
-        
+
         # 2. Add structured JSON sink (Standard Out)
         logger.add(
             sys.stdout,
             format="{message}",
-            serialize=False, # We'll do custom serialization in log_event
-            level=os.getenv("LOG_LEVEL", "INFO")
+            serialize=False,  # We'll do custom serialization in log_event
+            level=os.getenv("LOG_LEVEL", "INFO"),
         )
 
         # 3. Add file sink if log_dir provided
@@ -47,7 +47,7 @@ class QTraderLogger:
                 format="{message}",
                 serialize=False,
                 level="INFO",
-                encoding="utf-8"
+                encoding="utf-8",
             )
 
     def log_event(
@@ -59,7 +59,7 @@ class QTraderLogger:
         latency_ms: float | None = None,
         metadata: Mapping[str, Any] | None = None,
         error: str | None = None,
-        level: str = "INFO"
+        level: str = "INFO",
     ) -> None:
         """
         Produce a structured JSON log entry compliant with logging_schema.json.
@@ -79,13 +79,13 @@ class QTraderLogger:
             "message": message or f"{module}:{action}",
             "latency_ms": latency_ms,
             "metadata": metadata or {},
-            "error": error
+            "error": error,
         }
 
         # Use loguru to handle serialization and output to all sinks
         # We manually stringify to ensure we match the exact schema
         json_msg = json.dumps(log_entry)
-        
+
         if level == "INFO":
             logger.info(json_msg)
         elif level == "ERROR" or status == "FAILURE":

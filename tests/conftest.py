@@ -11,8 +11,11 @@ sys.path.append(str(root_dir))
 package_dir = root_dir / "qtrader"
 sys.path.append(str(package_dir))
 
+
 # Global Mocks for ML libraries and missing core dependencies to enable offline testing
-class MockTensor: pass
+class MockTensor:
+    pass
+
 
 ML_LIBS = {
     "torch": MagicMock(Tensor=MockTensor),
@@ -26,7 +29,7 @@ ML_LIBS = {
     "ray": MagicMock(),
     "ray.tune": MagicMock(),
     "mlflow": MagicMock(),
-    "mlflow.pyfunc": MagicMock()
+    "mlflow.pyfunc": MagicMock(),
 }
 
 for lib_name, mock_obj in ML_LIBS.items():

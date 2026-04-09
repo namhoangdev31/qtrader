@@ -14,9 +14,12 @@ logger = logging.getLogger(__name__)
 
 try:
     from qtrader_core import Account, PortfolioEngine
+
     _HAS_RUST = True
 except ImportError:
-    logger.warning("NAV_ENGINE | Rust core (qtrader_core) not found. Falling back to Python implementation.")
+    logger.warning(
+        "NAV_ENGINE | Rust core (qtrader_core) not found. Falling back to Python implementation."
+    )
     _HAS_RUST = False
 
 
@@ -37,16 +40,18 @@ class NAVEngine:
     ) -> NAVEvent:
         """
         Compute the latest NAV and PnL breakdown for the given system state.
-        
+
         Institutional Requirement: Must use high-performance Rust backend.
         """
         if not _HAS_RUST:
-            raise RuntimeError("NAV_ENGINE | Rust core (qtrader_core) is required but not found. Build the rust extension to proceed.")
+            raise RuntimeError(
+                "NAV_ENGINE | Rust core (qtrader_core) is required but not found. Build the rust extension to proceed."
+            )
 
         # 1. Prepare Account state for Rust
         account = Account(float(state.cash))
         account.cash = float(state.cash)
-        
+
         for symbol, pos in state.positions.items():
             account.add_position_direct(symbol, float(pos.quantity), float(pos.average_price))
 

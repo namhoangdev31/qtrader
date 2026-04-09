@@ -12,7 +12,7 @@ class UniversalDataLake:
     Cloud-ready Data Lake abstraction.
     Supports local paths and S3/GCS URIs via Polars native integration.
     """
-    
+
     def __init__(
         self,
         base_uri: str | None = None,
@@ -35,7 +35,7 @@ class UniversalDataLake:
     def save_data(self, df: pl.DataFrame, symbol: str, timeframe: str) -> None:
         """Saves data to the Data Lake (Local or Cloud)."""
         target_uri = self._get_path(symbol, timeframe)
-        
+
         # Ensure parent directory exists for local paths
         if not target_uri.startswith(("s3://", "gs://", "az://")):
             Path(target_uri).parent.mkdir(parents=True, exist_ok=True)

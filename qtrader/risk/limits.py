@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Protocol
 
-from qtrader.core.events import RiskEvent
+from qtrader.core.events import RiskEvent, RiskPayload
 
 if TYPE_CHECKING:
     import polars as pl
@@ -59,10 +60,12 @@ class RiskLimit(Protocol):
 
 try:
     import qtrader_core
+
     HAS_RUST_CORE = True
     math_engine = qtrader_core.MathEngine()
 except ImportError:
     HAS_RUST_CORE = False
+
 
 class MaxDrawdownLimit:
     """Maximum peak-to-trough drawdown as a fraction of HWM."""
@@ -81,22 +84,25 @@ class MaxDrawdownLimit:
         """Check whether drawdown exceeds the configured threshold via Rust Core."""
         if state.hwm <= 0.0:
             return None
-            
+
         drawdown = math_engine.calculate_drawdown(state.equity, state.hwm)
         if drawdown <= self._pct:
             return None
 
         return RiskEvent(
-            reason=f"Max drawdown limit breached: {drawdown:.2%} > {self._pct:.2%}",
-            action="BLOCK_TRADING",
-            metadata={
-                "limit": "MAX_DRAWDOWN",
-                "threshold_pct": self._pct,
-                "drawdown_pct": drawdown,
-                "equity": state.equity,
-                "hwm": state.hwm,
-                "source": "RUST_CORE"
-            },
+            source="MaxDrawdownLimit",
+            payload=RiskPayload(
+                symbol="PORTFOLIO",
+                risk_type="MAX_DRAWDOWN",
+                value=Decimal(str(drawdown)),
+                threshold=Decimal(str(self._pct)),
+                metadata={
+                    "reason": f"Max drawdown limit breached: {drawdown:.2%} > {self._pct:.2%}",
+                    "equity": state.equity,
+                    "hwm": state.hwm,
+                    "source": "RUST_CORE",
+                },
+            ),
         )
 
 
@@ -119,15 +125,18 @@ class DailyLossLimit:
         if loss <= self._usd:
             return None
         return RiskEvent(
-            reason=f"Daily loss limit breached: ${loss:,.2f} > ${self._usd:,.2f}",
-            action="BLOCK_TRADING",
-            metadata={
-                "limit": "DAILY_LOSS",
-                "threshold_usd": self._usd,
-                "loss_usd": loss,
-                "equity": state.equity,
-                "source": "RUST_CORE"
-            },
+            source="DailyLossLimit",
+            payload=RiskPayload(
+                symbol="PORTFOLIO",
+                risk_type="DAILY_LOSS",
+                value=Decimal(str(loss)),
+                threshold=Decimal(str(self._usd)),
+                metadata={
+                    "reason": f"Daily loss limit breached: ${loss:,.2f} > ${self._usd:,.2f}",
+                    "equity": state.equity,
+                    "source": "RUST_CORE",
+                },
+            ),
         )
 
 
@@ -155,15 +164,18 @@ class MaxConcentrationLimit:
             return None
 
         return RiskEvent(
-            reason="Concentration limit breached",
-            action="REDUCE_POSITIONS",
-            metadata={
-                "limit": "CONCENTRATION",
-                "threshold_weight": self._max_weight,
-                "max_weight": max_weight_value,
-                "hhi": state.hhi,
-                "source": "RUST_CORE"
-            },
+            source="MaxConcentrationLimit",
+            payload=RiskPayload(
+                symbol="PORTFOLIO",
+                risk_type="CONCENTRATION",
+                value=Decimal(str(max_weight_value)),
+                threshold=Decimal(str(self._max_weight)),
+                metadata={
+                    "reason": "Concentration limit breached",
+                    "hhi": state.hhi,
+                    "source": "RUST_CORE",
+                },
+            ),
         )
 
 
@@ -190,16 +202,19 @@ class GrossExposureLimit:
             return None
 
         return RiskEvent(
-            reason=f"Gross exposure limit breached: {leverage:.2f}x > {self._max_leverage:.2f}x",
-            action="REDUCE_LEVERAGE",
-            metadata={
-                "limit": "GROSS_EXPOSURE",
-                "threshold_leverage": self._max_leverage,
-                "gross_exposure": gross_exposure,
-                "leverage": leverage,
-                "equity": state.equity,
-                "source": "RUST_CORE"
-            },
+            source="GrossExposureLimit",
+            payload=RiskPayload(
+                symbol="PORTFOLIO",
+                risk_type="GROSS_EXPOSURE",
+                value=Decimal(str(leverage)),
+                threshold=Decimal(str(self._max_leverage)),
+                metadata={
+                    "reason": f"Gross exposure limit breached: {leverage:.2f}x > {self._max_leverage:.2f}x",
+                    "gross_exposure": gross_exposure,
+                    "equity": state.equity,
+                    "source": "RUST_CORE",
+                },
+            ),
         )
 
 
@@ -231,9 +246,19 @@ class VaRBreachLimit:
             "equity": state.equity,
         }
         return RiskEvent(
-            reason="VaR limit breached",
-            action="BLOCK_TRADING",
-            metadata=metadata,
+            source="VaRBreachLimit",
+            payload=RiskPayload(
+                symbol="PORTFOLIO",
+                risk_type="VAR_BREACH",
+                value=Decimal(str(var_fraction)),
+                threshold=Decimal(str(self._var_threshold_pct)),
+                metadata={
+                    "reason": "VaR limit breached",
+                    "var_95": state.var_95,
+                    "equity": state.equity,
+                    "source": "RESEARCH_MODULE",
+                },
+            ),
         )
 
 

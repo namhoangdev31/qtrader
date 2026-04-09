@@ -14,10 +14,11 @@ from qtrader.risk.base import RiskModule
 
 logger = logging.getLogger("qtrader.risk.dynamic")
 
+
 class DynamicGuardrailManager(RiskModule):
     """Adaptive SL/TP manager using forecast intervals and ATR.
-    
-    Philosophy: 
+
+    Philosophy:
         - High Volatility -> Wider Stops (Avoid noise)
         - Low Volatility -> Tighter Stops (Capital efficiency)
     """
@@ -27,7 +28,7 @@ class DynamicGuardrailManager(RiskModule):
         atr_multiplier: float = 2.0,
         forecast_multiplier: float = 1.5,
         min_sl_pct: float = 0.005,  # 0.5% floor
-        max_sl_pct: float = 0.05,   # 5.0% ceiling
+        max_sl_pct: float = 0.05,  # 5.0% ceiling
     ) -> None:
         self.atr_multiplier = atr_multiplier
         self.forecast_multiplier = forecast_multiplier
@@ -38,7 +39,7 @@ class DynamicGuardrailManager(RiskModule):
 
     def evaluate(self, *args: Any, **kwargs: Any) -> dict[str, float]:
         """Calculate dynamic SL/TP levels.
-        
+
         Args:
             price: Current market price.
             atr: Current ATR value (fallback).
@@ -62,12 +63,12 @@ class DynamicGuardrailManager(RiskModule):
             vol_unit = (atr / price) * self.atr_multiplier
             reason = "ATR_FALLBACK"
         else:
-            vol_unit = 0.025 # Global default 2.5%
+            vol_unit = 0.025  # Global default 2.5%
             reason = "DEFAULT_FIXED"
 
         # 2. Bound the risk
         sl_pct = max(self.min_sl_pct, min(self.max_sl_pct, vol_unit))
-        
+
         # 3. Compute levels
         # TP is usually scaled by a Risk/Reward ratio (e.g., 2.0)
         tp_pct = sl_pct * 2.0
@@ -84,7 +85,7 @@ class DynamicGuardrailManager(RiskModule):
             "tp_price": tp_price,
             "sl_pct": sl_pct,
             "tp_pct": tp_pct,
-            "risk_source": reason
+            "risk_source": reason,
         }
         self.last_result = res
         return res

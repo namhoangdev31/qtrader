@@ -139,7 +139,9 @@ class DuckDBClient:
         """Execute SQL and return a Polars DataFrame."""
         return self._con.execute(sql).pl()  # type: ignore[no-any-return]
 
-    def query_parquet(self, parquet_glob: str, sql: str = "SELECT * FROM read_parquet('{glob}')") -> pl.DataFrame:
+    def query_parquet(
+        self, parquet_glob: str, sql: str = "SELECT * FROM read_parquet('{glob}')"
+    ) -> pl.DataFrame:
         """Query parquet files directly. Use {glob} in sql to inject parquet_glob."""
         return self._con.execute(sql.replace("{glob}", parquet_glob)).pl()  # type: ignore[no-any-return]
 

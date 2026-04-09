@@ -2,24 +2,29 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from qtrader.core.events import RiskEvent
+from qtrader.core.events import RiskEvent, RiskPayload
 from qtrader.core.types import RiskMetrics
 
 if TYPE_CHECKING:
     from qtrader.core.event_bus import EventBus
 
+_LOG = logging.getLogger("qtrader.risk.runtime")
+
 __all__ = ["RuntimeRiskEngine"]
 
 try:
     import qtrader_core
+
     math_engine = qtrader_core.MathEngine()
 except ImportError as e:
     _LOG.error("[RISK] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
-    raise ImportError("qtrader_core is a mandatory dependency for institutional risk management") from e
+    raise ImportError(
+        "qtrader_core is a mandatory dependency for institutional risk management"
+    ) from e
 
 
 @dataclass(slots=True)
@@ -37,7 +42,7 @@ class RuntimeRiskEngine:
     max_daily_loss: float = 5_000.0
     max_leverage: float = 5.0  # 5x leverage cap
     max_turnover: float = 0.3  # 30% daily turnover constraint
-    
+
     event_bus: EventBus | None = None
 
     # State tracking
@@ -51,7 +56,7 @@ class RuntimeRiskEngine:
     current_day: date = field(
         default_factory=lambda: datetime.now().date(),
     )
-    
+
     # Portfolio value for leverage calculation
     portfolio_value: float = 100000.0
 
@@ -69,15 +74,17 @@ class RuntimeRiskEngine:
             self.current_drawdown = math_engine.calculate_drawdown(self.equity, self.current_hwm)
             if self.current_drawdown > self.max_drawdown:
                 _LOG.critical(
-                    "Max drawdown breached: RUST_VAL(%.4f) > LIMIT(%.4f)", 
-                    self.current_drawdown, 
-                    self.max_drawdown
+                    "Max drawdown breached: RUST_VAL(%.4f) > LIMIT(%.4f)",
+                    self.current_drawdown,
+                    self.max_drawdown,
                 )
                 return True
 
         # 2. Check max exposure
         if self.current_exposure > self.max_exposure:
-            _LOG.warning("Max exposure breached (%.2f > %.2f)", self.current_exposure, self.max_exposure)
+            _LOG.warning(
+                "Max exposure breached (%.2f > %.2f)", self.current_exposure, self.max_exposure
+            )
             return True
 
         # 3. Check max daily loss
@@ -110,7 +117,7 @@ class RuntimeRiskEngine:
             return True
 
         return False
-        
+
     def _now(self) -> datetime:
         return datetime.now()
 
@@ -144,17 +151,24 @@ class RuntimeRiskEngine:
             "intraday_pnl": self.intraday_pnl,
             "max_daily_loss": self.max_daily_loss,
         }
+        metrics = {
+            "current_drawdown": Decimal(str(self.current_drawdown)),
+            "max_drawdown": Decimal(str(self.max_drawdown)),
+            "current_exposure": Decimal(str(self.current_exposure)),
+            "max_exposure": Decimal(str(self.max_exposure)),
+            "intraday_pnl": Decimal(str(self.intraday_pnl)),
+            "max_daily_loss": Decimal(str(self.max_daily_loss)),
+        }
         return RiskEvent(
-            symbol="PORTFOLIO",
-            metrics={
-                "current_drawdown": self.current_drawdown,
-                "max_drawdown": self.max_drawdown,
-                "current_exposure": self.current_exposure,
-                "max_exposure": self.max_exposure,
-                "intraday_pnl": self.intraday_pnl,
-                "max_daily_loss": self.max_daily_loss,
-            },
-            metadata=metadata,
+            source="RuntimeRiskEngine",
+            payload=RiskPayload(
+                symbol="PORTFOLIO",
+                risk_type="KILL_SWITCH",
+                value=Decimal(str(self.current_drawdown)),
+                threshold=Decimal(str(self.max_drawdown)),
+                metrics=metrics,
+                metadata=metadata,
+            ),
         )
 
     async def dispatch_kill_switch(self) -> RiskEvent:
@@ -185,12 +199,12 @@ class RuntimeRiskEngine:
         # A real implementation would calculate VaR, volatility, drawdown, and leverage
         # based on the allocation and current market conditions.
         return RiskMetrics(
-            timestamp=datetime.utcnow(),
-            portfolio_var=Decimal('0'),
-            portfolio_volatility=Decimal('0'),
-            max_drawdown=Decimal('0'),
-            leverage=Decimal('0'),
-            metadata={}
+            timestamp=datetime.now(timezone.utc),
+            portfolio_var=Decimal("0"),
+            portfolio_volatility=Decimal("0"),
+            max_drawdown=Decimal("0"),
+            leverage=Decimal("0"),
+            metadata={},
         )
 
 
@@ -203,7 +217,7 @@ def create_runtime_risk_engine(
     event_bus: EventBus | None = None,
 ) -> RuntimeRiskEngine:
     """Factory function to create a RuntimeRiskEngine with custom limits.
-    
+
     Args:
         max_drawdown: Maximum allowed drawdown (default 0.1 = 10%)
         max_exposure: Maximum allowed exposure in currency units (default 1,000,000)
@@ -211,7 +225,7 @@ def create_runtime_risk_engine(
         max_leverage: Maximum allowed leverage ratio (default 5.0 = 5x)
         max_turnover: Maximum allowed daily turnover ratio (default 0.3 = 30%)
         event_bus: Optional event bus for publishing risk events
-        
+
     Returns:
         Configured RuntimeRiskEngine instance
     """

@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from decimal import Decimal
 from collections.abc import Callable
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -25,12 +25,16 @@ from qtrader.execution.paper_models import AdaptiveConfig, OpenPosition, TradeRe
 
 _LOG = logging.getLogger("qtrader.paper")
 
-class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillMixin, PersistenceMixin):
+
+class PaperTradingEngine(
+    DynamicSettingsMixin, SignalMixin, PositionMixin, FillMixin, PersistenceMixin
+):
     """Event-Driven Simulation Engine with institutional-grade forensics.
-    
-    Provides high-fidelity execution simulation including slippage, 
+
+    Provides high-fidelity execution simulation including slippage,
     latency, and technical signal generation.
     """
+
     def __init__(  # noqa: PLR0913
         self,
         starting_capital: float = 100000.0,
@@ -46,7 +50,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
     ) -> None:
         self._db_writer = db_writer
         self._session_id = session_id
-        
+
         self.starting_capital = starting_capital
         self.performance_fee = performance_fee
         self.max_concurrent_positions = max_concurrent_positions
@@ -54,15 +58,15 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
         self._last_recorded_equity: float | None = None
         self._trade_history = self.closed_trades
         self._max_trades_history = max_trades_history
-        
+
         self._open_positions: dict[str, list[OpenPosition]] = {}
         self._managed_positions: dict[str, list[OpenPosition]] = {}
-    
+
         self.adaptive = AdaptiveConfig(
             base_stop_loss_pct=sl_pct,
             base_take_profit_pct=tp_pct,
         )
-    
+
         ref_price = base_price if base_price is not None else settings.ts_reference_price
         self._cash = starting_capital
         self._total_commissions = 0.0
@@ -81,7 +85,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
         self._last_thinking = "Awaiting first analysis..."
         self._last_explanation = "Simulation engine is initializing market data buffer..."
         self._thinking_history: list[dict[str, Any]] = []
-        
+
         self._last_trace: dict[str, Any] = {
             "module_traces": {
                 "ingestion": {"status": "INITIALIZING", "price": ref_price},
@@ -93,7 +97,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
                 "Portfolio": {"status": "INITIALIZING"},
                 "execution": {"status": "AWAITING", "slippage_bps": 0.0},
                 "Reconciliation": {"status": "AWAITING"},
-                "Strategy": {"status": "AWAITING"}
+                "Strategy": {"status": "AWAITING"},
             }
         }
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
@@ -145,7 +149,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
                 else:
                     pnl = (lot.avg_price - self._current_price) * abs(lot.qty)
                     market_value += (abs(lot.qty) * lot.avg_price) + pnl
-        
+
         unrealized_gross = market_value - notional_value
         total_pnl = self.equity - self.starting_capital
         return total_pnl - unrealized_gross
@@ -250,7 +254,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
 
     def _on_tick(self) -> None:
         """Event-driven simulation step. Triggered on market data updates.
-        
+
         Complies with Zero Latency Rule (Rule 08) by avoiding asyncio.sleep.
         """
         if not self._running:
@@ -270,7 +274,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
                     dynamic_exit = self._check_dynamic_exit(signal)
                     if dynamic_exit:
                         self._emit(self._build_snapshot())
-                
+
                 if len(self._managed_positions) < self.max_concurrent_positions:
                     if signal:
                         sym = "BTC-USD"
@@ -279,8 +283,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
                             lot.side != signal["action"] for lot in existing_lots
                         ):
                             opened = self._open_managed_position(
-                                signal["action"], 
-                                signal["strength"]
+                                signal["action"], signal["strength"]
                             )
                             if opened:
                                 self._emit(self._build_snapshot())
@@ -288,20 +291,20 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
             if self._tick_count % 5 == 0:
                 self._persist_pnl_snapshot()
                 self._emit(self._build_snapshot())
-            
+
             self._last_latency_ms = (time.time() - loop_start) * 1000
-            
+
             # Rule 08 Compliance: Monitor simulation latency
             if self._last_latency_ms > 100:
                 _LOG.warning(f"[PAPER] Latency violation: {self._last_latency_ms:.2f}ms")
-                
+
                 content = f"CRITICAL: Engine latency breach detected. Simulation step took {self._last_latency_ms:.2f}ms."
-                
+
                 # 1. Add to internal thinking history for snapshot
                 violation_note = {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "thinking": "CRITICAL: Engine latency breach detected.",
-                    "explanation": content
+                    "explanation": content,
                 }
                 self._thinking_history.append(violation_note)
                 if len(self._thinking_history) > self.THINKING_HISTORY_LIMIT:
@@ -314,8 +317,8 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
                         payload=ForensicNotePayload(
                             content=content,
                             note_type="ALERT",
-                            session_id=getattr(self, "_session_id", None)
-                        )
+                            session_id=getattr(self, "_session_id", None),
+                        ),
                     )
                 )
 
@@ -324,11 +327,12 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
 
     async def run_continuous(self) -> None:
         """Background loop driving the heartbeat of the simulation.
-        
+
         Broadcasts MarketEvents to the global EventBus so other containers (Orchestrator, etc.)
         can synchronize to the same price feed.
         """
         from qtrader.core.events import MarketEvent, MarketPayload
+
         self._running = True
         self._start_time = time.time()
         _LOG.info("[PAPER] Simulation HEARTBEAT started")
@@ -337,7 +341,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
             try:
                 # Inject a unique trace ID for each simulation pulse
                 trace_id = TraceAuthority.start_trace()
-                
+
                 # 1. Self-drive the price simulation
                 self._on_tick()
 
@@ -352,9 +356,9 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
                             data={"price": price},
                             bid=Decimal(str(round(price * 0.9999, 2))),
                             ask=Decimal(str(round(price * 1.0001, 2))),
-                        )
+                        ),
                     )
-                    self._last_latency_ms = 0.0 # Internal loop has negligible latency
+                    self._last_latency_ms = 0.0  # Internal loop has negligible latency
                     self._publish_to_bus(event)
 
                 # 3. Controlled cadence (default 1s or as configured)
@@ -371,7 +375,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
 
     def update_base_price(self, price: float, force_current: bool = False) -> None:
         """Update the base (mean-reversion) price and optionally the current price.
-    
+
         Args:
             price: The new base price (USD)
             force_current: If True, also sets the current simulation price to this value.
@@ -385,45 +389,45 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
 
     async def handle_market_event(self, event: Any) -> None:
         """Update simulation state with external real-time market data.
-    
+
         Accepts MarketEvent from the global EventBus.
         """
         try:
             symbol = event.payload.symbol
             if "BTC-USD" not in symbol:
                 return
-    
+
             data = event.payload.data
             price = float(data.get("price") or 0.0)
-    
+
             if price <= 0:
                 bid = float(event.payload.bid)
                 ask = float(event.payload.ask)
                 if bid > 0 and ask > 0:
                     price = (bid + ask) / 2.0
-    
+
             if price > 0:
                 old_price = self._current_price
                 self._current_price = price
                 self._base_price = price
                 self._last_external_tick = time.time()
-    
+
                 if (
-                    abs(old_price - price) / (old_price or price or 1) > 
-                    TradeRecord.SIGNIFICANT_PRICE_CHANGE
+                    abs(old_price - price) / (old_price or price or 1)
+                    > TradeRecord.SIGNIFICANT_PRICE_CHANGE
                 ):
                     self._emit(self._build_snapshot())
-                
+
                 # Drive simulation logic on every market tick (Zero Latency Compliance)
                 self._on_tick()
-    
+
         except Exception as e:
             _LOG.error(f"[PAPER] Failed to handle external market data: {e}")
 
     def clear_history(self) -> None:
         """Clear the price history buffer and reset tick indicators.
-        
-        Useful when the base price is updated significantly to avoid 
+
+        Useful when the base price is updated significantly to avoid
         distorted indicators (e.g. extreme RSI) from stale data.
         """
         self._price_history.clear()
@@ -447,4 +451,3 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
             base_take_profit_pct=self.adaptive.base_take_profit_pct,
         )
         _LOG.info("[PAPER] Engine reset")
-

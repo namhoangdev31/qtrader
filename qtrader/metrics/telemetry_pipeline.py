@@ -17,7 +17,11 @@ class TelemetryPipeline:
     Provides the quantitative baseline for Phase -1.5 performance validation.
     """
 
-    def __init__(self, interval_seconds: float = 5.0, output_path: str = "qtrader/metrics/metrics_registry.json") -> None:
+    def __init__(
+        self,
+        interval_seconds: float = 5.0,
+        output_path: str = "qtrader/metrics/metrics_registry.json",
+    ) -> None:
         self.interval = interval_seconds
         self.output_path = Path(output_path)
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -28,7 +32,7 @@ class TelemetryPipeline:
         """Initialize and start the telemetry background task."""
         if self._running:
             return
-        
+
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info(f"TELEMETRY_PIPELINE | Started background worker (Interval: {self.interval}s)")
@@ -59,7 +63,7 @@ class TelemetryPipeline:
         """Capture a metrics snapshot and write to disk in JSON format."""
         snapshot = await metrics.snapshot()
         snapshot["last_updated"] = datetime.now(timezone.utc).isoformat()
-        
+
         # Atomically write to disk (temp file + rename)
         tmp_path = self.output_path.with_suffix(".tmp")
         try:

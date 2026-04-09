@@ -6,37 +6,36 @@ RoleContext.ANALYST     - EDA, backtest reports, risk summaries, HTML export
 RoleContext.RESEARCHER  - feature engineering, regime detection, ML experiments
 RoleContext.TRADER      - live bot monitoring, execution audit, slippage analysis
 """
+
 from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import httpx
-    from qtrader.analytics.ev_calculator import EVCalculator
-    from qtrader.execution.paper_engine import PaperTradingEngine
-    from qtrader.research.report import ReportBuilder
-    from qtrader.features.store import FeatureStore
-    from scripts.generate_test_data import generate_synthetic_data
+
+
+from datetime import datetime, timedelta
 
 import numpy as np
 import polars as pl
-from datetime import datetime, timedelta
 from loguru import logger
 
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.tearsheet import TearsheetGenerator
+from qtrader.core.config import Config
 from qtrader.data.datalake import DataLake
 from qtrader.data.datalake_universal import UniversalDataLake
 from qtrader.data.duckdb_client import DuckDBClient
 from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
-from qtrader.core.config import Config
 
 
 class RoleContext(str, Enum):
     """Role context for AnalystSession.  Determines workflow guidance in notebooks."""
+
     ANALYST = "analyst"
     RESEARCHER = "researcher"
     TRADER = "trader"
@@ -75,7 +74,9 @@ class AnalystSession:
                 return await self.load_from_datalake(symbol, timeframe, days=days)
         return await self.load_from_datalake(symbol, timeframe, days=days)
 
-    async def load_from_datalake(self, symbol: str, timeframe: str, days: int | None = None) -> pl.DataFrame:
+    async def load_from_datalake(
+        self, symbol: str, timeframe: str, days: int | None = None
+    ) -> pl.DataFrame:
         """Load OHLCV from UniversalDataLake/DataLake fallback."""
         try:
             return self._load_from_universal(symbol, timeframe)
@@ -87,7 +88,7 @@ class AnalystSession:
                 self._log.warning("DataLake missing. Falling back to Live API.")
                 if days is None:
                     days = 365 if self.role == RoleContext.RESEARCHER else 7
-                
+
                 return await self.load_live_ohlcv(symbol, timeframe, days=days)
 
     def sample_ohlcv(self, symbol: str = "AAPL", days: int = 5) -> pl.DataFrame:
@@ -95,6 +96,7 @@ class AnalystSession:
         self._log.warning(f"⚠️ DATA_SOURCE: Generating SYNTHETIC data for {symbol}.")
         try:
             from scripts.generate_test_data import generate_synthetic_data
+
             return generate_synthetic_data(symbol=symbol, days=days)
         except ImportError:
             self._log.error("generate_synthetic_data function missing. Return empty df.")
@@ -102,16 +104,21 @@ class AnalystSession:
 
     async def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
         """Load real Coinbase REST API data and persist it to the DataLake."""
-        
+
         self._log.info(f"Requesting {days} days of live data for {symbol}...")
-        
+
         tf_map = {
-            "1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
-            "30m": "THIRTY_MINUTE", "1h": "ONE_HOUR", "2h": "TWO_HOUR", 
-            "6h": "SIX_HOUR", "1d": "ONE_DAY"
+            "1m": "ONE_MINUTE",
+            "5m": "FIVE_MINUTE",
+            "15m": "FIFTEEN_MINUTE",
+            "30m": "THIRTY_MINUTE",
+            "1h": "ONE_HOUR",
+            "2h": "TWO_HOUR",
+            "6h": "SIX_HOUR",
+            "1d": "ONE_DAY",
         }
         granularity = tf_map.get(timeframe, "ONE_HOUR")
-        
+
         client = CoinbaseMarketDataClient()
         end_dt = datetime.now(Config.tz)
         start_dt = end_dt - timedelta(days=days)
@@ -123,9 +130,11 @@ class AnalystSession:
                 lake.save_data(df, symbol, timeframe)
             except Exception as e:
                 self._log.warning(f"Failed to persist live data to DataLake: {e}")
-                
+
         else:
-            self._log.warning(f"No live data returned for {symbol}. Falling back to synthetic mock data.")
+            self._log.warning(
+                f"No live data returned for {symbol}. Falling back to synthetic mock data."
+            )
             df = self.sample_ohlcv(symbol, days)
         return df
 
@@ -134,31 +143,33 @@ class AnalystSession:
         client = CoinbaseMarketDataClient()
         return await client.get_product_book(symbol, limit)
 
-    async def run_paper_simulation(self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7) -> Any:
+    async def run_paper_simulation(
+        self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7
+    ) -> Any:
         """Run a strategy logic function against live data to compute expected EV."""
         from qtrader.analytics.ev_calculator import EVCalculator
         from qtrader.execution.paper_engine import PaperTradingEngine
-        
+
         df = await self.load_live_ohlcv(symbol, timeframe, days)
         engine = PaperTradingEngine(starting_capital=10000.0)
-        
+
         for row in df.iter_rows(named=True):
             market_state = {
                 "bid": float(row["close"]) * 0.9999,
                 "ask": float(row["close"]) * 1.0001,
                 "top_depth": 5.0,
-                "venue": "Coinbase_Sim"
+                "venue": "Coinbase_Sim",
             }
             order = strategy_fn(row)
             if order:
                 engine.simulate_fill(order, market_state)
-                
+
         calculator = EVCalculator(engine.closed_trades)
         return calculator.diagnose(symbol)
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
         """Load pre-computed features from the FeatureStore.
-        
+
         Returns an empty DataFrame if no features are stored yet.
         """
         from qtrader.features.store import FeatureStore
@@ -200,25 +211,14 @@ class AnalystSession:
         if "returns" not in df.columns:
             df = self.make_returns(df, price_col)
         w = 14
-        cols.append(
-            pl.col("returns")
-            .clip(lower_bound=0)
-            .rolling_mean(w)
-            .alias("avg_gain")
-        )
-        cols.append(
-            (-pl.col("returns").clip(upper_bound=0))
-            .rolling_mean(w)
-            .alias("avg_loss")
-        )
+        cols.append(pl.col("returns").clip(lower_bound=0).rolling_mean(w).alias("avg_gain"))
+        cols.append((-pl.col("returns").clip(upper_bound=0)).rolling_mean(w).alias("avg_loss"))
         df = df.with_columns(cols)
         df = df.with_columns(
-            (
-                100
-                - 100 / (1 + pl.col("avg_gain") / (pl.col("avg_loss") + 1e-10))
-            ).alias("rsi_14")
+            (100 - 100 / (1 + pl.col("avg_gain") / (pl.col("avg_loss") + 1e-10))).alias("rsi_14")
         )
         return df
+
     def describe(self, df: pl.DataFrame) -> dict[str, Any]:
         """Lightweight describe helper for notebooks."""
         return {
@@ -232,9 +232,11 @@ class AnalystSession:
 
         Returns a dict suitable for ``add_table`` in a ReportBuilder.
         """
-        num_cols = [
-            c for c in df.columns if df[c].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32)
-        ] if numeric_only else df.columns
+        num_cols = (
+            [c for c in df.columns if df[c].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32)]
+            if numeric_only
+            else df.columns
+        )
 
         stats: dict[str, Any] = {"shape": df.shape, "numeric_columns": num_cols, "columns": {}}
         for col in num_cols:
@@ -245,8 +247,8 @@ class AnalystSession:
             outlier_pct = float(((arr < q25 - 1.5 * iqr) | (arr > q75 + 1.5 * iqr)).mean() * 100)
             mean_ = float(arr.mean())
             std_ = float(arr.std())
-            skew_ = float(((arr - mean_) ** 3).mean() / (std_ ** 3 + 1e-10))
-            kurt_ = float(((arr - mean_) ** 4).mean() / (std_ ** 4 + 1e-10)) - 3.0
+            skew_ = float(((arr - mean_) ** 3).mean() / (std_**3 + 1e-10))
+            kurt_ = float(((arr - mean_) ** 4).mean() / (std_**4 + 1e-10)) - 3.0
             stats["columns"][col] = {
                 "count": len(arr),
                 "mean": round(mean_, 6),
@@ -271,6 +273,7 @@ class AnalystSession:
             row = {"column": col, **metrics}
             rows.append(row)
         return pl.DataFrame(rows) if rows else pl.DataFrame()
+
     def run_vector_backtest(
         self,
         df: pl.DataFrame,
@@ -296,6 +299,7 @@ class AnalystSession:
             backtest_df["equity_curve"],
             backtest_df["timestamp"],
         )
+
     def performance_metrics(self, equity_curve: pl.Series | pl.DataFrame) -> dict[str, float]:
         """Compute core performance metrics (Sharpe, total return, max drawdown, vol)."""
         series = self._resolve_equity_series(equity_curve)
@@ -365,9 +369,7 @@ class AnalystSession:
         df = df.with_columns(cols)
         fwd_cols = [f"fwd_ret_{n}" for n in forward_periods]
         df = df.with_columns(
-            pl.concat_list([pl.col(c) for c in fwd_cols])
-            .list.mean()
-            .alias("alpha_score")
+            pl.concat_list([pl.col(c) for c in fwd_cols]).list.mean().alias("alpha_score")
         )
         return df
 

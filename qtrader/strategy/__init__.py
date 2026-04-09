@@ -6,7 +6,7 @@ from qtrader.strategy.signal_engine import SignalEngine
 
 __all__ = [
     "BaseStrategy",
-    "Strategy",
     "EnsembleStrategy",
     "SignalEngine",
+    "Strategy",
 ]

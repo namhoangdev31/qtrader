@@ -1,7 +1,9 @@
 import logging
+
 from qtrader_core import LatencyModel as RustLatencyModel
 
 logger = logging.getLogger(__name__)
+
 
 class LatencyModel(RustLatencyModel):
     """
@@ -18,7 +20,7 @@ class LatencyModel(RustLatencyModel):
         """Initialize Rust latency model."""
         super().__init__(
             base_latency_ms=int(base_network_latency_ms + base_processing_latency_ms),
-            jitter_ms=int(network_jitter_ms + processing_jitter_ms)
+            jitter_ms=int(network_jitter_ms + processing_jitter_ms),
         )
 
     async def get_latency(self) -> float:
@@ -32,7 +34,7 @@ class LatencyModel(RustLatencyModel):
     def get_latency_statistics(self) -> dict[str, float]:
         """Get latency statistics from Rust model."""
         return {
-            'mean_network_latency_ms': float(self.base_latency_ms),
-            'network_latency_stddev_ms': float(self.jitter_ms),
-            'mean_total_latency_ms': float(self.base_latency_ms),
+            "mean_network_latency_ms": float(self.base_latency_ms),
+            "network_latency_stddev_ms": float(self.jitter_ms),
+            "mean_total_latency_ms": float(self.base_latency_ms),
         }

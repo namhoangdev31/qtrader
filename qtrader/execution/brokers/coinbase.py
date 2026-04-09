@@ -135,12 +135,13 @@ class PaperAccount:
 
     def get_positions(self) -> dict[str, list[Any]]:
         """Returns the current positions as a list of lots per symbol.
-        
+
         This satisfies the interface expected by the SignalEngine for exit trigger checks.
         """
         from collections import namedtuple
+
         Lot = namedtuple("Lot", ["avg_price", "qty", "side", "trade_id"])
-        
+
         results: dict[str, list[Any]] = {}
         for sym, qty in self.positions.items():
             if qty == 0:
@@ -151,7 +152,7 @@ class PaperAccount:
                     avg_price=float(avg_p),
                     qty=float(qty),
                     side="BUY" if qty > 0 else "SELL",
-                    trade_id=f"paper-{sym}"
+                    trade_id=f"paper-{sym}",
                 )
             ]
         return results
@@ -292,7 +293,9 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             # High-fidelity shared state
             return {
                 "cash": float(self.sim_engine._cash),
-                "positions": {k: sum(l.qty for l in v) for k, v in self.sim_engine._open_positions.items()},
+                "positions": {
+                    k: sum(l.qty for l in v) for k, v in self.sim_engine._open_positions.items()
+                },
                 "equity": float(self.sim_engine.equity),
                 "realized_pnl": float(self.sim_engine.realized_pnl),
                 "total_commissions": float(self.sim_engine._total_commissions),
@@ -386,11 +389,15 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
                 commission = gross_profit * d(str(self.performance_fee_rate))
                 # Self-learning: Record win
                 self.paper_account.adaptive.record_win(float(gross_profit))
-                logger.info(f"[ADAPTIVE] Profit realized. Win streak optimized: {self.paper_account.adaptive.win_streak}")
+                logger.info(
+                    f"[ADAPTIVE] Profit realized. Win streak optimized: {self.paper_account.adaptive.win_streak}"
+                )
             else:
                 # Self-learning: Record loss
                 self.paper_account.adaptive.record_loss(float(gross_profit))
-                logger.warning(f"[ADAPTIVE] Loss realized. Loss streak detected: {self.paper_account.adaptive.loss_streak}. Adjusting risk...")
+                logger.warning(
+                    f"[ADAPTIVE] Loss realized. Loss streak detected: {self.paper_account.adaptive.loss_streak}. Adjusting risk..."
+                )
 
         session_id = (
             getattr(order.payload, "session_id", None) or self.paper_account.active_session_id
@@ -485,7 +492,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
                     "bid": float(quote.get("bid", 0.0)),
                     "ask": float(quote.get("ask", 0.0)),
                     "top_depth": 10.0,
-                    "venue": "SIMULATED_COINBASE"
+                    "venue": "SIMULATED_COINBASE",
                 }
                 fill = self.sim_engine.simulate_fill(order, market_state)
                 return fill.payload.order_id
@@ -722,20 +729,23 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             return
         self._ws_running = True
         self._ws_task = asyncio.create_task(self._websocket_loop())
-        
+
         # In simulation mode, also listen to internal Redis market feed (Unified Heartbeat)
         if self.simulate and HAS_REDIS and self._redis:
+
             async def redis_market_listener():
                 try:
                     from qtrader.core.events import EventType
+
                     pubsub = self._redis.pubsub()
                     # Subscribe to the key that EventBus uses for MarketData
                     channel = f"{settings.redis_prefix}:{EventType.MARKET_DATA.value}"
                     await pubsub.subscribe(channel)
                     logger.info(f"[SIM_FEED] Listening for unified heartbeat on {channel}")
-                    
+
                     async for message in pubsub.listen():
-                        if not self._ws_running: break
+                        if not self._ws_running:
+                            break
                         if message["type"] == "message":
                             try:
                                 data = json.loads(message["data"])
@@ -826,13 +836,13 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             product_id = data.get("product_id", "")
             bid = d(str(data.get("best_bid", "0")))
             ask = d(str(data.get("best_ask", "0")))
-            
+
             # Ensure price is present for TradingSystem handler
             price = d(str(data.get("price", "0")))
             if price <= 0 and bid > 0 and ask > 0:
                 price = (bid + ask) / d(2)
                 data["price"] = str(price)
-            
+
             if bid > 0 and ask > 0:
                 self.update_quote(product_id, bid, ask)
 

@@ -27,10 +27,10 @@ class ExecutionConfig:
         path = Path(yaml_path)
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {yaml_path}")
-        
+
         with open(path) as f:
             raw = f.read()
-        
+
         # Replace environment variables ${VAR}
         raw = cls._replace_env_vars(raw)
         config_data = yaml.safe_load(raw)
@@ -40,10 +40,12 @@ class ExecutionConfig:
     def _replace_env_vars(text: str) -> str:
         """Replace ${VAR} with environment variable values."""
         import re
+
         def replace(match):
             var_name = match.group(1)
             return os.getenv(var_name, match.group(0))
-        return re.sub(r'\$\{([^}]+)\}', replace, text)
+
+        return re.sub(r"\$\{([^}]+)\}", replace, text)
 
     def get_exchange_config(self, exchange_name: str) -> dict[str, Any] | None:
         """Get configuration for a specific exchange."""

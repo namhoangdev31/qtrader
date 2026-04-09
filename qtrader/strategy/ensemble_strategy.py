@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
 
 import polars as pl
 
+from qtrader.core.events import SignalPayload
 from qtrader.core.types import SignalEvent, ValidatedFeatures
+
 try:
     from qtrader.ml.meta_learning_engine import MetaLearningEngine
 except ImportError:
@@ -106,11 +107,13 @@ class EnsembleStrategy:
         """
         if not self.strategies:
             return SignalEvent(
-                symbol="UNKNOWN",
-                timestamp=datetime.utcnow(),
-                signal_type="HOLD",
-                strength=Decimal("0.0"),
-                metadata={},
+                source="EnsembleStrategy",
+                payload=SignalPayload(
+                    symbol="UNKNOWN",
+                    signal_type="HOLD",
+                    strength=Decimal("0.0"),
+                    metadata={},
+                ),
             )
 
         strategy_signals = {}
@@ -121,11 +124,13 @@ class EnsembleStrategy:
             except Exception as e:
                 _LOG.error(f"Error computing signal for strategy {i}: {e}")
                 strategy_signals[i] = SignalEvent(
-                    symbol="UNKNOWN",
-                    timestamp=datetime.utcnow(),
-                    signal_type="HOLD",
-                    strength=Decimal("0.0"),
-                    metadata={},
+                    source="EnsembleStrategy",
+                    payload=SignalPayload(
+                        symbol="UNKNOWN",
+                        signal_type="HOLD",
+                        strength=Decimal("0.0"),
+                        metadata={},
+                    ),
                 )
 
         self._update_performance(strategy_signals)
@@ -158,24 +163,30 @@ class EnsembleStrategy:
         combined_signal = self._combine_signals(strategy_signals, normalized_weights)
 
         ensemble_signal = SignalEvent(
-            symbol="UNKNOWN",
-            timestamp=datetime.utcnow(),
-            signal_type="ENSEMBLE",
-            strength=float(combined_signal.get("strength", 0.0)),
-            metadata={
-                "buy_prob": combined_signal.get("buy_prob", 0.0),
-                "sell_prob": combined_signal.get("sell_prob", 0.0),
-                "hold_prob": combined_signal.get("hold_prob", 0.0),
-                "strategy_weights": normalized_weights,
-                "signal_components": {
-                    i: {
-                        "signal_type": sig.signal_type,
-                        "strength": float(sig.strength),
-                        "metadata": sig.metadata,
-                    }
-                    for i, sig in strategy_signals.items()
+            source="EnsembleStrategy",
+            payload=SignalPayload(
+                symbol="UNKNOWN",
+                signal_type="ENSEMBLE",
+                strength=Decimal(str(combined_signal.get("strength", 0.0))),
+                metadata={
+                    "buy_prob": combined_signal.get("buy_prob", 0.0),
+                    "sell_prob": combined_signal.get("sell_prob", 0.0),
+                    "hold_prob": combined_signal.get("hold_prob", 0.0),
+                    "strategy_weights": normalized_weights,
+                    "signal_components": {
+                        str(i): {
+                            "signal_type": sig.payload.signal_type
+                            if hasattr(sig, "payload")
+                            else "UNKNOWN",
+                            "strength": float(sig.payload.strength)
+                            if hasattr(sig, "payload")
+                            else 0.0,
+                            "metadata": sig.payload.metadata if hasattr(sig, "payload") else {},
+                        }
+                        for i, sig in strategy_signals.items()
+                    },
                 },
-            },
+            ),
         )
 
         return ensemble_signal
@@ -221,10 +232,7 @@ class EnsembleStrategy:
             return
 
         min_perf = min(avg_performance.values())
-        shifted_perf = {
-            i: perf - min_perf + 1e-8
-            for i, perf in avg_performance.items()
-        }
+        shifted_perf = {i: perf - min_perf + 1e-8 for i, perf in avg_performance.items()}
 
         total_shifted = sum(shifted_perf.values())
         if total_shifted > 0:
@@ -274,9 +282,7 @@ class EnsembleStrategy:
             buy_prob = sell_prob = hold_prob = 1.0 / 3.0
 
         uniform_prob = 1.0 / 3.0
-        strength = (
-            max(0.0, max(buy_prob, sell_prob, hold_prob) - uniform_prob) * 1.5
-        )
+        strength = max(0.0, max(buy_prob, sell_prob, hold_prob) - uniform_prob) * 1.5
 
         return {
             "buy_prob": buy_prob,

@@ -8,6 +8,7 @@ import polars as pl
 @dataclasses.dataclass(slots=True)
 class SimulatedTrade:
     """Standardized virtual trade record for sandbox appraisals."""
+
     timestamp: int
     symbol: str
     side: str
@@ -19,8 +20,8 @@ class SimulatedTrade:
 class SimulatorAdapter:
     """
     Interface for deterministic strategy simulation.
-    
-    Isolates strategies from the production OMS by providing a virtual 
+
+    Isolates strategies from the production OMS by providing a virtual
     matching environment for historical or synthetic data.
     """
 
@@ -38,17 +39,12 @@ class SimulatorAdapter:
         # Simplification: Assume all trades are closed or marked-to-market is not needed yet
         # or assume 'trades' are realized PnL snapshots.
         # institutional-grade: use candle data to mark-to-market.
-        
+
         # For Sandbox purposes, we focus on the realized PnL of trade pairs.
         return pl.DataFrame(self._trades)
 
     def process_signal(
-        self, 
-        timestamp: int, 
-        symbol: str, 
-        side: str, 
-        price: float, 
-        quantity: float
+        self, timestamp: int, symbol: str, side: str, price: float, quantity: float
     ) -> SimulatedTrade | None:
         """
         Match a strategy signal into a virtual trade execution.
@@ -61,7 +57,7 @@ class SimulatorAdapter:
             side=side,
             price=price,
             quantity=quantity,
-            fee=0.0 # Sandbox default
+            fee=0.0,  # Sandbox default
         )
         self._trades.append(trade)
         return trade

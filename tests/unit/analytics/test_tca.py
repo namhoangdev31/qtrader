@@ -14,19 +14,22 @@ from qtrader.analytics.tca_models import TCAReport, TradeCostComponents, get_tca
 def test_analyze_batch() -> None:
     """Test analyzing a batch of trades using Polars."""
     engine = TCAEngine()
-    
+
     # Create a batch of trades
-    df = pl.DataFrame({
-        "timestamp": [datetime(2026, 3, 25, 10, 0, 0), datetime(2026, 3, 25, 10, 5, 0)],
-        "symbol": ["AAPL", "GOOGL"],
-        "side": [1, -1],  # Buy, Sell
-        "quantity": [100.0, 50.0],
-        "decision_price": [100.0, 100.0],
-        "arrival_price": [101.0, 99.0],
-        "fill_price": [102.0, 98.0],
-        "benchmark_price": [101.5, 98.5],
-        "fee_rate": [0.001, 0.002]
-    }, schema=get_tca_input_schema())
+    df = pl.DataFrame(
+        {
+            "timestamp": [datetime(2026, 3, 25, 10, 0, 0), datetime(2026, 3, 25, 10, 5, 0)],
+            "symbol": ["AAPL", "GOOGL"],
+            "side": [1, -1],  # Buy, Sell
+            "quantity": [100.0, 50.0],
+            "decision_price": [100.0, 100.0],
+            "arrival_price": [101.0, 99.0],
+            "fill_price": [102.0, 98.0],
+            "benchmark_price": [101.5, 98.5],
+            "fee_rate": [0.001, 0.002],
+        },
+        schema=get_tca_input_schema(),
+    )
 
     # Process batch
     results_df = engine.analyze_batch(df)
@@ -172,8 +175,8 @@ def test_analyze_sell_trade() -> None:
     assert report.total_timing_slippage == -50.0  # 50 shares * -1.0
     assert report.total_impact_slippage == -50.0  # 50 shares * -1.0
     assert report.total_fee_slippage == pytest.approx(9.8)
-    assert report.total_slippage == pytest.approx(-90.2) # 50 * -1.804
-    assert report.total_vwap_deviation == -25.0 # 50 * -0.5
+    assert report.total_slippage == pytest.approx(-90.2)  # 50 * -1.804
+    assert report.total_vwap_deviation == -25.0  # 50 * -0.5
     assert report.total_fees == pytest.approx(9.8)
 
 

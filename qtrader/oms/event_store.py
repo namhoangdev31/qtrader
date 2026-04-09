@@ -7,13 +7,12 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-
 from qtrader_core import EventStore as RustEventStore
 
 
 class EventStore:
     """High-fidelity persistence layer for system events.
-    
+
     Supports the fundamental architectural requirement: State(t) = Σ Events[0 → t].
     Ensures that for every order, the entire trace of transitions is preserved.
     """
@@ -29,11 +28,11 @@ class EventStore:
         try:
             event_dict = self._serialize(event)
             event_dict["timestamp"] = datetime.utcnow().isoformat()
-            
+
             # Delegate I/O to Rust
             json_payload = json.dumps(event_dict)
             self._rust_store.record_event(json_payload)
-            
+
         except Exception as e:
             self._log.exception("Persistent event logging failed", exc_info=e)
 
@@ -41,7 +40,7 @@ class EventStore:
         """Replay events for a specific order to reconstruct its state."""
         if not os.path.exists(self.log_path):
             return []
-            
+
         trace = []
         with open(self.log_path) as f:
             for line in f:
@@ -56,7 +55,7 @@ class EventStore:
         """Get the last processed sequence ID for a symbol from the log."""
         if not os.path.exists(self.log_path):
             return 0
-            
+
         last_seq = 0
         with open(self.log_path) as f:
             for line in f:
@@ -69,7 +68,7 @@ class EventStore:
         """Fetch the most recent prices for a symbol for statistical validation."""
         if not os.path.exists(self.log_path):
             return []
-            
+
         prices = []
         # In a real system, we'd use a tail-based approach or a cached index.
         # For this implementation, we read backwards or collect all and tail.
@@ -81,24 +80,26 @@ class EventStore:
                     price = data.get("last_price") or data.get("c") or 0.0
                     if price > 0:
                         prices.append(float(price))
-        
+
         return prices[-window_size:]
 
     def get_latest_price_cross_exchange(self, symbol: str, exclude_venue: str) -> float | None:
         """Fetch the latest price for a symbol from a different venue."""
         if not os.path.exists(self.log_path):
             return None
-            
+
         latest_price = None
         with open(self.log_path) as f:
             for line in f:
                 ev = json.loads(line)
                 metadata = ev.get("metadata") or {}
                 venue = metadata.get("venue") or ev.get("venue")
-                
-                if (ev.get("symbol") == symbol and 
-                    ev.get("type") == "MARKET_DATA" and 
-                    venue != exclude_venue):
+
+                if (
+                    ev.get("symbol") == symbol
+                    and ev.get("type") == "MARKET_DATA"
+                    and venue != exclude_venue
+                ):
                     data = ev.get("data", {})
                     price = data.get("last_price") or data.get("c") or 0.0
                     if price > 0:
@@ -109,14 +110,14 @@ class EventStore:
         """Retrieve deltas for a symbol starting from a specific sequence."""
         if not os.path.exists(self.log_path):
             return []
-            
+
         deltas = []
         with open(self.log_path) as f:
             for line in f:
                 ev = json.loads(line)
                 if ev.get("symbol") == symbol and ev.get("seq_id", 0) >= start_seq:
                     deltas.append(ev)
-        
+
         # Ensure deltas are sorted by sequence ID for deterministic replay
         deltas.sort(key=lambda x: x.get("seq_id", 0))
         return deltas
@@ -125,16 +126,16 @@ class EventStore:
         """Deep serialization for events with Decimals/Enums/Pydantic."""
         if hasattr(obj, "model_dump"):
             return self._serialize(obj.model_dump())
-        
+
         if is_dataclass(obj):
             return {k: self._serialize(v) for k, v in asdict(obj).items()}
-        
+
         if isinstance(obj, dict):
             return {k: self._serialize(v) for k, v in obj.items()}
-            
+
         if isinstance(obj, list):
             return [self._serialize(v) for v in obj]
-            
+
         # Combine simple scalar types into a single return path to satisfy Ruff PLR0911
         res = obj
         if isinstance(obj, Decimal):
@@ -149,5 +150,5 @@ class EventStore:
                 json.dumps(obj)
             except (TypeError, OverflowError):
                 res = str(obj)
-            
+
         return res

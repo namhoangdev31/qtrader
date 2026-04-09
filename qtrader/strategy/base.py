@@ -203,10 +203,7 @@ class BaseStrategy:
             ).alias("ev"),
         )
 
-        return {
-            row["symbol"]: float(row["ev"])
-            for row in joined.select("symbol", "ev").to_dicts()
-        }
+        return {row["symbol"]: float(row["ev"]) for row in joined.select("symbol", "ev").to_dicts()}
 
     def win_rate_trailing(self, n: int = 100) -> float:
         """Fraction of profitable trades in the last ``n`` fills.
@@ -246,8 +243,9 @@ class BaseStrategy:
         timestamp = datetime.now()
         # Generate a simple order ID based on symbol and timestamp
         order_id = f"{self.symbol}_{int(timestamp.timestamp())}"
-        
+
         from qtrader.core.events import OrderPayload
+
         return OrderEvent(
             source=f"Strategy:{self.__class__.__name__}",
             timestamp=int(timestamp.timestamp() * 1_000_000),
@@ -258,5 +256,5 @@ class BaseStrategy:
                 quantity=Decimal(str(quantity)),
                 price=Decimal(str(price)) if price is not None else None,
                 order_type=order_type,
-            )
+            ),
         )

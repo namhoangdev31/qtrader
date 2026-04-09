@@ -203,9 +203,16 @@ class TradeDBWriter:
     async def purge_database(self) -> None:
         """NUCLEAR RESET: Drop all tables and re-initialize."""
         tables = [
-            "system_health", "config_changes", "market_data_raw", 
-            "forensic_notes", "ai_thinking_logs", "pnl_snapshots", 
-            "positions", "fills", "orders", "trading_sessions"
+            "system_health",
+            "config_changes",
+            "market_data_raw",
+            "forensic_notes",
+            "ai_thinking_logs",
+            "pnl_snapshots",
+            "positions",
+            "fills",
+            "orders",
+            "trading_sessions",
         ]
         for table in tables:
             try:
@@ -269,8 +276,7 @@ class TradeDBWriter:
                 session_id,
             )
             logger.info(
-                f"[DB] Fill persisted: {symbol} {side} {quantity}@{price} "
-                f"(Session: {session_id})"
+                f"[DB] Fill persisted: {symbol} {side} {quantity}@{price} (Session: {session_id})"
             )
         except Exception as e:
             logger.error(f"[DB] Failed to persist fill: {e}")
@@ -309,10 +315,7 @@ class TradeDBWriter:
                 source,
                 session_id,
             )
-            logger.info(
-                f"[DB] Order persisted: {symbol} {side} {quantity} "
-                f"(Session: {session_id})"
-            )
+            logger.info(f"[DB] Order persisted: {symbol} {side} {quantity} (Session: {session_id})")
         except Exception as e:
             logger.error(f"[DB] Failed to persist order: {e}")
 
@@ -389,7 +392,9 @@ class TradeDBWriter:
             logger.error(f"[DB] Failed to fetch positions: {e}")
             return []
 
-    async def get_recent_fills(self, limit: int = 50, session_id: str | None = None) -> list[dict[str, Any]]:
+    async def get_recent_fills(
+        self, limit: int = 50, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Get recent fills."""
         if session_id:
             query = """
@@ -411,7 +416,9 @@ class TradeDBWriter:
             logger.error(f"[DB] Failed to fetch fills: {e}")
             return []
 
-    async def get_pnl_history(self, limit: int = 100, session_id: str | None = None) -> list[dict[str, Any]]:
+    async def get_pnl_history(
+        self, limit: int = 100, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Get recent PnL snapshots."""
         if session_id:
             query = """
@@ -611,13 +618,13 @@ class TradeDBWriter:
         """
         try:
             await DBClient.execute(
-                query, 
-                symbol, 
-                str(bid) if bid else None, 
-                str(ask) if ask else None, 
-                str(last_price) if last_price else None, 
-                str(volume) if volume else None, 
-                session_id
+                query,
+                symbol,
+                str(bid) if bid else None,
+                str(ask) if ask else None,
+                str(last_price) if last_price else None,
+                str(volume) if volume else None,
+                session_id,
             )
         except Exception as e:
             logger.error(f"[DB] Failed to persist raw market data: {e}")

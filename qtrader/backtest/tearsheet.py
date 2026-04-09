@@ -100,7 +100,10 @@ class TearsheetGenerator:
         Returns:
             TearsheetMetrics dataclass instance.
         """
-        if "net_return" not in backtest_result.columns or "equity_curve" not in backtest_result.columns:
+        if (
+            "net_return" not in backtest_result.columns
+            or "equity_curve" not in backtest_result.columns
+        ):
             raise ValueError("backtest_result must contain 'net_return' and 'equity_curve'.")
 
         net_ret = backtest_result["net_return"].to_numpy()
@@ -177,7 +180,9 @@ class TearsheetGenerator:
                 avg_win_pct = float(np.mean(wins)) if wins.size else 0.0
                 avg_loss_pct = float(np.mean(losses)) if losses.size else 0.0
                 profit_factor = (
-                    float(np.sum(wins) / abs(np.sum(losses))) if losses.size and np.sum(losses) != 0.0 else 0.0
+                    float(np.sum(wins) / abs(np.sum(losses)))
+                    if losses.size and np.sum(losses) != 0.0
+                    else 0.0
                 )
                 expected_value = float(np.mean(tr_np))
 
@@ -279,21 +284,28 @@ class TearsheetGenerator:
         # Compute YTD column
         ytd = (
             monthly.group_by("year")
-            .agg(
-                [
-                    ((pl.col("end").max() / pl.col("start").min() - 1.0) * 100.0).alias(
-                        "YTD"
-                    )
-                ]
-            )
+            .agg([((pl.col("end").max() / pl.col("start").min() - 1.0) * 100.0).alias("YTD")])
             .sort("year")
         )
 
         result = pivot.join(ytd, on="year", how="left")
-        
+
         # Friendly month names for the final output
         rename_map = {
-            str(m): ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1]
+            str(m): [
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ][m - 1]
             for m in range(1, 13)
         }
         return result.rename(rename_map)
@@ -338,9 +350,11 @@ class TearsheetGenerator:
         # Rolling Sharpe (Polars): annualized mean/std over window
         rolling_mean = ret.rolling_mean(rolling_window)
         rolling_std = ret.rolling_std(rolling_window)
-        rolling_sharpe = pl.when(rolling_std > 0).then(
-            rolling_mean / rolling_std * (periods_per_year**0.5)
-        ).otherwise(None)
+        rolling_sharpe = (
+            pl.when(rolling_std > 0)
+            .then(rolling_mean / rolling_std * (periods_per_year**0.5))
+            .otherwise(None)
+        )
 
         # Convert to list for Plotly (no numpy loops; single export)
         ts_list = ts.to_list()
@@ -352,7 +366,9 @@ class TearsheetGenerator:
 
         # 1) Equity Curve
         fig_eq = go.Figure()
-        fig_eq.add_trace(go.Scatter(x=ts_list, y=eq_list, mode="lines", name="Equity", line=dict(width=2)))
+        fig_eq.add_trace(
+            go.Scatter(x=ts_list, y=eq_list, mode="lines", name="Equity", line=dict(width=2))
+        )
         fig_eq.update_layout(
             title=f"{strategy_name} – Equity Curve",
             xaxis_title="Date",
@@ -485,7 +501,9 @@ class TearsheetGenerator:
             html.append(chart_html)
 
         # Simple equity curve listing (table-based).
-        html.append("<h2>Equity Curve (sample)</h2><table><thead><tr><th>Timestamp</th><th>Equity</th><th>Drawdown</th></tr></thead><tbody>")
+        html.append(
+            "<h2>Equity Curve (sample)</h2><table><thead><tr><th>Timestamp</th><th>Equity</th><th>Drawdown</th></tr></thead><tbody>"
+        )
         for row in eq.tail(50).iter_rows(named=True):
             html.append(
                 f"<tr><td>{row['timestamp']}</td><td>{row['equity_curve']:.2f}</td><td>{row['drawdown']:.4f}</td></tr>"
@@ -538,4 +556,3 @@ def test_tearsheet_metrics_from_json_roundtrip(tmp_path) -> None:
     loaded = TearsheetMetrics.from_json(str(p))
     assert loaded.sharpe_ratio == m.sharpe_ratio
 """
-

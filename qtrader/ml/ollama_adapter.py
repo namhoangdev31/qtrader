@@ -136,14 +136,18 @@ class OllamaDecisionAdapter:
             "System: Act as an institutional quantitative trading engine. "
             "Analyze inputs and provide a trading decision in strict JSON format.\n"
         )
-        
+
         if rag_context:
             instruct += (
                 "RAG INSTITUTIONAL MEMORY:\n"
                 "The following 'Elite Exemplars' (past success) or 'Forensic Interventions' (live human directives) were retrieved:\n"
             )
             for i, match in enumerate(rag_context, 1):
-                role = "FORENSIC INTERVENTION" if match.get("regime") == "forensic_intervention" else "HISTORICAL SUCCESS"
+                role = (
+                    "FORENSIC INTERVENTION"
+                    if match.get("regime") == "forensic_intervention"
+                    else "HISTORICAL SUCCESS"
+                )
                 instruct += (
                     f"Match {i} [{role}] (Similarity: {match['similarity']:.2f}):\n"
                     f"  Parameters/Context: {json.dumps(match['parameters'])}\n"
@@ -184,13 +188,13 @@ class OllamaDecisionAdapter:
         try:
             # 1. Basic Cleaning
             clean = response.strip()
-            
+
             # 2. Extract JSON block (find first '{' and last '}')
             start_idx = clean.find("{")
             end_idx = clean.rfind("}")
             if start_idx != -1 and end_idx != -1:
                 clean = clean[start_idx : end_idx + 1]
-            
+
             # 3. Handle truncation in 1B models
             if clean.startswith("{") and not clean.endswith("}"):
                 # Attempt to close the object if it looks like it was cut off
@@ -222,7 +226,7 @@ class OllamaDecisionAdapter:
                 "model": self.model_id,
                 "backend": "ollama",
                 "raw_response": (response if len(response) < MAX_RAW_RESPONSE_LEN else "truncated"),
-                "config_overrides": data.get("config_overrides", {})
+                "config_overrides": data.get("config_overrides", {}),
             },
         )
 

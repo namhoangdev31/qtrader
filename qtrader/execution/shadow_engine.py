@@ -272,14 +272,14 @@ class ShadowEngine:
             volatility = Decimal(str(signal.metadata.get("volatility", 0.02)))
             vol_scaler = 1.0 + (float(volatility) * 10.0)  # Simple linear scaling for simulation
             latency = base_latency * vol_scaler
-            
+
             # Simulated fill time = signal timestamp + latency
             fill_time = signal.timestamp + timedelta(seconds=latency)
 
             # 2. Depth-Aware Execution Simulation
             side = "buy" if signal.signal_type in ["LONG", "EXIT_SHORT"] else "sell"
             quantity = float(abs(signal.strength))
-            
+
             if self.orderbook_simulator:
                 # Prepare order for simulation
                 order = {
@@ -292,17 +292,21 @@ class ShadowEngine:
                     "bids": [(float(p), float(s)) for p, s in orderbook.get("bids", [])],
                     "asks": [(float(p), float(s)) for p, s in orderbook.get("asks", [])],
                 }
-                
+
                 fill_result = self.orderbook_simulator.simulate_order(order, sim_book)
                 fill_price = Decimal(str(fill_result["avg_price"]))
                 slippage = Decimal(str(fill_result["slippage"]))
-                
+
                 # If fill failed (avg_price = 0), use mid-price + penalty
                 if fill_price == 0:
                     best_bid = orderbook["bids"][0][0] if orderbook["bids"] else Decimal("0")
                     best_ask = orderbook["asks"][0][0] if orderbook["asks"] else Decimal("0")
                     mid_price = (best_bid + best_ask) / 2
-                    fill_price = mid_price * Decimal("1.02") if side == "buy" else mid_price * Decimal("0.98")
+                    fill_price = (
+                        mid_price * Decimal("1.02")
+                        if side == "buy"
+                        else mid_price * Decimal("0.98")
+                    )
                     slippage = fill_price - mid_price
             else:
                 # Fallback to mid-price model if no simulator
@@ -522,7 +526,7 @@ class ShadowEngine:
     def can_trade_live(self, symbol: str) -> tuple[bool, str]:
         """
         Final pre-trade check for institutional shadow validation.
-        
+
         Standash §4.13: Shadow Guard.
         """
         if not self.shadow_mode:
@@ -537,7 +541,7 @@ class ShadowEngine:
         # If mean square error between live/shadow fills is too high
         total_error = self.metrics.get("execution_error", 0.0)
         trade_count = len(self.recent_shadow_fills)
-        
+
         if trade_count > 5:
             avg_error = total_error / trade_count
             if avg_error > 0.05:  # 5% tracking error limit

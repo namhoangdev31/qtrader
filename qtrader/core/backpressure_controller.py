@@ -24,11 +24,11 @@ class BackpressureController:
         self,
         warning_threshold: int = 2000,
         throttle_threshold: int = 5000,
-        reject_threshold: int = 10000
+        reject_threshold: int = 10000,
     ) -> None:
         """
         Initialize thresholds for backpressure.
-        
+
         Args:
             warning_threshold: Log warnings above this depth.
             throttle_threshold: Slow down producers above this depth.
@@ -57,7 +57,7 @@ class BackpressureController:
             EventType.FEEDBACK_UPDATE,
             EventType.DRIFT,
         }
-        
+
         if event_type in critical_types:
             return EventPriority.CRITICAL
         if event_type in low_priority_types:
@@ -69,19 +69,19 @@ class BackpressureController:
         Decide whether to drop an incoming event based on current load and priority.
         """
         priority = self.get_priority(event_type)
-        
+
         # Never drop CRITICAL events
         if priority == EventPriority.CRITICAL:
             return False
-            
+
         # Drop LOW priority events early if under pressure
         if queue_size > self.warning_threshold and priority == EventPriority.LOW:
             return True
-            
+
         # Drop NORMAL priority if approaching peak capacity
         if queue_size > self.throttle_threshold and priority == EventPriority.NORMAL:
             return True
-            
+
         return False
 
     def should_throttle(self, queue_size: int) -> bool:

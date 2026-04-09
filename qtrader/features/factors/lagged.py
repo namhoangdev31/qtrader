@@ -109,7 +109,7 @@ class ReturnVolatility(BaseFeature):
         """
         self.validate_inputs(df)
         log_ret = pl.col("close").log(base=2.718281828).diff()
-        ann_vol = log_ret.rolling_std(self.window) * (self.periods_per_year ** 0.5)
+        ann_vol = log_ret.rolling_std(self.window) * (self.periods_per_year**0.5)
         return df.select(ann_vol.alias(self.name))[self.name]
 
 

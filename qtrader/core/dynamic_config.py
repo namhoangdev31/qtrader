@@ -3,17 +3,26 @@ from __future__ import annotations
 import threading
 from enum import Enum
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 from qtrader.core.config import settings
+
+
 class ExecutionStyle(str, Enum):
     AGGRESSIVE = "AGGRESSIVE_TAKER"
     BALANCED = "BALANCED"
     PASSIVE = "PASSIVE_MAKER"
+
+
 class LiveConfigSchema(BaseModel):
     """Schema for all AI-controllable system parameters."""
+
     # Alpha & Signal Logic
     min_confidence: float = Field(default=0.55, description="Required signal confidence to enter")
-    exit_confidence: float = Field(default=0.45, description="Confidence level to trigger early exit")
+    exit_confidence: float = Field(
+        default=0.45, description="Confidence level to trigger early exit"
+    )
     signal_ema_alpha: float = Field(default=0.2, description="Smoothing for signal direction")
     min_signal_streak: int = Field(default=1, description="Required consecutive signals")
     sim_rsi_bull_gate: float = Field(default=45.0, description="RSI threshold for long entry")
@@ -23,19 +32,27 @@ class LiveConfigSchema(BaseModel):
     sim_sma_short_window: int = Field(default=5, description="Short SMA window size")
     sim_sma_long_window: int = Field(default=10, description="Long SMA window size")
     sim_crossover_threshold: float = Field(default=0.0001, description="Min SMA delta for signal")
-    sim_reversal_threshold: float = Field(default=0.35, description="Threshold for reversal detection")
-    sim_mean_reversion_strength: float = Field(default=0.01, description="Strength of drift towards base price")
-    
+    sim_reversal_threshold: float = Field(
+        default=0.35, description="Threshold for reversal detection"
+    )
+    sim_mean_reversion_strength: float = Field(
+        default=0.01, description="Strength of drift towards base price"
+    )
+
     # Execution & Simulation Fidelity
     stop_loss_pct: float = Field(default=0.025, description="Dynamic SL base percentage")
     take_profit_pct: float = Field(default=0.05, description="Dynamic TP base percentage")
-    trailing_stop_activation_pct: float = Field(default=0.03, description="Profit level to activate trailing SL")
+    trailing_stop_activation_pct: float = Field(
+        default=0.03, description="Profit level to activate trailing SL"
+    )
     sim_taker_fee: float = Field(default=0.0006, description="Simulated taker fee (decimal)")
     sim_maker_fee: float = Field(default=0.0002, description="Simulated maker fee (decimal)")
     sim_latency_min_ms: float = Field(default=50.0, description="Min simulation latency")
     sim_latency_max_ms: float = Field(default=300.0, description="Max simulation latency")
-    sim_slippage_vol_mult: float = Field(default=0.5, description="Multiplier for slippage volatility")
-    
+    sim_slippage_vol_mult: float = Field(
+        default=0.5, description="Multiplier for slippage volatility"
+    )
+
     # Risk & System Environment
     max_drawdown_limit: float = Field(default=0.15, description="Hard drawdown limit")
     max_consecutive_losses: int = Field(default=20, description="Circuit breaker threshold")
@@ -43,21 +60,33 @@ class LiveConfigSchema(BaseModel):
     position_size_pct: float = Field(default=0.20, description="Max capital allocation per trade")
     min_hold_time_s: int = Field(default=5, description="Minimum duration for a trade")
     ts_max_orders_per_second: float = Field(default=10.0, description="Rate limit (orders/sec)")
-    lifecycle_sentiment_interval: float = Field(default=600.0, description="Sentiment refresh rate (s)")
+    lifecycle_sentiment_interval: float = Field(
+        default=600.0, description="Sentiment refresh rate (s)"
+    )
     sim_anomaly_threshold: float = Field(default=0.01, description="Price jump anomaly trigger")
-    
+
     # Simulation Data & Baselines
     reference_price_btc: float = Field(default=71522.97, description="Simulator baseline BTC")
     reference_price_eth: float = Field(default=3500.0, description="Simulator baseline ETH")
     max_md_points: int = Field(default=5000, description="Max market data points in memory")
     md_prune_target: int = Field(default=1000, description="Points to retain on prune")
-    active_strategy: str = Field(default="MOMENTUM", description="Currently active trading strategy")
+    active_strategy: str = Field(
+        default="MOMENTUM", description="Currently active trading strategy"
+    )
     ml_weight: float = Field(default=0.6, description="Weight for ML signals (0.0-1.0)")
-    traditional_weight: float = Field(default=0.4, description="Weight for technical signals (0.0-1.0)")
+    traditional_weight: float = Field(
+        default=0.4, description="Weight for technical signals (0.0-1.0)"
+    )
     signal_interval_s: float = Field(default=1.0, description="Signal processing tick interval")
-    volatility_multiplier: float = Field(default=1.0, description="Scaling factor for signal thresholds")
+    volatility_multiplier: float = Field(
+        default=1.0, description="Scaling factor for signal thresholds"
+    )
     min_history_for_alpha: int = Field(default=20, description="Min price points for ML prediction")
-    current_market_price: float = Field(default=71522.97, description="Latest market price from WebSocket")
+    current_market_price: float = Field(
+        default=71522.97, description="Latest market price from WebSocket"
+    )
+
+
 class DynamicConfigManager:
     """Manages system configuration with real-time AI overrides."""
 
@@ -100,7 +129,7 @@ class DynamicConfigManager:
         old_value = self.get(key)
         with self._lock:
             self._overrides[key] = value
-        
+
         if self._change_callback:
             try:
                 self._change_callback(key, old_value, value)
@@ -126,70 +155,119 @@ class DynamicConfigManager:
                 full_state[k.lower()] = v
         return full_state
 
+
 config_manager = DynamicConfigManager()
+
 
 class DynamicSettingsMixin:
     """Provides reactive properties for simulation and risk parameters.
-    
-    Classes inheriting from this mixin automatically gain access to 
+
+    Classes inheriting from this mixin automatically gain access to
     dynamically tunable settings that can be overridden by AI at runtime.
     """
-    
+
     # --- Dynamic Configuration Properties (AI Controllable) ---
     @property
-    def TAKER_FEE(self) -> float: return config_manager.get("sim_taker_fee")
+    def TAKER_FEE(self) -> float:
+        return config_manager.get("sim_taker_fee")
+
     @property
-    def MAKER_FEE(self) -> float: return config_manager.get("sim_maker_fee")
+    def MAKER_FEE(self) -> float:
+        return config_manager.get("sim_maker_fee")
+
     @property
-    def LATENCY_MIN_MS(self) -> float: return config_manager.get("sim_latency_min_ms")
+    def LATENCY_MIN_MS(self) -> float:
+        return config_manager.get("sim_latency_min_ms")
+
     @property
-    def LATENCY_MAX_MS(self) -> float: return config_manager.get("sim_latency_max_ms")
+    def LATENCY_MAX_MS(self) -> float:
+        return config_manager.get("sim_latency_max_ms")
+
     @property
-    def SLIPPAGE_VOL_MULT(self) -> float: return config_manager.get("sim_slippage_vol_mult")
+    def SLIPPAGE_VOL_MULT(self) -> float:
+        return config_manager.get("sim_slippage_vol_mult")
+
     @property
-    def ANOMALY_THRESHOLD(self) -> float: return config_manager.get("sim_anomaly_threshold")
-    
+    def ANOMALY_THRESHOLD(self) -> float:
+        return config_manager.get("sim_anomaly_threshold")
+
     @property
-    def RSI_BULL_GATE(self) -> float: return config_manager.get("sim_rsi_bull_gate")
+    def RSI_BULL_GATE(self) -> float:
+        return config_manager.get("sim_rsi_bull_gate")
+
     @property
-    def RSI_BEAR_GATE(self) -> float: return config_manager.get("sim_rsi_bear_gate")
+    def RSI_BEAR_GATE(self) -> float:
+        return config_manager.get("sim_rsi_bear_gate")
+
     @property
-    def RSI_OVERSOLD(self) -> float: return config_manager.get("sim_rsi_oversold")
+    def RSI_OVERSOLD(self) -> float:
+        return config_manager.get("sim_rsi_oversold")
+
     @property
-    def RSI_OVERBOUGHT(self) -> float: return config_manager.get("sim_rsi_overbought")
+    def RSI_OVERBOUGHT(self) -> float:
+        return config_manager.get("sim_rsi_overbought")
+
     @property
-    def REVERSAL_THRESHOLD(self) -> float: return config_manager.get("sim_reversal_threshold")
-    
+    def REVERSAL_THRESHOLD(self) -> float:
+        return config_manager.get("sim_reversal_threshold")
+
     @property
-    def SMA_SHORT_WINDOW(self) -> int: return config_manager.get("sim_sma_short_window")
+    def SMA_SHORT_WINDOW(self) -> int:
+        return config_manager.get("sim_sma_short_window")
+
     @property
-    def SMA_LONG_WINDOW(self) -> int: return config_manager.get("sim_sma_long_window")
+    def SMA_LONG_WINDOW(self) -> int:
+        return config_manager.get("sim_sma_long_window")
+
     @property
-    def CROSSOVER_THRESHOLD(self) -> float: return config_manager.get("sim_crossover_threshold")
+    def CROSSOVER_THRESHOLD(self) -> float:
+        return config_manager.get("sim_crossover_threshold")
+
     @property
-    def MEAN_REVERSION_STRENGTH(self) -> float: return config_manager.get("sim_mean_reversion_strength")
-    
+    def MEAN_REVERSION_STRENGTH(self) -> float:
+        return config_manager.get("sim_mean_reversion_strength")
+
     @property
-    def TS_MAX_ORDERS_PER_SECOND(self) -> float: return config_manager.get("ts_max_orders_per_second")
+    def TS_MAX_ORDERS_PER_SECOND(self) -> float:
+        return config_manager.get("ts_max_orders_per_second")
+
     @property
-    def MARKET_PRICE(self) -> float: return config_manager.get("current_market_price")
-    
+    def MARKET_PRICE(self) -> float:
+        return config_manager.get("current_market_price")
+
     # --- Static Settings (Non-AI yet or hard limits) ---
     @property
-    def ERROR_PROBABILITY(self) -> float: return settings.SIM_ERROR_PROBABILITY
+    def ERROR_PROBABILITY(self) -> float:
+        return settings.SIM_ERROR_PROBABILITY
+
     @property
-    def PRICE_HISTORY_LIMIT(self) -> int: return settings.SIM_PRICE_HISTORY_LIMIT
+    def PRICE_HISTORY_LIMIT(self) -> int:
+        return settings.SIM_PRICE_HISTORY_LIMIT
+
     @property
-    def PRICE_HISTORY_PRUNE(self) -> int: return settings.SIM_PRICE_HISTORY_PRUNE
+    def PRICE_HISTORY_PRUNE(self) -> int:
+        return settings.SIM_PRICE_HISTORY_PRUNE
+
     @property
-    def MIN_HISTORY_FOR_ANALYSIS(self) -> int: return config_manager.get("min_history_for_alpha")
+    def MIN_HISTORY_FOR_ANALYSIS(self) -> int:
+        return config_manager.get("min_history_for_alpha")
+
     @property
-    def RSI_PERIOD(self) -> int: return settings.SIM_RSI_PERIOD
+    def RSI_PERIOD(self) -> int:
+        return settings.SIM_RSI_PERIOD
+
     @property
-    def MIN_TRADE_NOTIONAL(self) -> float: return settings.SIM_MIN_TRADE_NOTIONAL
+    def MIN_TRADE_NOTIONAL(self) -> float:
+        return settings.SIM_MIN_TRADE_NOTIONAL
+
     @property
-    def EPSILON_QTY(self) -> float: return settings.SIM_EPSILON_QTY
+    def EPSILON_QTY(self) -> float:
+        return settings.SIM_EPSILON_QTY
+
     @property
-    def THINKING_HISTORY_LIMIT(self) -> int: return settings.SIM_THINKING_HISTORY_LIMIT
+    def THINKING_HISTORY_LIMIT(self) -> int:
+        return settings.SIM_THINKING_HISTORY_LIMIT
+
     @property
-    def EXTERNAL_TICK_TIMEOUT(self) -> float: return settings.SIM_EXTERNAL_TICK_TIMEOUT
+    def EXTERNAL_TICK_TIMEOUT(self) -> float:
+        return settings.SIM_EXTERNAL_TICK_TIMEOUT

@@ -75,6 +75,7 @@ class SpreadDynamicsModel:
 
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             # High-performance silent failover for industrial-grade stability
             if self._spreads:

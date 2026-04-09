@@ -52,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if sim_mode:
         try:
             from decimal import Decimal
+
             await system.db_writer.initialize()
             balance = await system.broker.get_paper_balance()
             session_id = await system.db_writer.start_session(
@@ -65,7 +66,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.error(f"[SIM] Failed to create DB session: {e}")
 
         # Start simulation with DB bridge injected
-        from qtrader.api.router import start_simulation, get_sim_engine
+        from qtrader.api.router import get_sim_engine, start_simulation
+
         await start_simulation(system)
         engine = get_sim_engine()
 
@@ -82,7 +84,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if session_id:
         try:
             from decimal import Decimal
+
             from qtrader.api.router import get_sim_engine
+
             engine = get_sim_engine()
             await system.db_writer.stop_session(
                 session_id=session_id,
@@ -96,6 +100,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if bg_task:
         bg_task.cancel()
     from qtrader.api.router import stop_simulation
+
     await stop_simulation()
 
 

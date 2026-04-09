@@ -9,7 +9,7 @@ When activated during extreme market conditions, the system:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -18,8 +18,12 @@ try:
     import qtrader_core
     from qtrader_core import WarModeState as RustWarModeState
 except ImportError as e:
-    _LOG.error("[WAR_MODE] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
-    raise ImportError("qtrader_core is a mandatory dependency for institutional safety orchestration") from e
+    _LOG.error(
+        "[WAR_MODE] Institutional Risk Core (qtrader_core) is missing. System startup blocked."
+    )
+    raise ImportError(
+        "qtrader_core is a mandatory dependency for institutional safety orchestration"
+    ) from e
 
 
 class WarModeState(str, Enum):
@@ -44,8 +48,7 @@ class WarModeConfig:
 
 
 class WarModeEngine:
-    """Capital Preservation Mode engine synchronized with Rust RiskCore.
-    """
+    """Capital Preservation Mode engine synchronized with Rust RiskCore."""
 
     def __init__(self, rust_engine: Any, config: WarModeConfig | None = None) -> None:
         """Initialize with an authoritative Rust engine instance."""
@@ -66,7 +69,7 @@ class WarModeEngine:
             Current system state mapped from Rust.
         """
         rust_state = self._rust_engine.get_state()
-        state_str = str(rust_state).split('.')[-1].upper()
+        state_str = str(rust_state).split(".")[-1].upper()
         if "WAR" in state_str:
             return WarModeState.WAR_MODE
         if "HALT" in state_str:
@@ -80,13 +83,12 @@ class WarModeEngine:
         is_hedge: bool,
         is_unwind: bool,
     ) -> tuple[bool, str]:
-        """Verify order legality via Rust engine's internal logic.
-        """
-        state = self.evaluate_state(0, 0, 0, 0) # Placeholder params for mapping
-        
+        """Verify order legality via Rust engine's internal logic."""
+        state = self.evaluate_state(0, 0, 0, 0)  # Placeholder params for mapping
+
         if state == WarModeState.NORMAL:
             return True, "Normal operations"
-            
+
         if state == WarModeState.HALTED:
             return False, "SYSTEM_HALTED: All trading blocked"
 

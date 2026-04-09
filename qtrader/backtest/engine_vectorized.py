@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +6,7 @@ import polars as pl
 
 try:
     import qtrader_core
+
     HAS_RUST_CORE = True
 except ImportError:
     HAS_RUST_CORE = False
@@ -94,7 +94,9 @@ class VectorizedEngine:
             sigma_daily = (
                 pl.col(price_col).pct_change().rolling_std(_ROLLING_VOL_WINDOW).fill_null(0.0)
             )
-            order_size_shares = (initial_capital * pl.col("_turnover") / pl.col(price_col)).fill_null(0.0)
+            order_size_shares = (
+                initial_capital * pl.col("_turnover") / pl.col(price_col)
+            ).fill_null(0.0)
             daily_vol = pl.col(volume_col).replace(0.0, None).fill_null(1e10)
             ratio = (order_size_shares / daily_vol).clip(upper_bound=1.0)
             impact_bps = (sigma_daily * ratio.sqrt()).fill_null(0.0)
@@ -136,9 +138,7 @@ class VectorizedEngine:
             )
 
         df_out = df_out.with_columns(
-            (
-                pl.col("equity_curve") / pl.col("equity_curve").cum_max() - 1.0
-            ).alias("drawdown"),
+            (pl.col("equity_curve") / pl.col("equity_curve").cum_max() - 1.0).alias("drawdown"),
         )
         return df_out
 
@@ -180,9 +180,7 @@ class VectorizedEngine:
         if len(weights) != n:
             raise ValueError("weights length must match signal_cols length.")
 
-        composite_expr = sum(
-            w * pl.col(c) for w, c in zip(weights, signal_cols, strict=True)
-        )
+        composite_expr = sum(w * pl.col(c) for w, c in zip(weights, signal_cols, strict=True))
         df_comp = df.with_columns(composite_expr.alias("_composite_signal"))
         return self.backtest(
             df=df_comp,
@@ -238,14 +236,8 @@ class VectorizedEngine:
 
         df_ranked = df_sorted.with_columns(rebalance_key.alias("_rebal_key"))
         df_ranked = df_ranked.with_columns(
-            pl.col("signal")
-            .rank("dense", descending=True)
-            .over("_rebal_key")
-            .alias("_rank_desc"),
-            pl.col("signal")
-            .rank("dense", descending=False)
-            .over("_rebal_key")
-            .alias("_rank_asc"),
+            pl.col("signal").rank("dense", descending=True).over("_rebal_key").alias("_rank_desc"),
+            pl.col("signal").rank("dense", descending=False).over("_rebal_key").alias("_rank_asc"),
         )
 
         # Define target weights per rebalance.
@@ -262,41 +254,33 @@ class VectorizedEngine:
         df_weights = df_weights.with_columns(
             (
                 pl.col("_raw_weight")
-                / pl.col("_raw_weight").abs().sum().over("_rebal_key").replace(
-                    0.0, None
-                ).fill_null(1.0)
+                / pl.col("_raw_weight")
+                .abs()
+                .sum()
+                .over("_rebal_key")
+                .replace(0.0, None)
+                .fill_null(1.0)
             ).alias("weight"),
         )
 
         # LOOKAHEAD PREVENTION: lag weights by one bar per symbol.
         df_weights = df_weights.with_columns(
-            pl.col("weight")
-            .shift(1)
-            .over("symbol")
-            .fill_null(0.0)
-            .alias("exec_weight")
+            pl.col("weight").shift(1).over("symbol").fill_null(0.0).alias("exec_weight")
         )
 
         df_weights = df_weights.with_columns(
-            pl.col("close")
-            .pct_change()
-            .over("symbol")
-            .alias("_asset_return")
+            pl.col("close").pct_change().over("symbol").alias("_asset_return")
         )
 
         df_weights = df_weights.with_columns(
-            (pl.col("exec_weight") * pl.col("_asset_return")).alias(
-                "symbol_return_contribution"
-            )
+            (pl.col("exec_weight") * pl.col("_asset_return")).alias("symbol_return_contribution")
         )
 
         portfolio = (
             df_weights.group_by("timestamp")
             .agg(
                 [
-                    pl.col("symbol_return_contribution")
-                    .sum()
-                    .alias("portfolio_return"),
+                    pl.col("symbol_return_contribution").sum().alias("portfolio_return"),
                     pl.col("exec_weight").diff().abs().sum().alias("turnover"),
                 ]
             )
@@ -305,33 +289,19 @@ class VectorizedEngine:
 
         cost = transaction_cost_bps / 10_000.0
         portfolio = portfolio.with_columns(
-            [
-                (pl.col("portfolio_return") - pl.col("turnover") * cost).alias(
-                    "net_return"
-                )
-            ]
+            [(pl.col("portfolio_return") - pl.col("turnover") * cost).alias("net_return")]
         )
         portfolio = portfolio.with_columns(
             [
-                (pl.col("net_return") + 1.0)
-                .cum_prod()
-                .alias("equity_curve"),
+                (pl.col("net_return") + 1.0).cum_prod().alias("equity_curve"),
             ]
         )
         portfolio = portfolio.with_columns(
-            [
-                (
-                    pl.col("equity_curve")
-                    / pl.col("equity_curve").cum_max()
-                    - 1.0
-                ).alias("drawdown")
-            ]
+            [(pl.col("equity_curve") / pl.col("equity_curve").cum_max() - 1.0).alias("drawdown")]
         )
 
         # Attach per-symbol contributions if needed.
-        contrib = df_weights.select(
-            ["timestamp", "symbol", "symbol_return_contribution"]
-        )
+        contrib = df_weights.select(["timestamp", "symbol", "symbol_return_contribution"])
         result = portfolio.join(contrib, on="timestamp", how="left")
         return result
 
@@ -348,7 +318,7 @@ class VectorizedEngine:
     ) -> tuple[pl.Series, float]:
         """
         Run a high-fidelity tick-by-tick backtest using the Rust HFT Simulator.
-        
+
         Requires L1 columns: bid_price, ask_price, bid_size, ask_size.
         """
         if not HAS_RUST_CORE:
@@ -366,7 +336,7 @@ class VectorizedEngine:
             fee_rate=fee_rate,
             slippage_bps=slippage_bps,
             max_position_usd=max_position_usd,
-            max_drawdown_pct=max_drawdown_pct
+            max_drawdown_pct=max_drawdown_pct,
         )
 
         # 2. Extract Native Data
@@ -386,7 +356,7 @@ class VectorizedEngine:
             ask_prices,
             bid_sizes,
             ask_sizes,
-            signals
+            signals,
         )
 
         return pl.Series(name="equity_curve", values=equity_curve_arr), final_pnl
@@ -408,4 +378,3 @@ if __name__ == "__main__":
     _engine = VectorizedEngine()
     _res = _engine.backtest(_df, signal_col="signal")
     assert "equity_curve" in _res.columns
-

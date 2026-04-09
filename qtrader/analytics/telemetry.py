@@ -5,7 +5,7 @@ from typing import Any
 
 class Telemetry:
     """Institutional-grade metrics exporter for Prometheus/Grafana."""
-    
+
     def __init__(self) -> None:
         self.metrics: dict[str, Any] = {}
         # In a real system, use prometheus_client library here
@@ -22,7 +22,7 @@ class Telemetry:
     def record_pnl(self, strategy_id: str, pnl: float) -> None:
         """Records real-time PnL."""
         logging.info(f"METRIC | Strategy {strategy_id} PnL: {pnl:.4f}")
-        
+
     def export(self) -> dict[str, Any]:
         """Placeholder for Prometheus scraping endpoint logic."""
         return self.metrics

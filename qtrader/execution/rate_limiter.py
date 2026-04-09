@@ -1,14 +1,16 @@
 """Token Bucket Rate Limiter for Python-side safety checks."""
 
-import time
 import asyncio
+import time
 from threading import Lock
+
 
 class TokenBucketRateLimiter:
     """
     Thread-safe Token Bucket Rate Limiter to enforce account-level or system-level limits.
     Can be used in both async and sync contexts.
     """
+
     def __init__(self, capacity: float, refill_rate: float):
         """
         Args:

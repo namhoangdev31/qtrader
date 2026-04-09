@@ -53,8 +53,8 @@ from qtrader.analytics.accounting import FundAccountingEngine
 from qtrader.analytics.drift import DriftMonitor
 from qtrader.analytics.tca_engine import TCAEngine
 from qtrader.core.config import settings
-from qtrader.core.dynamic_config import DynamicConfigManager
 from qtrader.core.decimal_adapter import math_authority
+from qtrader.core.dynamic_config import DynamicConfigManager
 from qtrader.core.execution_wrapper import execution_wrapper
 from qtrader.core.logger import log_event
 from qtrader.core.metrics import metrics
@@ -86,6 +86,7 @@ from qtrader.portfolio.risk_monitor import RealTimeRiskMonitor
 
 try:
     from qtrader_core import LedgerEngine, LedgerEntry
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False
@@ -983,7 +984,7 @@ class TradingOrchestrator:
             # Institutional Double-Entry: Fill Amount + Contra-Account Offset
             fill_amount = float(-quantity_dec * price_dec)
             fee_amount = float(fill_event.payload.fee or 0)
-            
+
             # Asset Entry (e.g., USD Balance change)
             entry_cash = LedgerEntry(
                 tx_id=str(trace_id),
@@ -998,13 +999,16 @@ class TradingOrchestrator:
                 amount=-(fill_amount - fee_amount),
                 entry_type="CONTRA",
             )
-            
+
             from qtrader_core import Transaction
+
             tx = Transaction(entries=[entry_cash, entry_contra])
-            
+
             try:
                 self.ledger_engine.record_transaction(tx)
-                logger.debug(f"ORCHESTRATOR_LEDGER | Recorded ATOMIC transaction | Trace: {trace_id}")
+                logger.debug(
+                    f"ORCHESTRATOR_LEDGER | Recorded ATOMIC transaction | Trace: {trace_id}"
+                )
             except Exception as e:
                 logger.error(f"ORCHESTRATOR_LEDGER_FAILURE | Transaction rejected: {e}")
 

@@ -71,4 +71,3 @@ async def request_json(
             continue
 
     raise last_exc or RuntimeError("request_json failed unexpectedly")
-

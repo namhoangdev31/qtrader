@@ -20,8 +20,10 @@ Signal = SignalEvent
 Order = OrderEvent
 Fill = FillEvent
 
+
 class Side:
     """Side of an order or signal."""
+
     BUY = "BUY"
     SELL = "SELL"
     Buy = "BUY"  # Compatibility with lowercase/PascalCase tests
@@ -32,6 +34,7 @@ class Side:
 @dataclass
 class MarketData:
     """Market data tick."""
+
     symbol: str
     timestamp: datetime
     open: Decimal
@@ -46,6 +49,7 @@ class MarketData:
 @dataclass
 class AlphaOutput:
     """Output from alpha generation."""
+
     symbol: str
     timestamp: datetime
     alpha_values: dict[str, Decimal]  # alpha name -> value
@@ -56,6 +60,7 @@ class AlphaOutput:
 @dataclass
 class ValidatedFeatures:
     """Features that have passed validation."""
+
     symbol: str
     timestamp: datetime
     features: dict[str, Decimal]
@@ -67,6 +72,7 @@ class ValidatedFeatures:
 @dataclass
 class AllocationWeights:
     """Portfolio allocation weights."""
+
     timestamp: datetime
     weights: dict[str, Decimal]  # symbol -> weight (should sum to 1.0 or less)
     trace_id: str
@@ -76,6 +82,7 @@ class AllocationWeights:
 @dataclass
 class RiskMetrics:
     """Risk metrics for a portfolio or position."""
+
     timestamp: datetime
     portfolio_var: Decimal  # Value at Risk
     portfolio_volatility: Decimal
@@ -102,15 +109,18 @@ class ConfigProtocol(Protocol):
 @dataclass
 class IngestionTrace:
     """Forensic trace for the ingestion stage."""
+
     price: float
     volatility: float
     spread_bps: float
     is_live: bool
     timestamp: str
 
+
 @dataclass
 class AlphaTrace:
     """Forensic trace for the alpha stage."""
+
     model_name: str
     action: str
     confidence: float
@@ -118,9 +128,11 @@ class AlphaTrace:
     forecast: list[float] | None = None
     reasoning: str | None = None
 
+
 @dataclass
 class RiskTrace:
     """Forensic trace for the risk stage."""
+
     initial_stop_loss: float
     initial_take_profit: float
     adjusted_stop_loss: float
@@ -129,18 +141,22 @@ class RiskTrace:
     notional_usd: float
     risk_score: float
 
+
 @dataclass
 class ExecutionTrace:
     """Forensic trace for the execution stage."""
+
     order_id: str
     fill_price: float
     slippage_bps: float
     fee_usd: float
     status: str
 
+
 @dataclass
 class PipelineTrace:
     """Complete forensic trace of a single pipeline pulse."""
+
     trace_id: str
     timestamp: str
     ingestion: IngestionTrace | None = None

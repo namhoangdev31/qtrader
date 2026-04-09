@@ -19,7 +19,7 @@ logger = logging.getLogger("qtrader.ml.remote_client")
 
 HTTP_OK = 200
 DEFAULT_TIMEOUT = 5.0
-PREDICT_TIMEOUT = 180.0 # Increased to accommodate 3-stage LLM pipeline on CPU
+PREDICT_TIMEOUT = 180.0  # Increased to accommodate 3-stage LLM pipeline on CPU
 
 
 class RemoteAtomicTrioPipeline:
@@ -97,7 +97,7 @@ class RemoteAtomicTrioPipeline:
                         logger.error(f"[REMOTE_ML] Prediction failed ({resp.status}): {error_text}")
             except Exception as e:
                 # Use repr(e) to ensure we see the exception type even if str(e) is empty
-                logger.error(f"[REMOTE_ML] Prediction connection error: {repr(e)}")
+                logger.error(f"[REMOTE_ML] Prediction connection error: {e!r}")
 
         # Fallback to empty result on error
         latency = (time.time() - start_t) * 1000

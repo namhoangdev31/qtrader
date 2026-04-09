@@ -38,9 +38,12 @@ def rolling_zscore(series: pl.Series, window: int) -> pl.Series:
     name = series.name or "zscore"
     rolling_mean = series.rolling_mean(window)
     rolling_std = series.rolling_std(window)
-    return pl.when(rolling_std == 0.0).then(None).otherwise(
-        (series - rolling_mean) / rolling_std
-    ).alias(f"{name}_zscore")
+    return (
+        pl.when(rolling_std == 0.0)
+        .then(None)
+        .otherwise((series - rolling_mean) / rolling_std)
+        .alias(f"{name}_zscore")
+    )
 
 
 def cross_sectional_rank(
@@ -69,16 +72,14 @@ def cross_sectional_rank(
     if timestamp_col not in df.columns:
         raise ValueError(f"Timestamp column '{timestamp_col}' not found.")
 
-    ranked = (
-        pl.col(col)
-        .rank(method="average")
-        .over(timestamp_col)
-    )
+    ranked = pl.col(col).rank(method="average").over(timestamp_col)
     # Normalize to [0, 1]: (rank - min) / (max - min)
     rank_min = pl.col(col).rank(method="average").min().over(timestamp_col)
     rank_max = pl.col(col).rank(method="average").max().over(timestamp_col)
-    normalized = pl.when(rank_max == rank_min).then(0.5).otherwise(
-        (ranked - rank_min) / (rank_max - rank_min)
+    normalized = (
+        pl.when(rank_max == rank_min)
+        .then(0.5)
+        .otherwise((ranked - rank_min) / (rank_max - rank_min))
     )
     return df.select(normalized.alias(f"{col}_cs_rank"))[f"{col}_cs_rank"]
 
@@ -198,9 +199,7 @@ def cross_sectional_zscore(
     """
     mean_expr = pl.col(col).mean().over(timestamp_col)
     std_expr = pl.col(col).std().over(timestamp_col)
-    zscore_expr = pl.when(std_expr == 0.0).then(0.0).otherwise(
-        (pl.col(col) - mean_expr) / std_expr
-    )
+    zscore_expr = pl.when(std_expr == 0.0).then(0.0).otherwise((pl.col(col) - mean_expr) / std_expr)
     return df.select(zscore_expr.alias(f"{col}_cs_zscore"))[f"{col}_cs_zscore"]
 
 

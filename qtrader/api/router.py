@@ -27,7 +27,6 @@ from qtrader.core.events import (
     OrderEvent,
     OrderPayload,
 )
-
 from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.trading_system import TradingSystem
@@ -66,15 +65,20 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
     if sys:
         if not sys._running:
             await sys.start()
-            logger.info(f"[SIM] Started TradingSystem Orchestrator (Session: {sys.active_session_id})")
+            logger.info(
+                f"[SIM] Started TradingSystem Orchestrator (Session: {sys.active_session_id})"
+            )
 
         if sys.db_writer and sys.active_session_id:
             engine.set_db_writer(sys.db_writer, sys.active_session_id)
             engine.set_event_bus(sys.event_bus)
-            logger.info(f"[SIM] Unified Persistence Layer & EventBus for Session {sys.active_session_id}")
+            logger.info(
+                f"[SIM] Unified Persistence Layer & EventBus for Session {sys.active_session_id}"
+            )
 
         try:
             from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
+
             if isinstance(sys.broker, CoinbaseBrokerAdapter):
                 sys.broker.sim_engine = engine
                 logger.info("[SIM] Injected PaperTradingEngine into CoinbaseBrokerAdapter")
@@ -84,7 +88,9 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
             if real_price > 0:
                 engine.update_base_price(real_price, force_current=True)
                 engine.clear_history()
-                logger.info(f"[SIM] Synced simulation to real price: {real_price:.2f} and cleared history")
+                logger.info(
+                    f"[SIM] Synced simulation to real price: {real_price:.2f} and cleared history"
+                )
 
             if not _is_subscribed:
                 sys.event_bus.subscribe(EventType.MARKET_DATA, engine.handle_market_event)
@@ -174,6 +180,7 @@ async def update_sim_config(cfg: SimulationConfig) -> dict[str, Any]:
 
 # --- Session Management ---
 
+
 @session_router.post("/start")
 async def start_session(
     metadata: dict[str, Any] | None = None, sys: TradingSystem = Depends(get_system)
@@ -185,15 +192,15 @@ async def start_session(
             "status": "started",
             "message": "Connected to active session",
             "session_id": active["session_id"],
-            "mode": active.get("mode", "UNKNOWN")
+            "mode": active.get("mode", "UNKNOWN"),
         }
 
     await sys.start()
-    
+
     return {
-        "status": "started", 
-        "session_id": sys.active_session_id, 
-        "mode": "PAPER" if sys.config.simulate else "LIVE"
+        "status": "started",
+        "session_id": sys.active_session_id,
+        "mode": "PAPER" if sys.config.simulate else "LIVE",
     }
 
 
@@ -212,14 +219,17 @@ async def stop_session(
     if not s_id:
         # Fallback to DB
         active = await writer.get_active_session()
-        if active: s_id = active["session_id"]
+        if active:
+            s_id = active["session_id"]
 
     if not s_id:
-         raise HTTPException(status_code=404, detail="No session identifier found to analyze")
+        raise HTTPException(status_code=404, detail="No session identifier found to analyze")
 
     # Generate forensic report from finalized DB data
     # Note: sys.stop() already closed the DB session recording.
-    report = await analyzer.analyze_session(s_id, "2000-01-01") # Analyzer handles time windows via DB
+    report = await analyzer.analyze_session(
+        s_id, "2000-01-01"
+    )  # Analyzer handles time windows via DB
 
     return {"status": "completed", "report": report}
 
@@ -246,7 +256,7 @@ async def purge_database_endpoint() -> dict[str, str]:
         return {"status": "success", "message": "Database purged and re-initialized"}
     except Exception as e:
         logger.error(f"[API] Purge failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Purge failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Purge failed: {e!s}")
 
 
 @session_router.get("/{session_id}/report")
@@ -274,34 +284,48 @@ async def get_status(sys: TradingSystem = Depends(get_system)) -> dict[str, Any]
 async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, Any]]:
     """Retrieve forensic notes for RAG/UI."""
     from qtrader.core.db import DBClient
+
     try:
         if session_id:
-            rows = await DBClient.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp DESC", session_id)
+            rows = await DBClient.fetch(
+                "SELECT id, note_text, note_type, timestamp FROM forensic_notes WHERE session_id = $1 ORDER BY timestamp DESC",
+                session_id,
+            )
         else:
-            rows = await DBClient.fetch("SELECT id, note_text, note_type, timestamp FROM forensic_notes ORDER BY timestamp DESC LIMIT 100")
-        return [{"id": str(r["id"]), "content": r["note_text"], "type": r["note_type"], "timestamp": r["timestamp"].isoformat()} for r in rows]
+            rows = await DBClient.fetch(
+                "SELECT id, note_text, note_type, timestamp FROM forensic_notes ORDER BY timestamp DESC LIMIT 100"
+            )
+        return [
+            {
+                "id": str(r["id"]),
+                "content": r["note_text"],
+                "type": r["note_type"],
+                "timestamp": r["timestamp"].isoformat(),
+            }
+            for r in rows
+        ]
     except Exception as e:
         logger.error(f"[API] Failed to fetch notes: {e}")
         return []
 
 
 @router.post("/forensic_notes")
-async def add_forensic_note(note: dict[str, Any], sys: TradingSystem = Depends(get_system)) -> dict[str, Any]:
+async def add_forensic_note(
+    note: dict[str, Any], sys: TradingSystem = Depends(get_system)
+) -> dict[str, Any]:
     """Persist a forensic note and ENQUEUE for async embedding (Zero Latency)."""
     writer = TradeDBWriter()
     try:
         content = note.get("content", "")
         note_type = note.get("type", "OBSERVATION")
         session_id = sys.active_session_id
-        
+
         note_id = await writer.write_forensic_note(
-            content=content,
-            note_type=note_type,
-            session_id=session_id
+            content=content, note_type=note_type, session_id=session_id
         )
-        
+
         embedding_manager.enqueue_note(note_id, content, session_id)
-        
+
         if note_type in ["ALERT", "TRIAL"]:
             embedding_manager.refresh_sentiment(f"Manual Forensic Intervention: {content}")
         try:
@@ -309,10 +333,8 @@ async def add_forensic_note(note: dict[str, Any], sys: TradingSystem = Depends(g
                 ForensicNoteEvent(
                     source="api_dashboard",
                     payload=ForensicNotePayload(
-                        content=content,
-                        note_type=note_type,
-                        session_id=session_id
-                    )
+                        content=content, note_type=note_type, session_id=session_id
+                    ),
                 )
             )
         except Exception as e:
@@ -354,6 +376,7 @@ async def place_order(
 ) -> dict[str, Any]:
     """Submit a manual paper trade."""
     import uuid
+
     order = OrderEvent(
         source="api_dashboard",
         payload=OrderPayload(
@@ -421,7 +444,7 @@ async def trading_updates(websocket: WebSocket) -> None:
     await websocket.accept()
     sys = get_system()
     engine = get_sim_engine()
-    
+
     async def get_snapshot():
         balance = await sys.broker.get_paper_balance()
         pos_list = []
@@ -432,20 +455,24 @@ async def trading_updates(websocket: WebSocket) -> None:
                     if lot.side == "BUY"
                     else (lot.avg_price - engine._current_price) * abs(lot.qty)
                 )
-                pos_list.append({
-                    "symbol": sym,
-                    "side": lot.side,
-                    "quantity": abs(lot.qty),
-                    "average_price": lot.avg_price,
-                    "unrealized_pnl": round(unrealized, 2),
-                    "unrealized_pnl_pct": round(
-                        (engine._current_price - lot.avg_price) / lot.avg_price * 100
-                        if lot.avg_price > 0 else 0, 2
-                    ),
-                    "stop_loss": lot.stop_loss,
-                    "take_profit": lot.take_profit,
-                    "entry_time": lot.entry_time,
-                })
+                pos_list.append(
+                    {
+                        "symbol": sym,
+                        "side": lot.side,
+                        "quantity": abs(lot.qty),
+                        "average_price": lot.avg_price,
+                        "unrealized_pnl": round(unrealized, 2),
+                        "unrealized_pnl_pct": round(
+                            (engine._current_price - lot.avg_price) / lot.avg_price * 100
+                            if lot.avg_price > 0
+                            else 0,
+                            2,
+                        ),
+                        "stop_loss": lot.stop_loss,
+                        "take_profit": lot.take_profit,
+                        "entry_time": lot.entry_time,
+                    }
+                )
 
         # Read trade history from sim engine
         trade_history = [
@@ -480,7 +507,10 @@ async def trading_updates(websocket: WebSocket) -> None:
     await websocket.send_json(await get_snapshot())
     queue: asyncio.Queue[bool] = asyncio.Queue()
     engine.add_update_listener(lambda x: queue.put_nowait(True))
-    async def handler(event): await queue.put(True)
+
+    async def handler(event):
+        await queue.put(True)
+
     sys.event_bus.subscribe(EventType.FILL, handler)
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
 
@@ -505,7 +535,7 @@ async def forensics_updates(websocket: WebSocket) -> None:
     async def get_snapshot():
         trace = getattr(sys, "_last_module_traces", {})
         if engine._running:
-             trace = engine._last_trace.get("module_traces", trace)
+            trace = engine._last_trace.get("module_traces", trace)
 
         return {
             "type": "forensic_update",
@@ -513,20 +543,21 @@ async def forensics_updates(websocket: WebSocket) -> None:
             "ai_thinking": getattr(sys, "last_thinking", "") or engine._last_thinking,
             "ai_explanation": getattr(sys, "last_explanation", "") or engine._last_explanation,
             "module_traces": trace,
-            "thinking_history": engine._thinking_history if engine._running else []
+            "thinking_history": engine._thinking_history if engine._running else [],
         }
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
+
     async def handler(event):
         if event.event_type == EventType.DECISION_TRACE:
             # Sync cross-container trace into local system state for dashboard visualization
             sys._last_module_traces = getattr(event.payload, "module_traces", {})
         await queue.put(True)
-    
+
     # Forensics subscribes to more granular events
     sys.event_bus.subscribe(EventType.SIGNAL, handler)
     sys.event_bus.subscribe(EventType.DECISION_TRACE, handler)
-    sys.event_bus.subscribe(EventType.MARKET_DATA, handler) # Pulse on every tick
+    sys.event_bus.subscribe(EventType.MARKET_DATA, handler)  # Pulse on every tick
     engine.add_update_listener(lambda x: queue.put_nowait(True))
 
     try:
@@ -550,10 +581,10 @@ async def telemetry_updates(websocket: WebSocket) -> None:
     await websocket.accept()
     sys = get_system()
     engine = get_sim_engine()
-    
+
     async def get_snapshot():
         status = sys.get_status()
-        
+
         # 1. Prioritize simulation metrics if engine is active (fixes Bug 2)
         if engine._running:
             status["status"] = "RUNNING"
@@ -563,32 +594,35 @@ async def telemetry_updates(websocket: WebSocket) -> None:
             status["stats"]["fills"] = len(engine.closed_trades)
             status["stats"]["signals"] = len(engine._thinking_history)
             status["peak_equity"] = engine._peak_equity
-            status["module_traces"] = engine._last_trace.get("module_traces", status.get("module_traces", {}))
-            status["market_price"] = engine._current_price # Injection for dashboard widget
-            
+            status["module_traces"] = engine._last_trace.get(
+                "module_traces", status.get("module_traces", {})
+            )
+            status["market_price"] = engine._current_price  # Injection for dashboard widget
+
             uptime = time.time() - getattr(engine, "_start_time", time.time())
             latency = getattr(engine, "_last_latency_ms", 0.0)
         else:
             status["running"] = sys._running
             uptime = time.time() - getattr(sys, "_start_time", time.time())
             latency = getattr(sys, "_last_latency_ms", 0.0)
-        
+
         return {
             "type": "telemetry_update",
             "timestamp": datetime.now().isoformat(),
             "status": status,
             "latency_ms": round(latency, 2),
             "is_synced": True,
-            "uptime_seconds": int(uptime)
+            "uptime_seconds": int(uptime),
         }
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
-    
+
     # Subscribe to sim engine updates (fires every tick)
     engine.add_update_listener(lambda x: queue.put_nowait(True))
-    
-    async def handler(event): await queue.put(True)
-    
+
+    async def handler(event):
+        await queue.put(True)
+
     # SYSTEM events for lifecycle, MARKET_DATA for real-time price updates
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
     sys.event_bus.subscribe(EventType.MARKET_DATA, handler)
@@ -708,20 +742,23 @@ async def audit_updates(websocket: WebSocket) -> None:
                 )
                 unrealized_pct = (
                     ((engine._current_price - lot.avg_price) / lot.avg_price * 100)
-                    if lot.avg_price > 0 else 0
+                    if lot.avg_price > 0
+                    else 0
                 )
-                pos_list.append({
-                    "symbol": sym,
-                    "quantity": abs(lot.qty),
-                    "entry_price": lot.avg_price,
-                    "current_price": engine._current_price,
-                    "unrealized_pnl": round(unrealized, 2),
-                    "unrealized_pnl_pct": round(unrealized_pct, 2),
-                    "side": lot.side,
-                    "stop_loss": lot.stop_loss,
-                    "take_profit": lot.take_profit,
-                    "entry_time": lot.entry_time,
-                })
+                pos_list.append(
+                    {
+                        "symbol": sym,
+                        "quantity": abs(lot.qty),
+                        "entry_price": lot.avg_price,
+                        "current_price": engine._current_price,
+                        "unrealized_pnl": round(unrealized, 2),
+                        "unrealized_pnl_pct": round(unrealized_pct, 2),
+                        "side": lot.side,
+                        "stop_loss": lot.stop_loss,
+                        "take_profit": lot.take_profit,
+                        "entry_time": lot.entry_time,
+                    }
+                )
 
         return {
             "type": "audit_update",
@@ -757,4 +794,3 @@ async def audit_updates(websocket: WebSocket) -> None:
         sys.event_bus.unsubscribe(EventType.FILL, handler)
         sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
         sys.event_bus.unsubscribe(EventType.FORENSIC_NOTE, handler)
-

@@ -58,7 +58,9 @@ class FactorEngine:
             self.store.save_features(final_features, symbol, timeframe)
         return final_features
 
-    def compute_multi_symbol(self, raw_dfs: dict[str, pl.DataFrame], timeframe: str) -> pl.DataFrame:
+    def compute_multi_symbol(
+        self, raw_dfs: dict[str, pl.DataFrame], timeframe: str
+    ) -> pl.DataFrame:
         """Compute features for multiple symbols and combine with a symbol column."""
         features_list = []
         for symbol, df in raw_dfs.items():

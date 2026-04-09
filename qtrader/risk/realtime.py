@@ -22,11 +22,14 @@ _LOG = logging.getLogger("qtrader.risk.realtime")
 try:
     import qtrader_core
     from qtrader_core import RiskEngine, WarModeState
+
     stats_engine = qtrader_core.StatsEngine()
     math_engine = qtrader_core.MathEngine()
 except ImportError as e:
     _LOG.error("[RISK] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
-    raise ImportError("qtrader_core is a mandatory dependency for institutional risk management") from e
+    raise ImportError(
+        "qtrader_core is a mandatory dependency for institutional risk management"
+    ) from e
 
 
 @dataclass(slots=True)
@@ -182,20 +185,22 @@ class RealTimeRiskEngine:
         """Estimate probability of ruin based on recent performance streaks."""
         if self.pnl_history.len() < 10:
             return 0.0
-            
+
         wins = self.pnl_history.filter(self.pnl_history > 0).len()
         losses = self.pnl_history.filter(self.pnl_history < 0).len()
         total = wins + losses
-        
-        if total == 0: return 0.0
-        
+
+        if total == 0:
+            return 0.0
+
         win_rate = wins / total
         avg_win = self.pnl_history.filter(self.pnl_history > 0).mean() or 0.0
         avg_loss = abs(self.pnl_history.filter(self.pnl_history < 0).mean() or 1.0)
         edge = (win_rate * avg_win - (1 - win_rate) * avg_loss) / avg_loss
-        
-        if edge <= 0: return 1.0
-        
+
+        if edge <= 0:
+            return 1.0
+
         # Simple analytical edge-based Ruin formula
         # P(Ruin) = ((1-edge)/(1+edge))^units_left
         units_left = self.equity / avg_loss if avg_loss > 0 else 100.0
@@ -234,7 +239,7 @@ class RealTimeRiskEngine:
             List of `RiskEvent` objects; empty list means all limits are satisfied.
         """
         breaches: list[RiskEvent] = []
-        
+
         # 1. Mandatory high-performance Rust Core checks
         try:
             gross_exposure = self.positions.get_column("market_value").abs().sum()
@@ -247,19 +252,30 @@ class RealTimeRiskEngine:
             # Map Rust authoritative error to RiskEvent
             reason = str(e)
             risk_type = "PORTFOLIO"
-            if "DRAWDOWN" in reason.upper(): risk_type = "DRAWDOWN"
-            if "LEVERAGE" in reason.upper(): risk_type = "EXPOSURE"
-            
-            breaches.append(RiskEvent(
-                reason=reason,
-                action="BLOCK_TRADING",
-                metadata={
-                    "risk_type": risk_type,
-                    "source": "RUST_CORE",
-                    "equity": self.equity,
-                    "hwm": self.hwm,
-                }
-            ))
+            if "DRAWDOWN" in reason.upper():
+                risk_type = "DRAWDOWN"
+            if "LEVERAGE" in reason.upper():
+                risk_type = "EXPOSURE"
+
+            from qtrader.core.events import RiskPayload
+
+            breaches.append(
+                RiskEvent(
+                    source="RealTimeRiskEngine",
+                    payload=RiskPayload(
+                        symbol="PORTFOLIO",
+                        risk_type=risk_type,
+                        value=Decimal(str(self.equity)),  # Simplified
+                        threshold=Decimal("0.0"),
+                        metadata={
+                            "reason": reason,
+                            "source": "RUST_CORE",
+                            "equity": self.equity,
+                            "hwm": self.hwm,
+                        },
+                    ),
+                )
+            )
 
         # 2. Sequential Custom Limits (Research-only plugins)
         if self.limits:
@@ -268,7 +284,7 @@ class RealTimeRiskEngine:
                 event = limit.check(state)
                 if event is not None:
                     breaches.append(event)
-        
+
         return breaches
 
     async def publish_breaches(self) -> list[RiskEvent]:
@@ -279,21 +295,24 @@ class RealTimeRiskEngine:
 
         # Identify critical breaches requiring immediate halt
         critical_breach = any(
-            event.metadata.get("risk_type") in ("DRAWDOWN", "VAR", "EXPOSURE") or
-            getattr(event, "payload", None) and getattr(event.payload, "risk_type", None) in ("DRAWDOWN", "VAR", "EXPOSURE")
+            event.metadata.get("risk_type") in ("DRAWDOWN", "VAR", "EXPOSURE")
+            or (
+                getattr(event, "payload", None)
+                and getattr(event.payload, "risk_type", None) in ("DRAWDOWN", "VAR", "EXPOSURE")
+            )
             for event in breaches
         )
 
         if self.event_bus:
             for event in breaches:
                 await self.event_bus.publish(event)
-        
+
         if critical_breach and self.kill_switch:
             self.kill_switch.trigger_on_critical_failure(
                 "RISK_LIMIT_BREACH",
                 f"Critical risk breach detected (State: {self._rust_engine.get_state()})",
             )
-            
+
         return breaches
 
     # ------------------------------------------------------------------ #

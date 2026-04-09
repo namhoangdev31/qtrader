@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 try:
     import qtrader_core
+
     stats_engine = qtrader_core.StatsEngine()
 except ImportError as e:
-    _LOG.error("[MONITOR] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
+    _LOG.error(
+        "[MONITOR] Institutional Risk Core (qtrader_core) is missing. System startup blocked."
+    )
     raise ImportError("qtrader_core is a mandatory dependency for institutional monitoring") from e
 
 
@@ -76,7 +78,7 @@ class MonitoringEngine:
         if len(self._latency_history) >= 20:  # noqa: PLR2004
             mu = stats_engine.calculate_mean(self._latency_history)
             sigma = stats_engine.calculate_std(self._latency_history)
-            
+
             if sigma > 1e-9:
                 z_score = stats_engine.calculate_z_score(metrics.latency_ms, mu, sigma)
                 if z_score > 3.0:  # noqa: PLR2004
@@ -107,11 +109,13 @@ class MonitoringEngine:
         Generate industrial situational awareness report using Rust precision.
         """
         total = self._stats["evaluations"]
-        avg_lat = stats_engine.calculate_mean(self._latency_history) if self._latency_history else 0.0
+        avg_lat = (
+            stats_engine.calculate_mean(self._latency_history) if self._latency_history else 0.0
+        )
         return {
             "status": "HEALTH_SUMMARY",
             "alert_count": self._stats["alerts"],
             "anomaly_rate": round(self._stats["alerts"] / total, 4) if total > 0 else 0.0,
             "avg_latency_ms": round(avg_lat, 2),
-            "engine": "RUST_STATS_CORE"
+            "engine": "RUST_STATS_CORE",
         }

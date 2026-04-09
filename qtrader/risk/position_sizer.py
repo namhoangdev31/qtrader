@@ -1,11 +1,17 @@
 try:
     import qtrader_core
     from qtrader_core import SizingEngine
+
     sizing_engine = SizingEngine()
 except ImportError as e:
     import logging
-    logging.error("[RISK] Institutional Risk Core (qtrader_core) is missing. System startup blocked.")
-    raise ImportError("qtrader_core is a mandatory dependency for institutional position sizing") from e
+
+    logging.error(
+        "[RISK] Institutional Risk Core (qtrader_core) is missing. System startup blocked."
+    )
+    raise ImportError(
+        "qtrader_core is a mandatory dependency for institutional position sizing"
+    ) from e
 
 
 class PositionSizer(RiskModule):
@@ -31,7 +37,7 @@ class PositionSizer(RiskModule):
         """
         Compute position sizes from signals via Rust-backed math.
         """
-        signals = kwargs.get('signals')
+        signals = kwargs.get("signals")
         if signals is None:
             raise ValueError("PositionSizer requires 'signals' in kwargs")
 
@@ -43,7 +49,7 @@ class PositionSizer(RiskModule):
         scaled_positions = raw_positions * vol_scaling
 
         # Use authoritative clipping logic (conceptual integration with Rust)
-        # For now, we utilize the high-speed Series.clip while ensuring the 
+        # For now, we utilize the high-speed Series.clip while ensuring the
         # parameters are strictly managed.
         final_positions = scaled_positions.clip(-self.max_position, self.max_position)
 

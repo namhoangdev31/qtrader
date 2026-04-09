@@ -15,7 +15,7 @@ def controller() -> FeedbackController:
 def test_feedback_high_quality_authorization(controller: FeedbackController) -> None:
     """Verify that a high-quality, mature trade is properly attributed."""
     signal = {"id": "S123", "features": np.array([1.0, 2.0])}
-    
+
     # Trade: Mature (settled 2 mins ago), Perfect Fill, Nominal Slippage
     trade = {
         "timestamp": time.time() - 120,
@@ -26,9 +26,9 @@ def test_feedback_high_quality_authorization(controller: FeedbackController) -> 
         "filled_qty": 10.0,  # 100% fill > 90%
         "entry_price": 90.0,
         "exit_price": 110.0,
-        "fees": 2.0
+        "fees": 2.0,
     }
-    
+
     sample = controller.process_trade(trade, signal)
     assert sample is not None
     assert sample.signal_id == "S123"
@@ -39,7 +39,7 @@ def test_feedback_high_quality_authorization(controller: FeedbackController) -> 
 def test_feedback_immature_rejection(controller: FeedbackController) -> None:
     """Verify that immature trades (within delay window) are rejected to prevent leakage."""
     signal = {"id": "S123", "features": np.array([1.0])}
-    
+
     # Trade: Settlement just happened (5s ago) < 60s delay
     trade = {
         "timestamp": time.time() - 5,
@@ -48,9 +48,9 @@ def test_feedback_immature_rejection(controller: FeedbackController) -> None:
         "total_qty": 10.0,
         "filled_qty": 10.0,
         "entry_price": 100.0,
-        "exit_price": 101.0
+        "exit_price": 101.0,
     }
-    
+
     sample = controller.process_trade(trade, signal)
     assert sample is None
 
@@ -58,7 +58,7 @@ def test_feedback_immature_rejection(controller: FeedbackController) -> None:
 def test_feedback_noise_rejection_slippage(controller: FeedbackController) -> None:
     """Verify that trades with extreme slippage (> 50bps) are filtered as noise."""
     signal = {"id": "S123", "features": np.array([1.0])}
-    
+
     # Trade: High Slippage (100.0 -> 101.0 = 100bps > 50bps)
     trade = {
         "timestamp": time.time() - 120,
@@ -67,9 +67,9 @@ def test_feedback_noise_rejection_slippage(controller: FeedbackController) -> No
         "total_qty": 10.0,
         "filled_qty": 10.0,
         "entry_price": 100.0,
-        "exit_price": 101.0
+        "exit_price": 101.0,
     }
-    
+
     sample = controller.process_trade(trade, signal)
     assert sample is None
 
@@ -77,7 +77,7 @@ def test_feedback_noise_rejection_slippage(controller: FeedbackController) -> No
 def test_feedback_noise_rejection_fill(controller: FeedbackController) -> None:
     """Verify that trades with low fill rate (< 90%) are filtered as noise."""
     signal = {"id": "S123", "features": np.array([1.0])}
-    
+
     # Trade: Poor Fill (5.0 / 10.0 = 50% < 90%)
     trade = {
         "timestamp": time.time() - 120,
@@ -86,9 +86,9 @@ def test_feedback_noise_rejection_fill(controller: FeedbackController) -> None:
         "total_qty": 10.0,
         "filled_qty": 5.0,  # 50% fill
         "entry_price": 100.0,
-        "exit_price": 101.0
+        "exit_price": 101.0,
     }
-    
+
     sample = controller.process_trade(trade, signal)
     assert sample is None
 
@@ -96,21 +96,24 @@ def test_feedback_noise_rejection_fill(controller: FeedbackController) -> None:
 def test_feedback_telemetry(controller: FeedbackController) -> None:
     """Verify feedback quality situational awareness report."""
     signal = {"id": "S1", "features": np.array([0])}
-    
+
     # 1. OK trade
     trade_ok = {
         "timestamp": time.time() - 120,
-        "requested_price": 100.0, "avg_price": 100.0, 
-        "total_qty": 10.0, "filled_qty": 10.0,
-        "entry_price": 100.0, "exit_price": 101.0
+        "requested_price": 100.0,
+        "avg_price": 100.0,
+        "total_qty": 10.0,
+        "filled_qty": 10.0,
+        "entry_price": 100.0,
+        "exit_price": 101.0,
     }
     controller.process_trade(trade_ok, signal)
-    
+
     # 2. Noise trade (No fill)
     trade_noise = trade_ok.copy()
     trade_noise["filled_qty"] = 0.0
     controller.process_trade(trade_noise, signal)
-    
+
     report = controller.get_feedback_report()
     assert report["processed_count"] == 2
     assert report["noise_ratio"] == 0.5

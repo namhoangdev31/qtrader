@@ -30,9 +30,9 @@ class MetricsRegistry:
                     "count": 0,
                     "sum": Decimal("0"),
                     "min": Decimal("Infinity"),
-                    "max": Decimal("-Infinity")
+                    "max": Decimal("-Infinity"),
                 }
-            
+
             h = self._histograms[name]
             h["count"] += 1
             h["sum"] += val
@@ -42,11 +42,8 @@ class MetricsRegistry:
     async def snapshot(self) -> dict[str, Any]:
         """Produce a point-in-time snapshot of all metrics."""
         async with self._lock:
-            data = {
-                "counters": self._counters.copy(),
-                "histograms": {}
-            }
-            
+            data = {"counters": self._counters.copy(), "histograms": {}}
+
             for name, h in self._histograms.items():
                 avg = h["sum"] / h["count"] if h["count"] > 0 else Decimal("0")
                 data["histograms"][name] = {
@@ -54,7 +51,7 @@ class MetricsRegistry:
                     "sum": str(h["sum"]),
                     "avg": str(avg),
                     "min": str(h["min"]) if h["count"] > 0 else "0",
-                    "max": str(h["max"]) if h["count"] > 0 else "0"
+                    "max": str(h["max"]) if h["count"] > 0 else "0",
                 }
             return data
 

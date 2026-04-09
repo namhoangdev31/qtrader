@@ -72,8 +72,7 @@ class PnLAttributor:
         )
 
         bench = (
-            market_returns.group_by("symbol")
-            .agg(pl.col("return").mean().alias("benchmark_return"))
+            market_returns.group_by("symbol").agg(pl.col("return").mean().alias("benchmark_return"))
             if market_returns.height > 0
             else pl.DataFrame({"symbol": [], "benchmark_return": []})
         )
@@ -161,4 +160,3 @@ def test_total_pnl_consistency() -> None:
         row["alpha_pnl"] + row["beta_pnl"] + row["slippage_pnl"],
     )
 """
-

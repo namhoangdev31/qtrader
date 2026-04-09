@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
@@ -20,6 +19,7 @@ from qtrader.ml.chronos_adapter import ForecastResult
 logger = logging.getLogger("qtrader.ml.ollama_forecast")
 
 HTTP_OK = 200
+
 
 class OllamaForecastAdapter:
     """Ollama Forecast Adapter.
@@ -36,7 +36,7 @@ class OllamaForecastAdapter:
         self.model_id = model_id
         self.base_url = base_url
         self.timeout_seconds = timeout_seconds
-        self._is_loaded = True # Assume loaded as orchestrator checks
+        self._is_loaded = True  # Assume loaded as orchestrator checks
 
     async def predict(
         self,
@@ -53,14 +53,14 @@ class OllamaForecastAdapter:
             "No conversational filler. Follow this schema exactly:\n\n"
             f"Input History: {prices.tolist()[-50:]}\n"
             f"Prediction Length: {prediction_length}\n"
-            "{\"forecast\": [val1, val2, ...]}\n\n"
+            '{"forecast": [val1, val2, ...]}\n\n'
             "Response:"
         )
 
         try:
             response_text = await self._generate(prompt)
             forecast_data = self._parse_forecast(response_text)
-            
+
             mean = np.array(forecast_data)
             # Simple probabilistic bounds for compatibility
             vol = np.std(prices) * 0.1
@@ -117,24 +117,24 @@ class OllamaForecastAdapter:
         try:
             # 1. Basic Cleaning
             clean = text.strip()
-            
+
             # 2. Extract JSON block (find first '{' and last '}')
             start_idx = clean.find("{")
             end_idx = clean.rfind("}")
             if start_idx != -1 and end_idx != -1:
                 clean = clean[start_idx : end_idx + 1]
-            
+
             # 3. Handle common truncation/malformation in 1B models
             # If it's missing the closing bracket but has { at start, try to fix it
             if clean.startswith("{") and not clean.endswith("}"):
                 clean += '"]}' if '["' in clean or '":' in clean else "}"
 
             data = json.loads(clean)
-            
+
             # 4. Flexible key finding (if 'forecast' is missing or named differently)
             if "forecast" in data and isinstance(data["forecast"], list):
                 return [float(x) for x in data["forecast"]]
-            
+
             # If not found, look for any list segment
             for val in data.values():
                 if isinstance(val, list) and len(val) > 0:
@@ -142,7 +142,7 @@ class OllamaForecastAdapter:
                         return [float(x) for x in val]
                     except (ValueError, TypeError):
                         continue
-            
+
             raise KeyError("No valid numeric array found in JSON")
 
         except Exception as e:
@@ -157,8 +157,4 @@ class OllamaForecastAdapter:
         return np.array([prices[-1] + trend * (i + 1) for i in range(length)])
 
     def get_model_info(self) -> dict[str, Any]:
-        return {
-            "model_id": self.model_id,
-            "adapter": "OllamaForecast",
-            "is_loaded": True
-        }
+        return {"model_id": self.model_id, "adapter": "OllamaForecast", "is_loaded": True}

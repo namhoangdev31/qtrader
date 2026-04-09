@@ -84,9 +84,7 @@ class RLTrainingPipeline:
 
         return total_reward
 
-    def train(
-        self, dataset: list[list[dict[str, Any]]], n_epochs: int = 10
-    ) -> list[float]:
+    def train(self, dataset: list[list[dict[str, Any]]], n_epochs: int = 10) -> list[float]:
         """
         Perform batch training over multi-episode historical datasets.
 

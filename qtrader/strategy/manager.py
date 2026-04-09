@@ -4,8 +4,6 @@ import logging
 from typing import Any
 
 from qtrader.core.dynamic_config import config_manager
-from qtrader.strategy.base import BaseStrategy
-from qtrader.strategy.ensemble_strategy import EnsembleStrategy
 
 logger = logging.getLogger("qtrader.strategy.manager")
 
@@ -23,13 +21,17 @@ class StrategyManager:
         """Get the currently active strategy instance."""
         target = config_manager.get("active_strategy", "MOMENTUM")
         if target not in self._strategies:
-            logger.warning(f"[STRATEGY_MANAGER] Strategy {target} not found, falling back to MOMENTUM")
+            logger.warning(
+                f"[STRATEGY_MANAGER] Strategy {target} not found, falling back to MOMENTUM"
+            )
             target = "MOMENTUM"
-        
+
         if target != self.active_strategy_name:
-            logger.info(f"[STRATEGY_MANAGER] SWAPPING METHODOLOGY: {self.active_strategy_name} -> {target}")
+            logger.info(
+                f"[STRATEGY_MANAGER] SWAPPING METHODOLOGY: {self.active_strategy_name} -> {target}"
+            )
             self.active_strategy_name = target
-            
+
         return self._strategies[target]
 
     def get_strategy_names(self) -> list[str]:

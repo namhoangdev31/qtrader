@@ -1,6 +1,8 @@
 import pytest
-from qtrader.execution.paper_engine import PaperTradingEngine
+
 from qtrader.core.config import settings
+from qtrader.execution.paper_engine import PaperTradingEngine
+
 
 def test_paper_engine_init():
     # Verify default base price from settings
@@ -9,23 +11,27 @@ def test_paper_engine_init():
     assert engine._current_price == settings.ts_reference_price
     assert len(engine._price_history) == 0
 
+
 def test_paper_engine_base_price_override():
     custom_price = 123456.78
     engine = PaperTradingEngine(base_price=custom_price)
     assert engine._base_price == custom_price
     assert engine._current_price == custom_price
 
+
 def test_clear_history():
     engine = PaperTradingEngine()
     engine._price_history = [100.0, 101.0, 102.0]
     engine._tick_count = 3
-    
+
     engine.clear_history()
     assert len(engine._price_history) == 0
     assert engine._tick_count == 0
 
+
 def test_rsi_clamping():
     from qtrader.execution.paper_mixins import SignalMixin
+
     class DummyEngine(SignalMixin):
         def __init__(self):
             self._price_history = [100.0] * 20
@@ -49,13 +55,17 @@ def test_rsi_clamping():
             self._running = True
             self.ANOMALY_THRESHOLD = 0.01
             from qtrader.execution.paper_models import AdaptiveConfig
+
             self.adaptive = AdaptiveConfig()
             self._cash = 1000.0
             self._open_positions = {}
             self.MEAN_REVERSION_STRENGTH = 0.01
-            
-        def _persist_thinking_log(self, **kwargs): pass
-        def _persist_fill(self, **kwargs): pass
+
+        def _persist_thinking_log(self, **kwargs):
+            pass
+
+        def _persist_fill(self, **kwargs):
+            pass
 
     dummy = DummyEngine()
     # Stagnant price should give RSI 50

@@ -53,7 +53,9 @@ def engine_no_db() -> PaperTradingEngine:
 class TestPaperEngineDBBridge:
     """Tests for the DB persistence bridge in PaperTradingEngine."""
 
-    def test_set_db_writer_injects_correctly(self, engine_no_db: PaperTradingEngine, mock_db_writer: AsyncMock) -> None:
+    def test_set_db_writer_injects_correctly(
+        self, engine_no_db: PaperTradingEngine, mock_db_writer: AsyncMock
+    ) -> None:
         """set_db_writer() should inject both db_writer and session_id."""
         assert engine_no_db._db_writer is None
         assert engine_no_db._session_id is None
@@ -96,8 +98,12 @@ class TestPaperEngineDBBridge:
         """_persist_fill() should be a no-op without db_writer/session_id."""
         # Should not raise
         engine_no_db._persist_fill(
-            order_id="x", symbol="BTC-USD", side="BUY",
-            quantity=1.0, price=65000.0, commission=0.0,
+            order_id="x",
+            symbol="BTC-USD",
+            side="BUY",
+            quantity=1.0,
+            price=65000.0,
+            commission=0.0,
         )
 
     def test_persist_thinking_log_calls_db(self, engine_with_db: PaperTradingEngine) -> None:
@@ -231,7 +237,11 @@ class TestRSIFix:
         engine._generate_signal()
         # With only losses, RSI should be near 0 → Oversold
         # This is a valid case (real movement), not the constant-price bug
-        assert "Oversold" in engine._last_thinking or "Bearish" in engine._last_thinking or "Neutral" in engine._last_thinking
+        assert (
+            "Oversold" in engine._last_thinking
+            or "Bearish" in engine._last_thinking
+            or "Neutral" in engine._last_thinking
+        )
 
 
 class TestUUIDReferences:
@@ -240,11 +250,13 @@ class TestUUIDReferences:
     def test_uuid4_import_works(self) -> None:
         """Verify uuid4 is importable from the module's namespace."""
         from uuid import uuid4
+
         result = uuid4()
         assert len(str(result)) == 36
 
     def test_uuid_module_works(self) -> None:
         """Verify uuid.uuid4() works (used in paper_engine for position/trade IDs)."""
         import uuid
+
         result = uuid.uuid4()
         assert len(str(result)) == 36

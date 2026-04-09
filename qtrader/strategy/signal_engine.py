@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-import polars as pl
 
 from qtrader.core.dynamic_config import config_manager
 from qtrader.core.session_state import SessionState
@@ -11,14 +10,16 @@ logger = logging.getLogger("qtrader.strategy.signal")
 
 try:
     import qtrader_core
+
     HAS_RUST_CORE = True
     sizing_engine = qtrader_core.SizingEngine()
 except ImportError:
     HAS_RUST_CORE = False
 
+
 class SignalEngine:
     """Specialized engine for signal generation and logic validation.
-    
+
     Decouples the 'Decision Logic' from the 'Execution Orchestrator'.
     """
 
@@ -26,14 +27,11 @@ class SignalEngine:
         self.state = state
 
     def generate_signal(
-        self, 
-        symbol: str, 
-        ml_result: dict[str, Any], 
-        is_exit_check: bool = False
+        self, symbol: str, ml_result: dict[str, Any], is_exit_check: bool = False
     ) -> dict[str, Any] | None:
         """Core signal generation logic using dynamic thresholds and Kelly sizing."""
         decision = ml_result["decision"]
-        
+
         # Handle both object and dictionary representation (remote ML compatibility)
         if isinstance(decision, dict):
             action_val = decision.get("action", "HOLD")
@@ -55,11 +53,11 @@ class SignalEngine:
 
         if action == "HOLD" or confidence < threshold:
             return None
-        
+
         kelly_multiplier = self._calculate_kelly_multiplier()
-        
+
         position_size = base_size * kelly_multiplier
-        
+
         position_size = min(position_size, config_manager.get("POSITION_SIZE_PCT", 0.5))
 
         return {
@@ -75,21 +73,23 @@ class SignalEngine:
         """Calculate Kelly-based multiplier from session performance."""
         if not self.state.win_history:
             return 1.0
-            
+
         wins = sum(self.state.win_history)
         total = len(self.state.win_history)
         win_rate = wins / total
-        
-        win_loss_ratio = 2.0 
-        
+
+        win_loss_ratio = 2.0
+
         if HAS_RUST_CORE:
             fraction = config_manager.get("KELLY_FRACTION", 0.5)
             kelly_f = sizing_engine.calculate_kelly_fraction(win_rate, win_loss_ratio, fraction)
             return kelly_f * 2.0
-            
+
         return win_rate
 
-    def check_trend_confirmation(self, symbol: str, side: str, market_data_history: list[dict[str, float]]) -> bool:
+    def check_trend_confirmation(
+        self, symbol: str, side: str, market_data_history: list[dict[str, float]]
+    ) -> bool:
         """Check if price trend confirms the signal direction."""
         lookback = config_manager.get("TREND_LOOKBACK", 10)
         if not market_data_history or len(market_data_history) < lookback:
@@ -104,12 +104,12 @@ class SignalEngine:
         return ma_short <= ma_long
 
     def check_exit_triggers(
-        self, 
-        symbol: str, 
-        current_price: float, 
+        self,
+        symbol: str,
+        current_price: float,
         positions_lots: list[Any],
         sl_pct: float,
-        tp_pct: float
+        tp_pct: float,
     ) -> dict[str, Any] | None:
         """Check if current position hits stop loss or take profit."""
         if not positions_lots:
@@ -127,16 +127,36 @@ class SignalEngine:
                 trade_id = getattr(lot, "trade_id", "unknown")
 
             pnl_pct = (current_price - avg_entry) / avg_entry if avg_entry > 0 else 0
-            
+
             if side == "BUY":
                 if pnl_pct <= -sl_pct:
-                    return {"symbol": symbol, "side": "SELL", "reason": "STOP_LOSS", "lot_id": trade_id}
+                    return {
+                        "symbol": symbol,
+                        "side": "SELL",
+                        "reason": "STOP_LOSS",
+                        "lot_id": trade_id,
+                    }
                 if pnl_pct >= tp_pct:
-                    return {"symbol": symbol, "side": "SELL", "reason": "TAKE_PROFIT", "lot_id": trade_id}
+                    return {
+                        "symbol": symbol,
+                        "side": "SELL",
+                        "reason": "TAKE_PROFIT",
+                        "lot_id": trade_id,
+                    }
             elif side == "SELL":
                 if pnl_pct >= sl_pct:
-                    return {"symbol": symbol, "side": "BUY", "reason": "STOP_LOSS", "lot_id": trade_id}
+                    return {
+                        "symbol": symbol,
+                        "side": "BUY",
+                        "reason": "STOP_LOSS",
+                        "lot_id": trade_id,
+                    }
                 if pnl_pct <= -tp_pct:
-                    return {"symbol": symbol, "side": "BUY", "reason": "TAKE_PROFIT", "lot_id": trade_id}
-        
+                    return {
+                        "symbol": symbol,
+                        "side": "BUY",
+                        "reason": "TAKE_PROFIT",
+                        "lot_id": trade_id,
+                    }
+
         return None

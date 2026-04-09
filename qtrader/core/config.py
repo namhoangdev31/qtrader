@@ -43,7 +43,7 @@ class QTraderSettings(BaseSettings):
     database_read_url: str | None = None  # Read replica; falls back to database_url if unset
     database_max_connections: int = 100
     database_ssl_enabled: bool = False
-    
+
     # Redis (Shared State)
     redis_host: str = "redis"
     redis_port: int = 6379
@@ -64,12 +64,12 @@ class QTraderSettings(BaseSettings):
     ts_max_orders_per_second: float = 5.0
     ts_max_latency_ms: float = 100.0
     starting_equity: float = 100000.0
-    
+
     # Model Hub
     ts_forecast_model: str = "llama3.2:1b"
     ts_risk_model: str = "qwen3.5:2b"
     ts_decision_model: str = "gemma4:e2b"
-    
+
     # Risk & Guardrails
     ts_atr_window: int = 14
     ts_atr_multiplier: float = 2.0
@@ -78,7 +78,7 @@ class QTraderSettings(BaseSettings):
     ts_max_sl_pct: float = 0.05
     ts_price_jump_threshold: float = 0.05
     ts_reference_price: float = 71522.97
-    
+
     # Retraining & Circuit Breakers
     ts_retrain_win_rate_threshold: float = 0.35
     ts_win_history_window: int = 10
@@ -100,7 +100,7 @@ class QTraderSettings(BaseSettings):
     sim_latency_max_ms: int = 300
     sim_error_probability: float = 0.01
     sim_slippage_vol_mult: float = 0.5
-    
+
     # Paper Engine Limits & RSI Gates
     sim_price_history_limit: int = 5000
     sim_price_history_prune: int = 2000
@@ -285,11 +285,11 @@ class QTraderSettings(BaseSettings):
     @property
     def FORECAST_MODEL(self) -> str:
         return self.ts_forecast_model
-    
+
     @property
     def RISK_MODEL(self) -> str:
         return self.ts_risk_model
-    
+
     @property
     def DECISION_MODEL(self) -> str:
         return self.ts_decision_model
@@ -301,7 +301,7 @@ class QTraderSettings(BaseSettings):
     @property
     def SIM_TAKER_FEE(self) -> float:
         return self.sim_taker_fee
-        
+
     @property
     def SIM_MAKER_FEE(self) -> float:
         return self.sim_maker_fee
@@ -434,7 +434,9 @@ def build_alert_router_config() -> dict[str, Any]:
             "smtp_port": settings.alert_email_smtp_port,
             "sender": settings.alert_email_sender,
             "password": settings.alert_email_password,
-            "recipients": [r.strip() for r in settings.alert_email_recipients.split(",") if r.strip()],
+            "recipients": [
+                r.strip() for r in settings.alert_email_recipients.split(",") if r.strip()
+            ],
         }
     if settings.alert_webhook_enabled and settings.alert_webhook_url:
         cfg["webhook"] = {"url": settings.alert_webhook_url}

@@ -11,8 +11,6 @@ from qtrader.core.logger import logger
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics
 from qtrader.execution.execution_engine import ExchangeAdapter, ExecutionEngine
 from qtrader.oms.order_management_system import UnifiedOMS
-from qtrader_core import Order as RustOrder, Side as RustSide, OrderType as RustOrderType
-
 
 
 class OMSAdapter(ABC):
@@ -25,16 +23,14 @@ class OMSAdapter(ABC):
     @require_initialized
     @abstractmethod
     async def create_order(
-        self, 
-        allocation_weights: AllocationWeights, 
-        risk_metrics: RiskMetrics
+        self, allocation_weights: AllocationWeights, risk_metrics: RiskMetrics
     ) -> OrderEvent:
         """Create an order based on allocation weights and risk metrics.
-         
+
         Args:
             allocation_weights: Portfolio allocation weights
             risk_metrics: Current risk metrics
-             
+
         Returns:
             OrderEvent to be submitted to the OMS
         """
@@ -43,14 +39,15 @@ class OMSAdapter(ABC):
     @require_initialized
     @abstractmethod
     async def cancel_all_orders(self):
-        """Cancel all open orders.
-        """
+        """Cancel all open orders."""
         pass
 
-    def _get_highest_weight(self, allocation_weights: AllocationWeights) -> tuple[str | None, Decimal]:
+    def _get_highest_weight(
+        self, allocation_weights: AllocationWeights
+    ) -> tuple[str | None, Decimal]:
         """Helper to find the symbol with the highest allocation weight."""
         symbol = None
-        max_weight = Decimal('0')
+        max_weight = Decimal("0")
         for sym, w in allocation_weights.weights.items():
             if w > max_weight:
                 symbol = sym
@@ -59,20 +56,25 @@ class OMSAdapter(ABC):
 
     def _create_empty_order(self, timestamp: Any) -> OrderEvent:
         """Helper to create a zero-quantity order event."""
-        ts_val = int(timestamp.timestamp() * 1_000_000) if hasattr(timestamp, "timestamp") else int(time.time() * 1_000_000)
-        
+        ts_val = (
+            int(timestamp.timestamp() * 1_000_000)
+            if hasattr(timestamp, "timestamp")
+            else int(time.time() * 1_000_000)
+        )
+
         from qtrader.core.events import OrderPayload
+
         return OrderEvent(
             source="OMSAdapter",
             timestamp=ts_val,
             payload=OrderPayload(
                 order_id="NO_TRADE",
                 symbol="",
-                action="BUY", # Placeholder for empty
-                quantity=Decimal('0'),
+                action="BUY",  # Placeholder for empty
+                quantity=Decimal("0"),
                 order_type="MARKET",
-                metadata={"reason": "no_allocation"}
-            )
+                metadata={"reason": "no_allocation"},
+            ),
         )
 
 
@@ -84,22 +86,21 @@ class SimpleOMSAdapter(OMSAdapter):
         super().__init__(name)
 
     async def create_order(
-        self, 
-        allocation_weights: AllocationWeights, 
-        risk_metrics: RiskMetrics
+        self, allocation_weights: AllocationWeights, risk_metrics: RiskMetrics
     ) -> OrderEvent:
         """Create market orders based on allocation weights."""
         symbol, weight = self._get_highest_weight(allocation_weights)
-        
-        if symbol is None or weight <= Decimal('0'):
+
+        if symbol is None or weight <= Decimal("0"):
             return self._create_empty_order(allocation_weights.timestamp)
-        
+
         # Determine side assuming long-only for Simple implementation
         side = "BUY"
-        
+
         from qtrader.core.events import OrderPayload
+
         ts_val = int(allocation_weights.timestamp.timestamp() * 1_000_000)
-        
+
         return OrderEvent(
             source="SimpleOMSAdapter",
             timestamp=ts_val,
@@ -114,9 +115,9 @@ class SimpleOMSAdapter(OMSAdapter):
                     "risk_metrics": {
                         "portfolio_var": float(risk_metrics.portfolio_var),
                         "portfolio_volatility": float(risk_metrics.portfolio_volatility),
-                    }
-                }
-            )
+                    },
+                },
+            ),
         )
 
     async def cancel_all_orders(self) -> None:
@@ -159,8 +160,9 @@ class ExecutionOMSAdapter(OMSAdapter):
         # Create the smart router
         # Create the execution engine using the primary exchange adapter
         from qtrader.core.config import settings
+
         main_adapter = next(iter(exchange_adapters.values())) if exchange_adapters else None
-        
+
         self.execution_engine = ExecutionEngine(
             exchange_adapter=main_adapter,
             max_orders_per_second=settings.ts_max_orders_per_second,
@@ -208,7 +210,7 @@ class ExecutionOMSAdapter(OMSAdapter):
         # Find the symbol with the highest weight
         symbol, weight = self._get_highest_weight(allocation_weights)
 
-        if symbol is None or weight <= Decimal('0'):
+        if symbol is None or weight <= Decimal("0"):
             return self._create_empty_order(allocation_weights.timestamp)
 
         # Simple order sizing and side (assuming long-only)
@@ -217,8 +219,9 @@ class ExecutionOMSAdapter(OMSAdapter):
 
         # Create the OrderEvent
         from qtrader.core.events import OrderPayload
+
         ts_val = int(allocation_weights.timestamp.timestamp() * 1_000_000)
-        
+
         order_event = OrderEvent(
             source="ExecutionOMSAdapter",
             timestamp=ts_val,
@@ -235,24 +238,16 @@ class ExecutionOMSAdapter(OMSAdapter):
                         "portfolio_volatility": float(risk_metrics.portfolio_volatility),
                     },
                     "_submitted_via_execution": True,
-                }
-            )
+                },
+            ),
         )
 
         # [OMS_STATE_CENTRALIZATION]: Persist order to central OMS (delegated to Rust)
-        # Standash §2.3: Map Pydantic payload to high-performance Rust struct
-        rust_order = RustOrder(
-            id=order_event.payload.order_id,
-            symbol=order_event.payload.symbol,
-            side=RustSide.Buy if order_event.payload.action == "BUY" else RustSide.Sell,
-            qty=float(order_event.payload.quantity),
-            price=float(order_event.payload.price) if order_event.payload.price else 0.0,
-            order_type=RustOrderType.Market if order_event.payload.order_type == "MARKET" else RustOrderType.Limit,
-            timestamp_ms=int(time.time() * 1000)
-        )
-        self.oms.create_order(rust_order)
+        await self.oms.create_order(order_event)
 
-        self.logger.debug(f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}")
+        self.logger.debug(
+            f"Created order for {symbol}: weight={weight}, size={order_size}, side={side}"
+        )
 
         # Submit the order via the execution engine (non-blocking)
         asyncio.create_task(self._submit_order(order_event))
@@ -275,14 +270,14 @@ class ExecutionOMSAdapter(OMSAdapter):
             oid = getattr(getattr(order_event, "payload", {}), "order_id", "unknown_oid")
             self.logger.error(f"Error submitting order {oid}: {e}", exc_info=True)
             # Standardize on REJECTED for failed submissions in Rust FSM
-            await self.oms.on_reject(oid, f"Submission Error: {str(e)}")
+            await self.oms.on_reject(oid, f"Submission Error: {e!s}")
 
     async def cancel_all_orders(self) -> None:
         """Cancel all open orders via UnifiedOMS."""
         self.logger.info("Cancelling all open orders via ExecutionOMSAdapter")
-        
+
         # Delegate to UnifiedOMS to ensure FSM and StateStore are synchronized
-        active_orders = await self.oms.get_active_orders()
+        active_orders = await self.oms.state_store.get_active_orders()
         for order_id in active_orders.keys():
             await self.oms.cancel_order(order_id)
             self.logger.info(f"Initiated cancellation for order: {order_id}")

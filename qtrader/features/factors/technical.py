@@ -47,14 +47,18 @@ class RSI(BaseFeature):
         avg_gain = gain.ewm_mean(alpha=alpha, adjust=False)
         avg_loss = loss.ewm_mean(alpha=alpha, adjust=False)
 
-        rsi_expr = pl.when(avg_loss == 0.0).then(100.0).otherwise(
-            100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+        rsi_expr = (
+            pl.when(avg_loss == 0.0)
+            .then(100.0)
+            .otherwise(100.0 - (100.0 / (1.0 + avg_gain / avg_loss)))
         )
 
-        result = df.with_columns([
-            gain.alias("_gain"),
-            loss.alias("_loss"),
-        ]).select([rsi_expr.alias(self.name)])[self.name]
+        result = df.with_columns(
+            [
+                gain.alias("_gain"),
+                loss.alias("_loss"),
+            ]
+        ).select([rsi_expr.alias(self.name)])[self.name]
         return result
 
 
@@ -133,16 +137,20 @@ class MACD(BaseFeature):
         ema_slow = pl.col("close").ewm_mean(span=self.slow, adjust=False)
         macd_line = ema_fast - ema_slow
 
-        out = df.select([
-            macd_line.alias("_macd_raw"),
-        ])
+        out = df.select(
+            [
+                macd_line.alias("_macd_raw"),
+            ]
+        )
         macd_signal = out["_macd_raw"].ewm_mean(span=self.signal, adjust=False)
 
-        return pl.DataFrame({
-            "macd": out["_macd_raw"],
-            "macd_signal": macd_signal,
-            "macd_hist": out["_macd_raw"] - macd_signal,
-        })
+        return pl.DataFrame(
+            {
+                "macd": out["_macd_raw"],
+                "macd_signal": macd_signal,
+                "macd_hist": out["_macd_raw"] - macd_signal,
+            }
+        )
 
 
 class BollingerBands(BaseFeature):
@@ -178,14 +186,18 @@ class BollingerBands(BaseFeature):
         upper = mid + self.std_dev * std
         lower = mid - self.std_dev * std
 
-        out = df.select([
-            mid.alias("bb_mid"),
-            upper.alias("bb_upper"),
-            lower.alias("bb_lower"),
-        ])
+        out = df.select(
+            [
+                mid.alias("bb_mid"),
+                upper.alias("bb_upper"),
+                lower.alias("bb_lower"),
+            ]
+        )
         band_range = out["bb_upper"] - out["bb_lower"]
-        pct_b = pl.when(band_range == 0.0).then(0.5).otherwise(
-            (df["close"] - out["bb_lower"]) / band_range
+        pct_b = (
+            pl.when(band_range == 0.0)
+            .then(0.5)
+            .otherwise((df["close"] - out["bb_lower"]) / band_range)
         )
         out = out.with_columns(pct_b.alias("bb_pct_b"))
         return out

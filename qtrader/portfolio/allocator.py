@@ -1,25 +1,24 @@
 from __future__ import annotations
 
+import logging
 import time
-from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
 
-import numpy as np
 import polars as pl
 
-import logging
-from qtrader.core.container import container
 from qtrader.core.decimal_adapter import d
-from qtrader.core.types import AllocationWeights, SignalEvent
 
 _LOG = logging.getLogger(__name__)
 
 try:
     from qtrader_core import CapitalAllocator as RustAllocator
+
     _HAS_RUST = True
 except ImportError:
-    _LOG.warning("ALLOCATOR | Rust core (qtrader_core) not found. Falling back to Python implementation.")
+    _LOG.warning(
+        "ALLOCATOR | Rust core (qtrader_core) not found. Falling back to Python implementation."
+    )
     _HAS_RUST = False
 
 
@@ -41,7 +40,7 @@ class CapitalAllocationEngine:
         self._max_cap = max_cap
         if not _HAS_RUST:
             raise RuntimeError("ALLOCATOR | Rust core (qtrader_core) is required.")
-        
+
         self._rust_allocator = RustAllocator(max_cap=float(max_cap))
         # Telemetry for institutional situational awareness.
         self._current_distribution: dict[str, Decimal] = {}
@@ -65,17 +64,19 @@ class CapitalAllocationEngine:
         start_time = time.time()
 
         if not _HAS_RUST:
-            raise RuntimeError("ALLOCATOR | Rust core (qtrader_core) is required for capital allocation.")
+            raise RuntimeError(
+                "ALLOCATOR | Rust core (qtrader_core) is required for capital allocation."
+            )
 
         # 1. Prepare data for Rust
         strategy_sharpes = {str(s["id"]): float(s.get("sharpe", 0.0)) for s in strategies}
-        
+
         # 2. Compute via Rust
         report = self._rust_allocator.allocate_sharpe(strategy_sharpes, float(total_capital))
-        
+
         if report.status == "ALLOCATION_EMPTY":
-             _LOG.warning("[ALLOCATE] NO_PERFORMERS | Zero capital deployed.")
-             return {
+            _LOG.warning("[ALLOCATE] NO_PERFORMERS | Zero capital deployed.")
+            return {
                 "status": "ALLOCATION_EMPTY",
                 "result": "SKIP",
                 "message": "Zero strategies with Sharpe > 0 detected for target universe.",
@@ -128,7 +129,7 @@ class CapitalAllocationEngine:
     ) -> tuple[Decimal, str]:
         """
         Validate and potentially scale a proposed order size based on concentration limits.
-        
+
         Standash §4.5: Diversification Gating.
 
         Returns:
@@ -148,13 +149,13 @@ class CapitalAllocationEngine:
         # Scale down to meet max_cap
         allowed_notional = total_portfolio_value * self._max_cap
         current_notional = abs(current_position_qty) * price
-        
+
         remaining_notional = max(d(0), allowed_notional - current_notional)
         scaled_qty = remaining_notional / price if price > 0 else d(0)
-        
+
         # Round down to prevent float precision breakage
         scaled_qty = scaled_qty.quantize(Decimal("0.00000001"))
-        
+
         reason = f"CONCENTRATION_GUARD | Scaled from {proposed_qty} to {scaled_qty} (Cap: {self._max_cap:.0%})"
         self._last_trace = {
             "symbol": symbol,
@@ -164,7 +165,7 @@ class CapitalAllocationEngine:
             "new_notional": float(new_notional),
             "concentration": float(concentration),
             "max_cap": float(self._max_cap),
-            "reason": reason
+            "reason": reason,
         }
         return scaled_qty, reason
 
@@ -195,14 +196,14 @@ class PortfolioAllocator:
             return {}
 
         if not _HAS_RUST:
-             raise RuntimeError("Rust core required for PortfolioAllocator.")
+            raise RuntimeError("Rust core required for PortfolioAllocator.")
 
         # 1. Compute volatilties (standard deviation)
         vols = {name: float(series.std()) for name, series in strategy_returns.items()}
-        
+
         # 2. Delegate to Rust
         report = self._rust_allocator.allocate_risk_parity(vols, 1.0)
-        
+
         # 3. Construct result series
         min_len = min(len(series) for series in strategy_returns.values())
         result = {}

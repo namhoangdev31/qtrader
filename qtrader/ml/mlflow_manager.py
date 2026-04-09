@@ -500,13 +500,9 @@ class MLflowManager:
                 # 3. Transition to Production
                 # Promote shadow run to production, archive existing production.
                 # Get version from shadow run's model (should be in Staging).
-                staging_versions = client.get_latest_versions(
-                    model_name, stages=["Staging"]
-                )
+                staging_versions = client.get_latest_versions(model_name, stages=["Staging"])
                 if not staging_versions:
-                    self.logger.warning(
-                        "No staging version found for %s to promote", model_name
-                    )
+                    self.logger.warning("No staging version found for %s to promote", model_name)
                     return False
 
                 version = staging_versions[0].version

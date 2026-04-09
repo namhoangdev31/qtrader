@@ -34,9 +34,13 @@ class OBV(BaseFeature):
             OBV series aligned with df rows.
         """
         self.validate_inputs(df)
-        direction = pl.when(pl.col("close") > pl.col("close").shift(1)).then(1.0).when(
-            pl.col("close") < pl.col("close").shift(1)
-        ).then(-1.0).otherwise(0.0)
+        direction = (
+            pl.when(pl.col("close") > pl.col("close").shift(1))
+            .then(1.0)
+            .when(pl.col("close") < pl.col("close").shift(1))
+            .then(-1.0)
+            .otherwise(0.0)
+        )
 
         signed_vol = (direction * pl.col("volume")).fill_null(0.0)
         return df.select(signed_vol.cum_sum().alias(self.name))[self.name]
@@ -91,7 +95,9 @@ class DollarVolume(BaseFeature):
 
     def __init__(self, rolling_window: int | None = None) -> None:
         self.rolling_window = rolling_window
-        self.name = "dollar_volume" if rolling_window is None else f"dollar_volume_{rolling_window}d"
+        self.name = (
+            "dollar_volume" if rolling_window is None else f"dollar_volume_{rolling_window}d"
+        )
 
     def compute(self, df: pl.DataFrame) -> pl.Series:
         """Compute dollar volume, optionally with rolling sum.

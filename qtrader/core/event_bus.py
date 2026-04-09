@@ -152,13 +152,15 @@ class EventBus:
         # 3. Route to partition
         try:
             await self._queues[p_index].put(event)
-            
+
             # 4. Global Broadcast (Bridge to other containers)
             if self._redis and not event.is_remote:
                 # We use model_dump_json to serialize the Pydantic model
                 # The receiver will parse it back into a BaseEvent
-                asyncio.create_task(self._redis.publish(self._redis_channel, event.model_dump_json()))
-                
+                asyncio.create_task(
+                    self._redis.publish(self._redis_channel, event.model_dump_json())
+                )
+
             logger.debug(f"[EVENT_BUS] Published {event.event_type} to partition {p_index}")
             return True
         except asyncio.QueueFull:
@@ -216,31 +218,35 @@ class EventBus:
                     data_json = message["data"]
                     # Re-hydrate the event with correct polymorphic class
                     from qtrader.core.events import EVENT_TYPE_MAP, BaseEvent, EventType
-                    
+
                     # 1. Peek at event_type
                     try:
                         import json
+
                         raw_data = json.loads(data_json)
                         et_str = raw_data.get("event_type")
                         et = EventType(et_str) if et_str else None
-                        
+
                         # 2. Map to class or fallback to BaseEvent
                         event_cls = EVENT_TYPE_MAP.get(et, BaseEvent)
                         event = event_cls.model_validate_json(data_json)
                     except Exception as e:
-                        logger.error(f"[EVENT_BUS] Deserialization failed for type {et_str if 'et_str' in locals() else 'unknown'}: {e}")
+                        logger.error(
+                            f"[EVENT_BUS] Deserialization failed for type {et_str if 'et_str' in locals() else 'unknown'}: {e}"
+                        )
                         continue
-                    
+
                     # Mark as remote to prevent circular loops
                     event = event.model_copy(update={"is_remote": True})
-                    
+
                     # Publish locally
                     await self.publish(event)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"[EVENT_BUS] Redis bridge listener error: {e}")
-                await asyncio.sleep(2)
+                # Throttled by the get_message timeout (1.0s) on next iteration
+                continue
 
     async def _safe_deliver(self, handler: Callable, event: BaseEvent) -> None:
         """Execute a single handler with timeout and retry logic."""

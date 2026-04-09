@@ -205,8 +205,9 @@ class LatencyEnforcer:
             m.stage: {
                 "duration_ms": m.duration_ms,
                 "budget_ms": m.budget_ms,
-                "breached": m.breached
-            } for m in self._measurements
+                "breached": m.breached,
+            }
+            for m in self._measurements
         }
 
     def get_pipeline_data(self, trace_id: str) -> PipelineLatencyReport | None:

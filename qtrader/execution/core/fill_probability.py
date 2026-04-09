@@ -74,6 +74,7 @@ class FillProbabilityModel:
             return 1.0
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             # High-performance silent failover for industrial stability
             _LOG.error("FillProbabilityModel: computation failed", exc_info=True)

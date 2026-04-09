@@ -97,4 +97,3 @@ def test_mean_reversion_alpha_name() -> None:
     out = alpha.compute(df)
     assert out.name == "mean_reversion"
 """
-

@@ -1,4 +1,5 @@
 """Feature validation for quantitative factors using vectorized Polars."""
+
 from __future__ import annotations
 
 import polars as pl
@@ -109,9 +110,7 @@ class FeatureValidator:
         """Return cached validation metrics."""
         return self.metrics.copy()
 
-    def _compute_ic_series(
-        self, feature: pl.Series, forward_returns: pl.Series
-    ) -> pl.Series:
+    def _compute_ic_series(self, feature: pl.Series, forward_returns: pl.Series) -> pl.Series:
         """Compute rolling IC (Pearson)."""
         df = pl.DataFrame({"feature": feature, "forward_returns": forward_returns})
 

@@ -1,5 +1,5 @@
-"""Pre-Trade Risk Validation — Standash §4.6, §4.7.
-"""
+"""Pre-Trade Risk Validation — Standash §4.6, §4.7."""
+
 from __future__ import annotations
 
 import logging
@@ -9,13 +9,14 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from qtrader.core.dynamic_config import DynamicSettingsMixin, config_manager
+from qtrader.core.dynamic_config import DynamicSettingsMixin
 
 logger = logging.getLogger("qtrader.execution.pre_trade_risk")
 
 try:
     import qtrader_core
     from qtrader_core import Side as RustSide
+
     HAS_RUST_CORE = True
 except ImportError:
     HAS_RUST_CORE = False
@@ -32,7 +33,7 @@ class PreTradeRiskConfig:
 
     # Position limits
     max_position_per_symbol: Decimal = Decimal("100")  # Max position per symbol (Units)
-    max_position_usd: Decimal = Decimal("1000000")    # Max position per symbol (USD)
+    max_position_usd: Decimal = Decimal("1000000")  # Max position per symbol (USD)
     max_total_exposure: Decimal = Decimal("10000000")  # Max total USD exposure
 
     # Order rate limits
@@ -91,8 +92,13 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         # 10. High-Performance Rust Core Initialization
         if HAS_RUST_CORE:
             self._rust_engine = qtrader_core.RiskEngine(
-                max_position_usd=float(self.config.max_position_per_symbol * (self.config.max_order_notional / self.config.max_order_quantity)), # Approximation
-                max_drawdown_pct=float(self.config.max_concentration_pct), # Using concentration as proxy for simple pos limit
+                max_position_usd=float(
+                    self.config.max_position_per_symbol
+                    * (self.config.max_order_notional / self.config.max_order_quantity)
+                ),  # Approximation
+                max_drawdown_pct=float(
+                    self.config.max_concentration_pct
+                ),  # Using concentration as proxy for simple pos limit
                 max_order_qty=float(self.config.max_order_quantity),
                 max_order_notional=float(self.config.max_order_notional),
                 max_orders_per_second=int(self.config.max_orders_per_second),
@@ -112,11 +118,13 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
     def update_mid_price(self, symbol: str, price: Decimal) -> None:
         """Update current mid price for a symbol and recalculate dynamic limits."""
         self._mid_prices[symbol] = price
-        
+
         # Derive dynamic unit limit from USD limit: Units = MaxUSD / Price
         if price > 0:
             self._effective_unit_limits[symbol] = self.config.max_position_usd / price
-            logger.debug(f"[RISK] Recalculated dynamic unit limit for {symbol}: {self._effective_unit_limits[symbol]:.4f}")
+            logger.debug(
+                f"[RISK] Recalculated dynamic unit limit for {symbol}: {self._effective_unit_limits[symbol]:.4f}"
+            )
 
     def update_portfolio_value(self, value: Decimal) -> None:
         """Update total portfolio value."""
@@ -191,10 +199,12 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         current_position = self._positions.get(symbol, Decimal("0"))
         side_upper = side.upper()
         new_position = current_position + (quantity if side_upper == "BUY" else -quantity)
-        
+
         # Use dynamic limit if available, fallback to static config
-        effective_limit = self._effective_unit_limits.get(symbol, self.config.max_position_per_symbol)
-        
+        effective_limit = self._effective_unit_limits.get(
+            symbol, self.config.max_position_per_symbol
+        )
+
         if abs(new_position) > effective_limit:
             checks_failed.append(
                 f"POSITION_UNITS_EXCEEDED: {abs(new_position):.4f} > {effective_limit:.4f} (Dynamic)"
@@ -229,10 +239,10 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         # ------------------------------------------------------------------
         now = time.time()
         self._order_timestamps.append(now)
-        
+
         # Use DynamicSettingsMixin property (reactive to AI overrides)
         max_ops = self.TS_MAX_ORDERS_PER_SECOND
-        
+
         recent_1s = sum(1 for t in self._order_timestamps if now - t < 1.0)
         if recent_1s > max_ops:
             checks_failed.append(
@@ -244,11 +254,9 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         # Check 8: Order rate limit (per minute) - Scaled from dynamic limit
         recent_60s = sum(1 for t in self._order_timestamps if now - t < 60.0)
         # Scale 1m limit proportional to dynamic 1s limit if not explicitly defined
-        max_opm = self.config.max_orders_per_minute 
+        max_opm = self.config.max_orders_per_minute
         if recent_60s > max_opm:
-            checks_failed.append(
-                f"RATE_LIMIT_60S: {recent_60s} > {max_opm}"
-            )
+            checks_failed.append(f"RATE_LIMIT_60S: {recent_60s} > {max_opm}")
         else:
             checks_passed.append("RATE_LIMIT_60S_OK")
 
@@ -256,36 +264,42 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         # Performance Gating: Rust Acceleration Path (< 100μs)
         # ------------------------------------------------------------------
         if HAS_RUST_CORE:
-            from qtrader_core import (
-                Order as RustOrder,
-                Account as RustAccount,
-                Side as RustSide,
-                OrderType as RustOrderType
-            )
+            from qtrader_core import Account as RustAccount
+            from qtrader_core import Order as RustOrder
+            from qtrader_core import OrderType as RustOrderType
+            from qtrader_core import Side as RustSide
 
             # Build mock context for Rust engine
             rust_side = RustSide.Buy if side.upper() == "BUY" else RustSide.Sell
             order_price_f = float(price or self._mid_prices.get(symbol, Decimal("0")))
-            
+
             # Create lightweight Rust order object
             rust_order = RustOrder(
-                0, symbol, rust_side, float(quantity), order_price_f,
+                0,
+                symbol,
+                rust_side,
+                float(quantity),
+                order_price_f,
                 RustOrderType.Limit if price else RustOrderType.Market,
-                int(time.time() * 1000)
+                int(time.time() * 1000),
             )
-            
+
             # Create lightweight Account snapshot
             rust_account = RustAccount(float(self._portfolio_value))
             # We must sync positions for concentration checks
             for sym, qty in self._positions.items():
-                rust_account.add_position_direct(sym, float(qty), float(self._mid_prices.get(sym, Decimal("0"))))
+                rust_account.add_position_direct(
+                    sym, float(qty), float(self._mid_prices.get(sym, Decimal("0")))
+                )
 
             try:
                 # Primary Rust checks (Fat finger, Position, Concentration)
-                self._rust_engine.check_order(rust_order, rust_account, order_price_f, float(self._portfolio_value))
+                self._rust_engine.check_order(
+                    rust_order, rust_account, order_price_f, float(self._portfolio_value)
+                )
                 checks_passed.extend(["RUST_FAT_FINGER_OK", "RUST_POSITION_OK"])
             except ValueError as e:
-                checks_failed.append(f"RUST_RISK_REJECT: {str(e)}")
+                checks_failed.append(f"RUST_RISK_REJECT: {e!s}")
 
         # Final decision
         approved = len(checks_failed) == 0

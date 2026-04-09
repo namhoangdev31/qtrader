@@ -3,6 +3,7 @@ Level 2 Critical Tests: Feature Base Contract
 Covers: BaseFeature validate_inputs(), Feature Protocol compliance,
 missing columns, below-min-periods, and statelessness.
 """
+
 import polars as pl
 import pytest
 
@@ -11,6 +12,7 @@ from qtrader.features.base import BaseFeature, Feature
 # ---------------------------------------------------------------------------
 # Concrete stub for testing BaseFeature mixin
 # ---------------------------------------------------------------------------
+
 
 class PriceReturnFeature(BaseFeature):
     name = "price_return"
@@ -39,6 +41,7 @@ class MultiColFeature(BaseFeature):
 # validate_inputs()
 # ---------------------------------------------------------------------------
 
+
 def test_validate_missing_column_raises():
     f = PriceReturnFeature()
     df_no_close = pl.DataFrame({"open": [100.0, 101.0]})
@@ -55,7 +58,7 @@ def test_validate_below_min_periods_raises():
 
 def test_validate_passes_exact_min_periods():
     f = PriceReturnFeature()
-    df = pl.DataFrame({"close": [100.0, 101.0]})   # exactly 2 rows
+    df = pl.DataFrame({"close": [100.0, 101.0]})  # exactly 2 rows
     f.validate_inputs(df)  # Must not raise
 
 
@@ -69,6 +72,7 @@ def test_validate_multi_col_missing_one():
 # ---------------------------------------------------------------------------
 # compute() contract
 # ---------------------------------------------------------------------------
+
 
 def test_compute_output_length_matches_input():
     f = PriceReturnFeature()
@@ -114,6 +118,7 @@ def test_spread_feature_all_positive():
 # ---------------------------------------------------------------------------
 # Protocol compliance
 # ---------------------------------------------------------------------------
+
 
 def test_base_feature_satisfies_protocol():
     """BaseFeature (with concrete stub) must satisfy the Feature Protocol."""

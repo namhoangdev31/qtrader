@@ -2,33 +2,41 @@
 from __future__ import annotations
 
 import asyncio
+import queue
+import threading
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
-import threading
-import queue
 
+from qtrader_core import (
+    ExecutionEngine as RustExecutionEngine,
+)
+from qtrader_core import (
+    Order as RustOrder,
+)
+from qtrader_core import (
+    OrderType as RustOrderType,
+)
+from qtrader_core import (
+    RiskEngine as RustRiskEngine,
+)
+from qtrader_core import (
+    RoutingMode as RustRoutingMode,
+)
+from qtrader_core import (
+    Side as RustSide,
+)
+
+from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.core.logger import logger
 from qtrader.core.state_store import Position, StateStore
-from qtrader.core.events import FillEvent, FillPayload, OrderEvent
+from qtrader.core.trace_authority import TraceAuthority
 from qtrader.core.types import LoggerProtocol
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine
-from qtrader.core.trace_authority import TraceAuthority
-
-import qtrader_core
-from qtrader_core import (
-    Account as RustAccount,
-    Order as RustOrder,
-    OrderType as RustOrderType,
-    Side as RustSide,
-    ExecutionEngine as RustExecutionEngine,
-    RoutingMode as RustRoutingMode,
-    RiskEngine as RustRiskEngine,
-)
 
 from .orderbook_simulator import OrderbookSimulator
 from .rate_limiter import TokenBucketRateLimiter
@@ -49,7 +57,6 @@ class OrderStatus(Enum):
 
 
 class ExchangeAdapter(ABC):
-
     def __init__(self, name: str, logger: LoggerProtocol = logger) -> None:
         self.name = name
         self.logger = logger
@@ -77,7 +84,6 @@ class ExchangeAdapter(ABC):
 
 
 class SimulatedExchangeAdapter(ExchangeAdapter):
-
     def __init__(
         self,
         name: str = "SimulatedExchange",
@@ -170,7 +176,9 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
             if limit_price is None:
                 continue
 
-            can_fill = (side == "BUY" and price <= limit_price) or (side == "SELL" and price >= limit_price)
+            can_fill = (side == "BUY" and price <= limit_price) or (
+                side == "SELL" and price >= limit_price
+            )
             if can_fill:
                 fill_event = FillEvent(
                     source="SimulatedExchange",
@@ -181,7 +189,7 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
                         quantity=order.payload.quantity,
                         price=price,
                         commission=Decimal("0.0"),
-                    )
+                    ),
                 )
                 fills.append(fill_event)
                 order_info["status"] = OrderStatus.FILLED
@@ -192,7 +200,6 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
 
 
 class ExecutionEngine:
-
     def __init__(
         self,
         exchange_adapter: ExchangeAdapter,
@@ -214,7 +221,7 @@ class ExecutionEngine:
         # Create a Rust RiskEngine with matching limits (Required for WarModeEngine)
         self._rust_risk = RustRiskEngine(
             max_position_usd=max_order_size,  # Simplified mapping
-            max_drawdown_pct=0.1,             # Default 10%
+            max_drawdown_pct=0.1,  # Default 10%
             max_order_notional=max_order_size,
         )
 
@@ -230,11 +237,10 @@ class ExecutionEngine:
         self.enable_failover_queue = enable_failover_queue
         self.logger = logger
         self._event_bus = event_bus
-        
+
         # Python-side Rate Limiter (Standash §6.1)
         self.rate_limiter = TokenBucketRateLimiter(
-            capacity=max_orders_per_second,
-            refill_rate=max_orders_per_second
+            capacity=max_orders_per_second, refill_rate=max_orders_per_second
         )
 
         # Background Execution Worker (Hybrid Concurrency)
@@ -242,9 +248,7 @@ class ExecutionEngine:
         self._rust_engine: RustExecutionEngine | None = None
         self._max_retry_attempts = max_retry_attempts
         self._worker_thread = threading.Thread(
-            target=self._execution_worker_loop,
-            daemon=True,
-            name="ExecutionWorker"
+            target=self._execution_worker_loop, daemon=True, name="ExecutionWorker"
         )
 
         # Subscribe to retries if event bus is available
@@ -285,13 +289,14 @@ class ExecutionEngine:
         # 3. Wait for Worker Result
         try:
             routed_orders = await future
-            
+
             # 4. Dispatch the routed orders back to Python adapters
             all_success = True
             last_id = None
-            
+
             for r_order, exchange in routed_orders:
                 from qtrader.core.events import OrderPayload
+
                 dispatch_order = OrderEvent(
                     source="ExecutionEngine",
                     timestamp=int(time.time() * 1_000_000),
@@ -301,11 +306,13 @@ class ExecutionEngine:
                         action="BUY" if r_order.side == RustSide.Buy else "SELL",
                         quantity=Decimal(str(r_order.qty)),
                         price=Decimal(str(r_order.price)) if r_order.price > 0 else None,
-                        order_type="MARKET" if r_order.order_type == RustOrderType.Market else "LIMIT",
-                        metadata={**(order.payload.metadata or {}), "exchange": exchange}
-                    )
+                        order_type="MARKET"
+                        if r_order.order_type == RustOrderType.Market
+                        else "LIMIT",
+                        metadata={**(order.payload.metadata or {}), "exchange": exchange},
+                    ),
                 )
-                
+
                 try:
                     broker_oid = await self.exchange_adapter.submit_order(dispatch_order)
                     last_id = broker_oid
@@ -313,8 +320,8 @@ class ExecutionEngine:
                     self.logger.error(f"Failed to submit order to {exchange}: {e}")
                     all_success = False
                     last_id = str(e)
-                    break # Stop dispatching subsequent legs if one fails
-            
+                    break  # Stop dispatching subsequent legs if one fails
+
             return all_success, last_id
 
         except Exception as e:
@@ -323,6 +330,7 @@ class ExecutionEngine:
 
     async def _on_retry_order(self, event: Any) -> None:
         from qtrader.core.events import RetryOrderEvent
+
         if isinstance(event, RetryOrderEvent):
             await self.execute_order(event.order, attempt=event.attempt)
 
@@ -354,8 +362,8 @@ class ExecutionEngine:
     def _execution_worker_loop(self) -> None:
         # Safely retrieve simulation parameters from adapter defaults if available
         latency = 0.0
-        slippage = float(self.max_slippage * 10000) # Default from engine config
-        
+        slippage = float(self.max_slippage * 10000)  # Default from engine config
+
         if hasattr(self.exchange_adapter, "orderbook_simulator"):
             latency = self.exchange_adapter.orderbook_simulator.latency_ms
             slippage = float(self.exchange_adapter.orderbook_simulator.max_slippage_pct * 10000)
@@ -368,7 +376,7 @@ class ExecutionEngine:
             latency_ms=latency,
             slippage_bps=slippage,
         )
-        loop = asyncio.new_event_loop() # For future completion if needed
+        loop = asyncio.new_event_loop()  # For future completion if needed
         # Standash §4.2: Suppress trace warnings in background worker using TraceAuthority
         with TraceAuthority.inject_trace("EXEC_WORKER_THREAD"):
             while True:
@@ -376,14 +384,18 @@ class ExecutionEngine:
                     item = self._worker_queue.get()
                     if item is None:
                         break
-                    
+
                     cmd, data, future = item
-                    
+
                     if cmd == "EXECUTE":
                         order = data
                         # Map to Rust using payload (Standash §2)
                         rust_side = RustSide.Buy if order.payload.action == "BUY" else RustSide.Sell
-                        rust_type = RustOrderType.Market if order.payload.order_type == "MARKET" else RustOrderType.Limit
+                        rust_type = (
+                            RustOrderType.Market
+                            if order.payload.order_type == "MARKET"
+                            else RustOrderType.Limit
+                        )
                         rust_order = RustOrder(
                             id=str(int(time.time() * 1000)),
                             symbol=order.payload.symbol,
@@ -391,16 +403,16 @@ class ExecutionEngine:
                             qty=float(order.payload.quantity),
                             price=float(order.payload.price) if order.payload.price else 0.0,
                             order_type=rust_type,
-                            timestamp_ms=int(time.time() * 1000)
+                            timestamp_ms=int(time.time() * 1000),
                         )
-                        
-                        market_data = {order.payload.symbol: (100.0, 100.1)} # Simplified
-                        
+
+                        market_data = {order.payload.symbol: (100.0, 100.1)}  # Simplified
+
                         try:
                             result = self._rust_engine.execute_order(
                                 rust_order,
-                                1000000.0, # Peak equity placeholder
-                                market_data
+                                1000000.0,  # Peak equity placeholder
+                                market_data,
                             )
                             future.get_loop().call_soon_threadsafe(future.set_result, result)
                         except Exception as e:
@@ -408,12 +420,14 @@ class ExecutionEngine:
 
                     elif cmd == "FILL_UPDATE":
                         fill_event = data
-                        rust_side = RustSide.Buy if fill_event.payload.side == "BUY" else RustSide.Sell
+                        rust_side = (
+                            RustSide.Buy if fill_event.payload.side == "BUY" else RustSide.Sell
+                        )
                         self._rust_engine.update_fill(
                             fill_event.payload.symbol,
                             rust_side,
                             float(fill_event.payload.quantity),
-                            float(fill_event.payload.price)
+                            float(fill_event.payload.price),
                         )
 
                 except Exception as e:
@@ -425,18 +439,26 @@ class ExecutionEngine:
     def _on_order_filled(self, order_id: str, fill_event: FillEvent) -> None:
         # 1. Sync Rust state via background worker
         self._worker_queue.put(("FILL_UPDATE", fill_event, None))
-        
+
         # 2. Propagation & Logging
         from qtrader.execution.trade_logger import TradeLogger
 
-        trace_id = getattr(fill_event.payload, "trace_id", "no_trace")
+        trace_id = getattr(
+            fill_event,
+            "trace_id",
+            getattr(fill_event.payload, "metadata", {}).get("trace_id", "no_trace"),
+        )
+        metadata = getattr(fill_event.payload, "metadata", {})
         TradeLogger.log_trade(
             symbol=fill_event.payload.symbol,
             side=fill_event.payload.side,
             quantity=float(fill_event.payload.quantity),
             price=float(fill_event.payload.price),
-            trace_id=trace_id,
+            trace_id=str(trace_id),
             timestamp=getattr(fill_event, "timestamp", time.time()),
+            sl=float(metadata.get("sl", 0.0)),
+            tp=float(metadata.get("tp", 0.0)),
+            reason=metadata.get("reason", "SIGNAL"),
         )
 
         self._log_explainability(fill_event, trace_id)
@@ -461,7 +483,11 @@ class ExecutionEngine:
 
     async def _update_position_from_fill(self, fill_event: FillEvent) -> None:
         symbol = fill_event.payload.symbol
-        quantity = fill_event.payload.quantity if fill_event.payload.side == "BUY" else -fill_event.payload.quantity
+        quantity = (
+            fill_event.payload.quantity
+            if fill_event.payload.side == "BUY"
+            else -fill_event.payload.quantity
+        )
 
         current = await self.state_store.get_position(symbol)
         if current:

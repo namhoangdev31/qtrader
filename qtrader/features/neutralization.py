@@ -48,8 +48,10 @@ class FactorNeutralizer:
 
         mean_expr = pl.col(factor_col).mean().over(group_col)
         std_expr = pl.col(factor_col).std().over(group_col)
-        neutralized = pl.when(std_expr == 0.0).then(0.0).otherwise(
-            (pl.col(factor_col) - mean_expr) / std_expr
+        neutralized = (
+            pl.when(std_expr == 0.0)
+            .then(0.0)
+            .otherwise((pl.col(factor_col) - mean_expr) / std_expr)
         )
         return df.select(neutralized.alias(f"{factor_col}_sector_neutral"))[
             f"{factor_col}_sector_neutral"
@@ -72,9 +74,7 @@ class FactorNeutralizer:
         if factor_col not in df.columns:
             raise ValueError(f"factor_col '{factor_col}' not found in df.")
         demeaned = pl.col(factor_col) - pl.col(factor_col).mean()
-        return df.select(demeaned.alias(f"{factor_col}_mkt_neutral"))[
-            f"{factor_col}_mkt_neutral"
-        ]
+        return df.select(demeaned.alias(f"{factor_col}_mkt_neutral"))[f"{factor_col}_mkt_neutral"]
 
     @staticmethod
     def winsorize(
@@ -122,8 +122,8 @@ class FactorNeutralizer:
         # Rolling z-score via Polars expressions
         rolling_mean = series.rolling_mean(window)
         rolling_std = series.rolling_std(window)
-        result = pl.when(rolling_std == 0.0).then(None).otherwise(
-            (series - rolling_mean) / rolling_std
+        result = (
+            pl.when(rolling_std == 0.0).then(None).otherwise((series - rolling_mean) / rolling_std)
         )
         return result.alias(f"{name}_zscore{window}")
 

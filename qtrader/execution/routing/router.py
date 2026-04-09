@@ -38,7 +38,15 @@ class DynamicRoutingEngine:
         self._cost_model = RoutingCostModel(config)
         self._fill_model = VenueFillProbabilityModel(config)
 
-    def route(self, order_size: float, side: str, market_data: dict[str, dict[str, Any]], latencies: dict[str, float], order_type: str = "MARKET", time_horizon: float = 1.0) -> dict[str, float]:  # noqa: PLR0913, E501
+    def route(
+        self,
+        order_size: float,
+        side: str,
+        market_data: dict[str, dict[str, Any]],
+        latencies: dict[str, float],
+        order_type: str = "MARKET",
+        time_horizon: float = 1.0,
+    ) -> dict[str, float]:  # noqa: PLR0913, E501
         """
         Generate optimal order allocation across candidate venues.
 
@@ -99,9 +107,7 @@ class DynamicRoutingEngine:
         else:
             # Failsafe: Fallback to best known liquidity venue
             best_venue = (
-                max(l_scores, key=lambda k: l_scores[k])
-                if l_scores
-                else next(iter(market_data))
+                max(l_scores, key=lambda k: l_scores[k]) if l_scores else next(iter(market_data))
             )
             allocation[best_venue] = order_size
 

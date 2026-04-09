@@ -4,31 +4,35 @@ Covers: MomentumAlpha, MeanReversionAlpha, TrendAlpha
 Focus: output correctness, floating-point precision, look-ahead bias,
 direction of signal, NaN propagation, and statelessness.
 """
+
+from datetime import datetime
+
 import numpy as np
 import polars as pl
 import pytest
 
 from qtrader.alpha.technical import MeanReversionAlpha, MomentumAlpha, TrendAlpha
 
-from datetime import datetime
 
 def _add_ohlcv(df: pl.DataFrame) -> pl.DataFrame:
     """Add missing required columns to test DataFrames."""
     n = df.height
     cols = df.columns
     new_cols = {}
-    if "open" not in cols: new_cols["open"] = [100.0] * n
-    if "high" not in cols: new_cols["high"] = df["close"] + 0.5
-    if "low" not in cols: new_cols["low"] = df["close"] - 0.5
-    if "volume" not in cols: new_cols["volume"] = [1000.0] * n
+    if "open" not in cols:
+        new_cols["open"] = [100.0] * n
+    if "high" not in cols:
+        new_cols["high"] = df["close"] + 0.5
+    if "low" not in cols:
+        new_cols["low"] = df["close"] - 0.5
+    if "volume" not in cols:
+        new_cols["volume"] = [1000.0] * n
     if "timestamp" not in cols:
         new_cols["timestamp"] = pl.datetime_range(
-            datetime(2024, 1, 1), 
-            datetime(2025, 1, 1), 
-            interval="1m", 
-            eager=True
+            datetime(2024, 1, 1), datetime(2025, 1, 1), interval="1m", eager=True
         ).head(n)
     return df.with_columns(**new_cols)
+
 
 def rising_prices(n=120, start=100.0, step=0.01):
     # Exponential growth ensures log-returns are positive and increasing
@@ -46,12 +50,15 @@ def falling_prices(n=120, start=1000.0, step=0.01):
 
 def ohlcv(n=60, start=100.0):
     prices = [start * np.exp(0.01 * i + 0.0001 * i**2) for i in range(n)]
-    df = pl.DataFrame({
-        "close": prices,
-        "high":  [p * 1.005 for p in prices],
-        "low":   [p * 0.995 for p in prices],
-    })
+    df = pl.DataFrame(
+        {
+            "close": prices,
+            "high": [p * 1.005 for p in prices],
+            "low": [p * 0.995 for p in prices],
+        }
+    )
     return _add_ohlcv(df)
+
 
 class TestMomentumAlpha:
     def test_output_length_equals_input(self):
@@ -88,8 +95,9 @@ class TestMomentumAlpha:
         r_short = alpha.compute(df_short)
         r_long = alpha.compute(df_long)
         # Index 35 (interior) must be identical
-        assert r_short[35] == pytest.approx(r_long[35], abs=1e-9), \
+        assert r_short[35] == pytest.approx(r_long[35], abs=1e-9), (
             "Look-ahead bias detected: future rows changed past value"
+        )
 
     def test_stateless_between_calls(self):
         df = rising_prices(50)
@@ -127,6 +135,7 @@ class TestMomentumAlpha:
 # MeanReversionAlpha
 # ---------------------------------------------------------------------------
 
+
 class TestMeanReversionAlpha:
     def test_output_length(self):
         df = rising_prices(30)
@@ -139,7 +148,7 @@ class TestMeanReversionAlpha:
 
     def test_spike_up_generates_negative_signal(self):
         """Price spikes above mean → expect to revert → signal should be negative."""
-        prices = [100.0] * 20 + [150.0]   # sharp one-day spike
+        prices = [100.0] * 20 + [150.0]  # sharp one-day spike
         df = _add_ohlcv(pl.DataFrame({"close": prices}))
         alpha = MeanReversionAlpha(lookback=5, zscore_window=10)
         result = alpha.compute(df)
@@ -157,11 +166,17 @@ class TestMeanReversionAlpha:
 
     def test_look_ahead_bias_mean_reversion(self):
         """Mean reversion at index T must be identical with or without future data."""
-        df_base = _add_ohlcv(pl.DataFrame({"close": [100.0 + 5*np.sin(i/3) for i in range(30)]}))
-        df_ext = _add_ohlcv(pl.concat([
-            pl.DataFrame({"close": [100.0 + 5*np.sin(i/3) for i in range(30)]}), 
-            pl.DataFrame({"close": [200.0]*20})
-        ]))
+        df_base = _add_ohlcv(
+            pl.DataFrame({"close": [100.0 + 5 * np.sin(i / 3) for i in range(30)]})
+        )
+        df_ext = _add_ohlcv(
+            pl.concat(
+                [
+                    pl.DataFrame({"close": [100.0 + 5 * np.sin(i / 3) for i in range(30)]}),
+                    pl.DataFrame({"close": [200.0] * 20}),
+                ]
+            )
+        )
         alpha = MeanReversionAlpha(lookback=3, zscore_window=10)
         r_base = alpha.compute(df_base)
         r_ext = alpha.compute(df_ext)
@@ -180,14 +195,19 @@ class TestMeanReversionAlpha:
 # TrendAlpha
 # ---------------------------------------------------------------------------
 
+
 class TestTrendAlpha:
     def test_output_length(self):
         df = ohlcv(80)
-        result = TrendAlpha(fast_window=5, slow_window=20, atr_window=5, zscore_window=30).compute(df)
+        result = TrendAlpha(fast_window=5, slow_window=20, atr_window=5, zscore_window=30).compute(
+            df
+        )
         assert result.len() == 80
 
     def test_output_name(self):
-        result = TrendAlpha(fast_window=2, slow_window=5, atr_window=3, zscore_window=5).compute(ohlcv(20))
+        result = TrendAlpha(fast_window=2, slow_window=5, atr_window=3, zscore_window=5).compute(
+            ohlcv(20)
+        )
         assert result.name == "trend"
 
     def test_persistent_uptrend_positive_signal(self):
@@ -198,7 +218,7 @@ class TestTrendAlpha:
         assert float(tail.mean()) > 0, "Uptrend should produce positive trend signal"
 
     def test_requires_high_low_columns(self):
-        df_no_high = pl.DataFrame({"close": [100.0]*30, "low": [99.0]*30})
+        df_no_high = pl.DataFrame({"close": [100.0] * 30, "low": [99.0] * 30})
         alpha = TrendAlpha(fast_window=2, slow_window=5, atr_window=3, zscore_window=5)
         with pytest.raises(Exception):
             alpha.compute(df_no_high)

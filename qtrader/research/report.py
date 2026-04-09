@@ -1,4 +1,5 @@
 """ReportBuilder – HTML/Markdown report generator for QTrader Analyst workflows."""
+
 from __future__ import annotations
 
 import base64
@@ -75,7 +76,12 @@ class ReportBuilder:
         """Add a table section from a Polars DataFrame or a flat dict of metrics."""
         if isinstance(df, dict):
             # Convert flat metrics dict → 2-col Polars DataFrame
-            df = pl.DataFrame({"Metric": list(df.keys()), "Value": [f"{v:.4f}" if isinstance(v, float) else str(v) for v in df.values()]})
+            df = pl.DataFrame(
+                {
+                    "Metric": list(df.keys()),
+                    "Value": [f"{v:.4f}" if isinstance(v, float) else str(v) for v in df.values()],
+                }
+            )
         html = self._df_to_html_table(df)
         self._sections.append(_Section(heading, f"<h2>{heading}</h2>{html}"))
         return self

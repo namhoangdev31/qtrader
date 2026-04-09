@@ -23,26 +23,28 @@ class ViolationHandler:
         self.logger = container.get("logger")
         self.failfast = container.get("failfast")
         self.log_path = log_path
-        
+
         # Internal Metrics
         self.violation_count = 0
         self.blocked_execution_count = 0
         self.alert_trigger_count = 0
 
-    async def handle_violation(self, violation: ConstraintViolation, context: dict[str, Any] | None = None) -> None:
+    async def handle_violation(
+        self, violation: ConstraintViolation, context: dict[str, Any] | None = None
+    ) -> None:
         """
         Principal entry point for violation handling.
         Transitions the system to a REJECTED/HALTED state.
         """
         self.violation_count += 1
         self.blocked_execution_count += 1
-        
+
         timestamp = datetime.utcnow().isoformat()
         violation_data = {
             "timestamp": timestamp,
             "constraint_id": violation.constraint_id,
             "message": violation.message,
-            "context": context or {}
+            "context": context or {},
         }
 
         # 1. Structured Logging
@@ -52,7 +54,7 @@ class ViolationHandler:
             status="HALT",
             message=violation.message,
             metadata={"constraint_id": violation.constraint_id},
-            level="ERROR"
+            level="ERROR",
         )
         self._persist_violation(violation_data)
 
@@ -62,10 +64,7 @@ class ViolationHandler:
 
         # 3. System-Wide Halt via FailFast
         # This ensures the orchestrator stops and safe state is preserved
-        await self.failfast.handle_error(
-            source="ViolationHandler",
-            error=violation
-        )
+        await self.failfast.handle_error(source="ViolationHandler", error=violation)
 
     def _persist_violation(self, data: dict[str, Any]) -> None:
         """Append violation to persistent log for audit."""
@@ -77,7 +76,7 @@ class ViolationHandler:
                         logs = json.load(f)
                     except json.JSONDecodeError:
                         pass
-            
+
             logs.append(data)
             with open(self.log_path, "w") as f:
                 json.dump(logs, f, indent=2)
@@ -89,7 +88,7 @@ class ViolationHandler:
                 action="_persist_violation",
                 status="FAILED",
                 message=str(e),
-                level="CRITICAL"
+                level="CRITICAL",
             )
 
     async def _emit_alert(self, data: dict[str, Any]) -> None:
@@ -101,7 +100,7 @@ class ViolationHandler:
             "threshold": 0.0,
             "severity": "CRITICAL",
             "action": "HALT_SYSTEM",
-            "timestamp": data["timestamp"]
+            "timestamp": data["timestamp"],
         }
         await alert_engine.trigger(alert_info)
 
@@ -110,8 +109,9 @@ class ViolationHandler:
             "violations": self.violation_count,
             "blocked": self.blocked_execution_count,
             "alerts": self.alert_trigger_count,
-            "status": "ENFORCED"
+            "status": "ENFORCED",
         }
+
 
 # Authoritative Instance
 violation_handler = ViolationHandler()

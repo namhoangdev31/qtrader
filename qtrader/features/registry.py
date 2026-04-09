@@ -46,9 +46,7 @@ class FeatureRegistry:
             feature: Any object satisfying the ``Feature`` protocol.
         """
         if name in self._features:
-            _LOG.warning(
-                "FeatureRegistry: overwriting existing feature '%s'.", name
-            )
+            _LOG.warning("FeatureRegistry: overwriting existing feature '%s'.", name)
         self._features[name] = feature
         _LOG.debug("Registered feature '%s' (version=%s).", name, getattr(feature, "version", "?"))
 
@@ -66,8 +64,7 @@ class FeatureRegistry:
         """
         if name not in self._features:
             raise KeyError(
-                f"Feature '{name}' not found in registry. "
-                f"Available: {list(self._features)}"
+                f"Feature '{name}' not found in registry. Available: {list(self._features)}"
             )
         return self._features[name]
 
@@ -138,10 +135,19 @@ def build_default_registry() -> FeatureRegistry:
 
     registry = FeatureRegistry()
     factors: list[Feature] = [
-        RSI(14), ATR(14), MACD(12, 26, 9), BollingerBands(20),
-        MomentumReturn(20), ROC(10),
-        OBV(), VWAP(), DollarVolume(), VolumeRatio(20), ForceIndex(13),
-        LaggedReturn(1, 1), ReturnVolatility(20),
+        RSI(14),
+        ATR(14),
+        MACD(12, 26, 9),
+        BollingerBands(20),
+        MomentumReturn(20),
+        ROC(10),
+        OBV(),
+        VWAP(),
+        DollarVolume(),
+        VolumeRatio(20),
+        ForceIndex(13),
+        LaggedReturn(1, 1),
+        ReturnVolatility(20),
     ]
     for f in factors:
         registry.register(f.name, f)

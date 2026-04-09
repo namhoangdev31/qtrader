@@ -23,19 +23,19 @@ class RuntimeGatekeeper:
     def __init__(
         self,
         halt_log_path: str = "qtrader/logs/halt_log.json",
-        monitoring_map_path: str = "qtrader/audit/runtime_monitoring_map.json"
+        monitoring_map_path: str = "qtrader/audit/runtime_monitoring_map.json",
     ) -> None:
         self.halt_log_path = halt_log_path
         self.monitoring_map_path = monitoring_map_path
         self.halt_count = 0
         self.violations_detected = 0
-        
+
         # Initialize monitoring map structure
         self._monitoring_data = {
             "status": "ACTIVE_PROTECTION",
             "halt_count": 0,
             "runtime_violations": 0,
-            "stage_metrics": {}
+            "stage_metrics": {},
         }
         self._ensure_paths()
         self._save_monitoring_map()
@@ -80,21 +80,17 @@ class RuntimeGatekeeper:
         """
         self.halt_count += 1
         timestamp = datetime.now(timezone.utc).isoformat()
-        
-        halt_entry = {
-            "timestamp": timestamp,
-            "reason": reason,
-            "context": context or {}
-        }
-        
+
+        halt_entry = {"timestamp": timestamp, "reason": reason, "context": context or {}}
+
         logger.critical(f"RUNTIME_GATEKEEPER_HALT | {reason}")
         self._persist_halt(halt_entry)
-        
+
         # Update and persist monitoring map before crashing
         self._monitoring_data["halt_count"] = self.halt_count
         self._monitoring_data["runtime_violations"] = self.violations_detected
         self._save_monitoring_map()
-        
+
         raise SystemHalt(message=reason, metadata=context)
 
     def _persist_halt(self, entry: dict[str, Any]) -> None:
@@ -107,7 +103,7 @@ class RuntimeGatekeeper:
                         logs = json.load(f)
                     except json.JSONDecodeError:
                         pass
-            
+
             logs.append(entry)
             with open(self.halt_log_path, "w") as f:
                 json.dump(logs, f, indent=2)
@@ -118,11 +114,11 @@ class RuntimeGatekeeper:
         """Update metrics for a specific pipeline stage."""
         if stage not in self._monitoring_data["stage_metrics"]:
             self._monitoring_data["stage_metrics"][stage] = {"checks": 0, "violations": 0}
-            
+
         self._monitoring_data["stage_metrics"][stage]["checks"] += 1
         if not success:
             self._monitoring_data["stage_metrics"][stage]["violations"] += 1
-        
+
         # Save monitoring map for real-time observability
         self._save_monitoring_map()
 
@@ -139,7 +135,7 @@ class RuntimeGatekeeper:
         return {
             "halts": self.halt_count,
             "violations": self.violations_detected,
-            "status": self._monitoring_data["status"]
+            "status": self._monitoring_data["status"],
         }
 
 

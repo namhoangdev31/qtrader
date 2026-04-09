@@ -367,5 +367,5 @@ class GlobalKillSwitch:
             "dd_limit": self._dd_limit,
             "loss_limit": self._loss_limit,
             "actions_count": len(self._actions_executed),
-            "status": "DANGER" if self._is_system_halted else "HEALTHY"
+            "status": "DANGER" if self._is_system_halted else "HEALTHY",
         }

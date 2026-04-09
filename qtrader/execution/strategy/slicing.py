@@ -119,6 +119,7 @@ class AdaptiveSlicer:
 
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("AdaptiveSlicer: failed to generate slice", exc_info=True)
             return None

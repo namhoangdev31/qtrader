@@ -84,6 +84,7 @@ class ExecutionRewardFunction:
 
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             _LOG.error("ExecutionRewardFunction: failed to compute reward", exc_info=True)
             # Silent failover to zero reward (neutral signal) to avoid crashing RL update loop

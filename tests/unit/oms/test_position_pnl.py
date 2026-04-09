@@ -3,6 +3,7 @@ Level 1 Critical Tests for OMS Position/P&L accounting (rust_core + Python integ
 Covers: partial fill, realized/unrealized P&L, position flip, multi-symbol isolation.
 These tests use the Rust-backed OMS types via the Python OMS interface contract.
 """
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,7 @@ import pytest
 # -------------------------------------------------------------------------------------
 class Position:
     """Python equivalent of rust_core Position for contract testing."""
+
     def __init__(self, symbol: str) -> None:
         self.symbol = symbol
         self.qty = 0.0
@@ -60,6 +62,7 @@ class Position:
 # Contract tests
 # -------------------------------------------------------------------------------------
 
+
 def test_position_initial_state():
     pos = Position("BTC")
     assert pos.qty == 0.0
@@ -84,7 +87,7 @@ def test_position_avg_entry_price_two_buys():
 
 def test_position_partial_close_realized_pnl():
     pos = Position("BTC")
-    pos.add_fill("BUY", 2.0, 40000.0)   # avg = 40k
+    pos.add_fill("BUY", 2.0, 40000.0)  # avg = 40k
     pos.add_fill("SELL", 1.0, 50000.0)  # realized = 1 * (50k - 40k) = 10k
     assert pos.qty == pytest.approx(1.0)
     assert pos.realized_pnl == pytest.approx(10000.0)
@@ -137,6 +140,7 @@ def test_unrealized_pnl_short_loss():
 # Multi-symbol isolation — positions must not bleed into each other
 # -------------------------------------------------------------------------------------
 
+
 def test_multi_symbol_positions_are_isolated():
     btc = Position("BTC")
     eth = Position("ETH")
@@ -153,6 +157,7 @@ def test_multi_symbol_positions_are_isolated():
 # -------------------------------------------------------------------------------------
 # Partial fill scenario (exchange only partially fills the order)
 # -------------------------------------------------------------------------------------
+
 
 def test_partial_fill_sequence():
     """An order for 5 BTC filled in three partial fills must yield the same result
@@ -171,8 +176,10 @@ def test_partial_fill_sequence():
 # Account-level equity check
 # -------------------------------------------------------------------------------------
 
+
 class Account:
     """Minimal Account for contract testing."""
+
     def __init__(self, cash: float) -> None:
         self.cash = cash
         self.positions: dict[str, Position] = {}
@@ -207,7 +214,7 @@ def test_account_equity_with_long_position():
 def test_account_equity_with_short_reduces_on_price_rise():
     acct = Account(cash=100000.0)
     eth = Position("ETH")
-    eth.add_fill("SELL", 10.0, 3000.0)   # Short 10 ETH at 3000
+    eth.add_fill("SELL", 10.0, 3000.0)  # Short 10 ETH at 3000
     acct.positions["ETH"] = eth
     # Price rises to 4000 → short loses 10 * 1000 = 10000
     assert acct.equity({"ETH": 4000.0}) == pytest.approx(90000.0)

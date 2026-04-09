@@ -31,14 +31,15 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
+
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import uvicorn
 
-from qtrader.ml.chronos_adapter import ChronosForecastAdapter, ForecastResult
+from qtrader.ml.chronos_adapter import ChronosForecastAdapter
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
-from qtrader.ml.ollama_risk_adapter import OllamaRiskAdapter
 from qtrader.ml.ollama_forecast_adapter import OllamaForecastAdapter
+from qtrader.ml.ollama_risk_adapter import OllamaRiskAdapter
 from qtrader.ml.types import DecisionAction, TradingDecision
 from qtrader.ml.vector_store import memory_store
 
@@ -52,9 +53,11 @@ class PipelineConfig:
     forecast_model_id: str = "llama3.2:1b"
     risk_model_id: str = "qwen3.5:2b"
     decision_model_id: str = "llama3.2:1b"
-    
+
     # Backend options (Ollama defaults to auto-optimized for M4)
-    backend_url: str = field(default_factory=lambda: os.getenv("OLLAMA_URL", "http://localhost:11434"))
+    backend_url: str = field(
+        default_factory=lambda: os.getenv("OLLAMA_URL", "http://localhost:11434")
+    )
 
 
 @dataclass(slots=True)
@@ -65,7 +68,7 @@ class PipelineResult:
     forecast_results: dict[str, Any] | None = None
     risk_results: dict[str, Any] | None = None
     chronos_forecast: dict[str, Any] | None = None  # Mapping for TradingSystem
-    tabpfn_risk: dict[str, Any] | None = None      # Mapping for TradingSystem
+    tabpfn_risk: dict[str, Any] | None = None  # Mapping for TradingSystem
     pipeline_latency_ms: float = 0.0
     forecast_latency_ms: float = 0.0
     risk_latency_ms: float = 0.0
@@ -117,7 +120,7 @@ class AtomicTrioPipeline:
             )
 
         # Lazy-loaded components
-        self._forecast_engine: ChronosForecastAdapter | None = None # Legacy wrapper for forecast
+        self._forecast_engine: ChronosForecastAdapter | None = None  # Legacy wrapper for forecast
         self._risk_engine: OllamaRiskAdapter | None = None
         self._decision_engine: OllamaDecisionAdapter | None = None
         self._is_initialized = False
@@ -136,13 +139,16 @@ class AtomicTrioPipeline:
 
         # Stage 1: Forecast Stage (Hybrid selection)
         if ":" in self.config.forecast_model_id:
-            logger.info(f"[ATOMIC_TRIO] Using Ollama Forcast Adapter for {self.config.forecast_model_id}")
+            logger.info(
+                f"[ATOMIC_TRIO] Using Ollama Forcast Adapter for {self.config.forecast_model_id}"
+            )
             self._forecast_engine = OllamaForecastAdapter(
-                model_id=self.config.forecast_model_id,
-                base_url=ollama_url
+                model_id=self.config.forecast_model_id, base_url=ollama_url
             )
         else:
-            logger.info(f"[ATOMIC_TRIO] Using Specialized Chronos Adapter for {self.config.forecast_model_id}")
+            logger.info(
+                f"[ATOMIC_TRIO] Using Specialized Chronos Adapter for {self.config.forecast_model_id}"
+            )
             self._forecast_engine = ChronosForecastAdapter(
                 model_id=self.config.forecast_model_id,
             )
@@ -183,10 +189,16 @@ class AtomicTrioPipeline:
 
         async def run_forecast():
             nonlocal forecast_results, forecast_latency
-            if historical_prices and len(historical_prices) > 0 and self._forecast_engine is not None:
+            if (
+                historical_prices
+                and len(historical_prices) > 0
+                and self._forecast_engine is not None
+            ):
                 try:
                     t0 = time.time()
-                    if hasattr(self._forecast_engine, "predict") and asyncio.iscoroutinefunction(self._forecast_engine.predict):
+                    if hasattr(self._forecast_engine, "predict") and asyncio.iscoroutinefunction(
+                        self._forecast_engine.predict
+                    ):
                         forecast_res = await self._forecast_engine.predict(
                             historical_prices=historical_prices,
                             prediction_length=prediction_length,
@@ -220,30 +232,31 @@ class AtomicTrioPipeline:
         if self._decision_engine is not None:
             try:
                 t0 = time.time()
-                
+
                 # RAG Context retrieval
                 m_vector = [
                     float(market_context.get("price_change", 0.0)) if market_context else 0.0,
                     float(market_context.get("volatility", 0.0)) if market_context else 0.0,
                     float(risk_results.get("risk_score", 0.5)) if risk_results else 0.5,
-                    float(self._run_count % 100) / 100.0
+                    float(self._run_count % 100) / 100.0,
                 ]
-                
+
                 from qtrader.ml.embedding_worker import embedding_manager
+
                 rag_context = memory_store.retrieve_similar(
-                    market_vector=m_vector, 
+                    market_vector=m_vector,
                     semantic_embedding=embedding_manager.current_sentiment_vector,
-                    top_k=3
+                    top_k=3,
                 )
-                
+
                 decision = await self._decision_engine.decide(
                     chronos_forecast=forecast_results,
                     tabpfn_risk=risk_results,
                     market_context=market_context,
                     system_state=system_state,
-                    rag_context=rag_context
+                    rag_context=rag_context,
                 )
-                
+
                 decision_latency = (time.time() - t0) * 1000
             except Exception as e:
                 logger.error(f"[ATOMIC_TRIO] Decision engine failed: {e}")
@@ -323,7 +336,7 @@ async def get_info() -> dict[str, Any]:
             "forecast": pipeline.config.forecast_model_id,
             "risk": pipeline.config.risk_model_id,
             "decision": pipeline.config.decision_model_id,
-        }
+        },
     }
 
 
@@ -335,7 +348,7 @@ async def predict(req: PredictRequest) -> dict[str, Any]:
             market_features=req.market_features,
             market_context=req.market_context,
             system_state=req.system_state,
-            prediction_length=req.prediction_length
+            prediction_length=req.prediction_length,
         )
         return result.to_dict()
     except Exception as e:

@@ -15,7 +15,6 @@ from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.ml.evaluation import ModelEvaluator, NestedCrossValidation
 from qtrader.ml.feedback_loop import FeedbackController, FeedbackSample
 from qtrader.ml.hmm_smoother import HMMRegimeSmoother
-
 from qtrader.ml.regime import RegimeDetector, VolatilityRegimeDetector
 from qtrader.ml.retrain_system import RetrainDecision, RetrainSystem
 from qtrader.ml.rotation import ModelRotator

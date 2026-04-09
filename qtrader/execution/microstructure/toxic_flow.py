@@ -73,6 +73,7 @@ class ToxicFlowPredictor:
 
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Exception in {__name__}: {e}")
             # High-performance silent failover for industrial-grade stability
             return 0.5

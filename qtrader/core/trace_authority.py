@@ -6,7 +6,9 @@ from uuid import UUID, uuid4
 from loguru import logger
 
 # Context Variable to store the active trace_id across async contexts.
-_trace_context: contextvars.ContextVar[UUID | None] = contextvars.ContextVar("trace_id", default=None)
+_trace_context: contextvars.ContextVar[UUID | None] = contextvars.ContextVar(
+    "trace_id", default=None
+)
 
 
 class TraceAuthority:
@@ -56,10 +58,10 @@ class TraceAuthority:
                 )
             _trace_context.set(trace_id)
             return trace_id
-            
+
         if current:
             return current
-            
+
         # No trace active - generate and log warning for audit trail.
         new_trace = uuid4()
         logger.warning(f"[TRACE] Missing trace context. Injecting auto-generated: {new_trace}")
@@ -71,6 +73,7 @@ class TraceAuthority:
         """
         Decorator/Context manager helper to wrap a block of execution with a specific trace.
         """
+
         class TraceContextManager:
             def __init__(self, tid: UUID) -> None:
                 self.tid = tid
@@ -84,7 +87,7 @@ class TraceAuthority:
                 _trace_context.reset(self.token)
 
         return TraceContextManager(trace_id)
-    
+
     @staticmethod
     def inject_trace(trace_id: UUID | str | None = None):
         """
@@ -110,20 +113,20 @@ class TraceAuthority:
         """
         Extract trace ID from a source event for propagation to the context.
         """
-        if hasattr(source_event, 'trace_id'):
+        if hasattr(source_event, "trace_id"):
             tid = source_event.trace_id
             if isinstance(tid, str):
                 tid = UUID(tid)
             TraceAuthority.start_trace(tid)
             return tid
-        
+
         # Fallback to metadata
-        if hasattr(source_event, 'metadata') and source_event.metadata:
-            tid = source_event.metadata.get('trace_id')
+        if hasattr(source_event, "metadata") and source_event.metadata:
+            tid = source_event.metadata.get("trace_id")
             if tid:
                 if isinstance(tid, str):
                     tid = UUID(tid)
                 TraceAuthority.start_trace(tid)
                 return tid
-                
+
         return TraceAuthority.start_trace()

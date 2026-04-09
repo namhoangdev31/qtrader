@@ -79,11 +79,11 @@ class TestPreTradeRiskValidator:
         # At $150, limit is 100 shares.
         validator.update_mid_price("AAPL", Decimal("150.0"))
         assert validator._effective_unit_limits["AAPL"] == Decimal("100")
-        
+
         # At $300, limit should shrink to 50 shares.
         validator.update_mid_price("AAPL", Decimal("300.0"))
         assert validator._effective_unit_limits["AAPL"] == Decimal("50")
-        
+
         # Try to buy 51 shares at $300 (Total $15,300 > 15k)
         result = validator.validate_order("AAPL", "BUY", Decimal("51"), Decimal("300.0"))
         assert not result.approved
