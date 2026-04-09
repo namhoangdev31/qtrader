@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import logging
 import time
 from decimal import Decimal
 from typing import Any
+
 import polars as pl
+
 from qtrader.core.decimal_adapter import d
 
 _LOG = logging.getLogger(__name__)
@@ -126,7 +129,7 @@ class PortfolioAllocator:
             raise RuntimeError("Rust core required for PortfolioAllocator.")
         vols = {name: float(series.std()) for (name, series) in strategy_returns.items()}
         report = self._rust_allocator.allocate_risk_parity(vols, 1.0)
-        min_len = min((len(series) for series in strategy_returns.values()))
+        min_len = min(len(series) for series in strategy_returns.values())
         result = {}
         for strat_name, weight in report.weights.items():
             result[strat_name] = pl.Series(

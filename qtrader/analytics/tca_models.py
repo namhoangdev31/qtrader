@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -54,24 +55,24 @@ class TCAReport:
         if not self.trade_details:
             return
         self.total_trades = len(self.trade_details)
-        self.total_volume = sum((abs(t.quantity) for t in self.trade_details))
+        self.total_volume = sum(abs(t.quantity) for t in self.trade_details)
         self.total_implementation_shortfall = sum(
-            (t.implementation_shortfall for t in self.trade_details)
+            t.implementation_shortfall for t in self.trade_details
         )
         self.total_timing_slippage = sum(
-            (t.timing_slippage * abs(t.quantity) for t in self.trade_details)
+            t.timing_slippage * abs(t.quantity) for t in self.trade_details
         )
         self.total_impact_slippage = sum(
-            (t.impact_slippage * abs(t.quantity) for t in self.trade_details)
+            t.impact_slippage * abs(t.quantity) for t in self.trade_details
         )
-        self.total_fee_slippage = sum((t.fee_amount for t in self.trade_details))
+        self.total_fee_slippage = sum(t.fee_amount for t in self.trade_details)
         self.total_vwap_deviation = sum(
-            (t.vwap_deviation * abs(t.quantity) for t in self.trade_details)
+            t.vwap_deviation * abs(t.quantity) for t in self.trade_details
         )
         self.total_slippage = (
             self.total_timing_slippage + self.total_impact_slippage + self.total_fee_slippage
         )
-        self.total_fees = sum((t.fee_amount for t in self.trade_details))
+        self.total_fees = sum(t.fee_amount for t in self.trade_details)
         if self.total_trades > 0:
             self.avg_implementation_shortfall = (
                 self.total_implementation_shortfall / self.total_trades

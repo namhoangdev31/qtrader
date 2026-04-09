@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -18,13 +19,11 @@ class Feature(Protocol):
     def compute(self, df: pl.DataFrame) -> pl.Series | pl.DataFrame: ...
 
     def validate_inputs(self, df: pl.DataFrame) -> None: ...
-        pass
 
 
 @runtime_checkable
 class FeaturePipeline(Protocol):
     def compute_all(self, df: pl.DataFrame) -> pl.DataFrame: ...
-        pass
 
 
 class BaseFeature:

@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.types import FillEvent, MarketData, SignalEvent
 
 logger = logging.getLogger(__name__)

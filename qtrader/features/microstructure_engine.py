@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 
 _LOG = logging.getLogger("qtrader.features.microstructure")

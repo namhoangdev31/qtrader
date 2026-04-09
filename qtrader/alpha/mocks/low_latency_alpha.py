@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 import time
 from typing import Any
+
 from qtrader.alpha.base import BaseAlpha
 from qtrader.core.types import AlphaOutput, MarketData
 

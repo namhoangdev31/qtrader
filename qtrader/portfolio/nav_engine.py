@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
+
 from qtrader.core.events import NAVEvent, NAVPayload
 
 if TYPE_CHECKING:
@@ -37,7 +39,7 @@ class NAVEngine:
             account.add_position_direct(symbol, float(pos.quantity), float(pos.average_price))
         float_prices = {sym: float(p) for (sym, p) in mark_prices.items()}
         report = self._rust_engine.compute_nav(account, float_prices, float(state.total_fees))
-        total_realized_pnl = sum((pos.realized_pnl for pos in state.positions.values()))
+        total_realized_pnl = sum(pos.realized_pnl for pos in state.positions.values())
         return NAVEvent(
             trace_id=trace_id or uuid4(),
             source="NAVEngineRust",

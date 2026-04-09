@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 import time
 from enum import Enum
+
 from qtrader_core import OrderFSM as RustOrderFSM
 from qtrader_core import OrderStatus
 

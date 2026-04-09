@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import hashlib
 import logging
 import time
 from typing import Any, Final, cast
+
 import numpy as np
 import polars as pl
 

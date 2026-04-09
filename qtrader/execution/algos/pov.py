@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
+
 from qtrader.execution.algos.base import ChildOrder
 
 __all__ = ["POVAlgo"]

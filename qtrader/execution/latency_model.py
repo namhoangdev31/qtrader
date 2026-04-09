@@ -1,4 +1,5 @@
 import logging
+
 from qtrader_core import LatencyModel as RustLatencyModel
 
 logger = logging.getLogger(__name__)

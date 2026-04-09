@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import ClassVar
+
 import polars as pl
+
 from qtrader.alpha.base import BaseAlpha
 from qtrader.features.microstructure_engine import MicrostructureFeatureEngine
 

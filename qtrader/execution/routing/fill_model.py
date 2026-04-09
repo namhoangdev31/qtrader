@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any
+
 from qtrader.execution.core.fill_probability import FillProbabilityModel
 
 if TYPE_CHECKING:

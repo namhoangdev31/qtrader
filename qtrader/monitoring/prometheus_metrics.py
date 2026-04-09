@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
 
@@ -37,7 +38,7 @@ class MetricsRegistry:
     def _make_key(self, name: str, labels: dict[str, str] | None) -> str:
         if not labels:
             return name
-        label_str = ",".join((f"{k}={v}" for (k, v) in sorted(labels.items())))
+        label_str = ",".join(f"{k}={v}" for (k, v) in sorted(labels.items()))
         return f"{name}{{{label_str}}}"
 
     def get_metrics_text(self) -> str:
@@ -45,13 +46,13 @@ class MetricsRegistry:
         for key, value in self._counters.items():
             label_part = ""
             if key in self._labels:
-                label_part = ",".join((f'{k}="{v}"' for (k, v) in self._labels[key].items()))
+                label_part = ",".join(f'{k}="{v}"' for (k, v) in self._labels[key].items())
                 label_part = f"{{{label_part}}}"
             lines.append(f"{key}{label_part} {value}")
         for key, value in self._gauges.items():
             label_part = ""
             if key in self._labels:
-                label_part = ",".join((f'{k}="{v}"' for (k, v) in self._labels[key].items()))
+                label_part = ",".join(f'{k}="{v}"' for (k, v) in self._labels[key].items())
                 label_part = f"{{{label_part}}}"
             lines.append(f"{key}{label_part} {value}")
         for key, values in self._histograms.items():
@@ -59,7 +60,7 @@ class MetricsRegistry:
                 continue
             label_part = ""
             if key in self._labels:
-                label_part = ",".join((f'{k}="{v}"' for (k, v) in self._labels[key].items()))
+                label_part = ",".join(f'{k}="{v}"' for (k, v) in self._labels[key].items())
                 label_part = f"{{{label_part}}}"
             count = len(values)
             total = sum(values)

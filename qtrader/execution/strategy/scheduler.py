@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -27,8 +28,8 @@ class ExecutionScheduler:
             s_t = [float(s.get("spread", 0.0)) for s in predicted_states]
             vol_t = [float(s.get("volatility", 0.0)) for s in predicted_states]
             c_t = [s_t[i] / 2.0 - self._risk_aversion * vol_t[i] for i in range(horizon_steps)]
-            sum_v_eta = sum((v / self._eta for v in v_t))
-            sum_cv_eta = sum((c_t[i] * v_t[i] / self._eta for i in range(horizon_steps)))
+            sum_v_eta = sum(v / self._eta for v in v_t)
+            sum_cv_eta = sum(c_t[i] * v_t[i] / self._eta for i in range(horizon_steps))
             lam = (total_qty + sum_cv_eta) / sum_v_eta
             q_star = [max(0.0, (lam - c_t[i]) * v_t[i] / self._eta) for i in range(horizon_steps)]
             total_q_star = sum(q_star)

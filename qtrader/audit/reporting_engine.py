@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import logging
 import time
 from enum import Enum, auto
 from typing import Any, Final
+
 import polars as pl
 
 _LOG = logging.getLogger("qtrader.audit.reporting_engine")

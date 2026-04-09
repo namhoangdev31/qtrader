@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 from qtrader.core.events import (
     ErrorEvent,
     EventType,

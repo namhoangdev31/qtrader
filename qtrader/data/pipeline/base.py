@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
+
 from qtrader.core.events import MarketEvent
 
 
@@ -10,16 +11,13 @@ class DataSource(Protocol):
     async def stream(self) -> AsyncIterator[Any]: ...
 
     async def close(self) -> None: ...
-        pass
 
 
 @runtime_checkable
 class DataNormalizer(Protocol):
     def normalize(self, raw_data: Any) -> MarketEvent: ...
-        pass
 
 
 @runtime_checkable
 class DataPipeline(Protocol):
     async def run(self) -> None: ...
-        pass

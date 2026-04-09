@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 from qtrader.core.dynamic_config import config_manager
 from qtrader.core.session_state import SessionState
 

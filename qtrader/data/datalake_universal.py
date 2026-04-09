@@ -1,7 +1,9 @@
 import logging
 from pathlib import Path
 from typing import Any
+
 import polars as pl
+
 from qtrader.core.config import Config
 
 

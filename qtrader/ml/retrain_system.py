@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Any
+
 import numpy as np
 
 _LOG = logging.getLogger("qtrader.ml.retrain_system")

@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 from qtrader.core.decimal_adapter import math_authority
 from qtrader.core.dynamic_config import DynamicConfigManager
 from qtrader.core.fail_fast_engine import FailFastEngine

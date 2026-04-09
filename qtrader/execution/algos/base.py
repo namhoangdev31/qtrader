@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -19,4 +20,3 @@ class ChildOrder:
 
 class ExecutionAlgo(Protocol):
     def schedule(self, order: OrderEvent, context: dict[str, Any]) -> list[ChildOrder]: ...
-        pass

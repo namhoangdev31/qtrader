@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Any, Final
@@ -72,6 +73,6 @@ class SpoofDetector:
             "status": "SPOOF_CHECK",
             "spoof_flags_count": self._stats["spoof_flags"],
             "monitored_liquidity_entries": sum(
-                (s.submitted for syms in self._registry.values() for s in syms.values())
+                s.submitted for syms in self._registry.values() for s in syms.values()
             ),
         }

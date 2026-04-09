@@ -1,6 +1,8 @@
 import logging
 from typing import Any
+
 import polars as pl
+
 from qtrader.risk.base import RiskModule
 
 _LOG = logging.getLogger(__name__)

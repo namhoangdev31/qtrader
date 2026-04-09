@@ -4,6 +4,7 @@ import time
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.events import EventType, FillEvent, SystemEvent, SystemPayload
 from qtrader.core.state_store import StateStore
 from qtrader.core.types import EventBusProtocol
@@ -87,6 +88,7 @@ class ReconciliationEngine:
                             f"PERIODIC_RECON | First-run sync: {symbol} -> {exchange_qty}"
                         )
                         from datetime import datetime
+
                         from qtrader.core.state_store import Position
 
                         pos = Position(

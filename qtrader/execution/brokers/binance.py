@@ -6,7 +6,9 @@ import time
 import urllib.parse
 from collections.abc import Callable
 from typing import Any
+
 import aiohttp
+
 from qtrader.core.config import Config
 from qtrader.core.events import FillEvent, OrderEvent
 from qtrader.execution.brokers.base import BrokerAdapter

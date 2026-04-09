@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import contextvars
 from uuid import UUID, uuid4
+
 from loguru import logger
 
 _trace_context: contextvars.ContextVar[UUID | None] = contextvars.ContextVar(

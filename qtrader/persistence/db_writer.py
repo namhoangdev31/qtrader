@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import json
 import logging
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+
 from qtrader.core.db import DBClient
 
 logger = logging.getLogger("qtrader.persistence")

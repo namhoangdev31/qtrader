@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 from qtrader.risk.base import RiskModule
 
 logger = logging.getLogger("qtrader.risk.dynamic")

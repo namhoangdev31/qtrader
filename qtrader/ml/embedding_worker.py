@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 import os
 from typing import Any
+
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
 from qtrader.ml.vector_store import EliteExemplar, memory_store
 from qtrader.persistence.db_writer import TradeDBWriter

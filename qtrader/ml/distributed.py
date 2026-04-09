@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import polars as pl
 
@@ -18,6 +20,7 @@ from qtrader.ml.walk_forward import WalkForwardPipeline
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     import pandas as pd
 __all__ = ["RayCompute", "RayHyperparamTuner"]
 

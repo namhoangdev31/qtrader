@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 import random
@@ -7,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.events import FillEvent, FillPayload, OrderEvent, SignalEvent, SignalPayload
 from qtrader.execution.paper_models import OpenPosition, TradeRecord
 
@@ -421,7 +423,7 @@ class FillMixin:
         ref_mid = mid_price if mid_price > 0 else price
         lots = self._open_positions.get(sym, [])
         if lots and isinstance(lots, list):
-            curr_qty = sum((lot.qty for lot in lots))
+            curr_qty = sum(lot.qty for lot in lots)
             curr_price = lots[0].avg_price
             curr_comm_per_unit = lots[0].avg_comm_per_unit
         else:
@@ -446,10 +448,8 @@ class FillMixin:
                     position_id=str(uuid.uuid4()),
                 )
             )
-        elif (
-            self._open_positions[sym][0].qty > 0
-            and side == "BUY"
-            or (self._open_positions[sym][0].qty < 0 and side == "SELL")
+        elif (self._open_positions[sym][0].qty > 0 and side == "BUY") or (
+            self._open_positions[sym][0].qty < 0 and side == "SELL"
         ):
             lot = self._open_positions[sym][0]
             old_qty = lot.qty

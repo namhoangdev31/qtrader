@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import polars as pl
+
 from qtrader.features.base import BaseFeature
 
 __all__ = ["OBV", "VWAP", "DollarVolume", "ForceIndex", "VolumeRatio"]

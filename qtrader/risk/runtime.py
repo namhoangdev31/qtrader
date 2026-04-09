@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
+
 from qtrader.core.events import RiskEvent, RiskPayload
 from qtrader.core.types import RiskMetrics
 

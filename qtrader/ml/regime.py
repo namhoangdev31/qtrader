@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Literal
+
 import numpy as np
 import polars as pl
 from sklearn.mixture import GaussianMixture
@@ -136,7 +138,7 @@ class RegimeDetector:
         lookback = min(window, len(regimes))
         recent = regimes.tail(lookback).to_list()
         latest = recent[-1]
-        return any((label != latest for label in recent[:-1]))
+        return any(label != latest for label in recent[:-1])
 
 
 @dataclass(slots=True)

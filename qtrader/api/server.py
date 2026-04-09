@@ -4,9 +4,11 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+
 from qtrader.api.dependencies import get_system
 from qtrader.api.router import health_router, router, session_router, sim_router, ws_router
 
@@ -63,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if session_id:
         try:
             from decimal import Decimal
+
             from qtrader.api.router import get_sim_engine
 
             engine = get_sim_engine()

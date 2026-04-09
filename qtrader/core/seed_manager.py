@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import hashlib
 import random
 import zlib
 from dataclasses import dataclass
 from typing import Any
+
 import numpy as np
 from loguru import logger
 

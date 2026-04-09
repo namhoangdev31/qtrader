@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 import time
@@ -217,13 +218,11 @@ class PaperTradingEngine(
             "max_drawdown": self._max_drawdown,
             "position_value": round(
                 sum(
-                    (
-                        abs(lot.qty) * self._current_price
-                        if lot.qty > 0
-                        else (lot.avg_price + (lot.avg_price - self._current_price)) * abs(lot.qty)
-                        for (sym, lots) in self._open_positions.items()
-                        for lot in lots
-                    )
+                    abs(lot.qty) * self._current_price
+                    if lot.qty > 0
+                    else (lot.avg_price + (lot.avg_price - self._current_price)) * abs(lot.qty)
+                    for (sym, lots) in self._open_positions.items()
+                    for lot in lots
                 ),
                 2,
             ),
@@ -250,7 +249,7 @@ class PaperTradingEngine(
                         sym = "BTC-USD"
                         existing_lots = self._managed_positions.get(sym, [])
                         if not existing_lots or any(
-                            (lot.side != signal["action"] for lot in existing_lots)
+                            lot.side != signal["action"] for lot in existing_lots
                         ):
                             opened = self._open_managed_position(
                                 signal["action"], signal["strength"]

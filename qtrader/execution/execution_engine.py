@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import queue
 import threading
@@ -8,12 +9,14 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
+
 from qtrader_core import ExecutionEngine as RustExecutionEngine
 from qtrader_core import Order as RustOrder
 from qtrader_core import OrderType as RustOrderType
 from qtrader_core import RiskEngine as RustRiskEngine
 from qtrader_core import RoutingMode as RustRoutingMode
 from qtrader_core import Side as RustSide
+
 from qtrader.core.events import FillEvent, FillPayload, OrderEvent
 from qtrader.core.logger import logger
 from qtrader.core.state_store import Position, StateStore
@@ -21,6 +24,7 @@ from qtrader.core.trace_authority import TraceAuthority
 from qtrader.core.types import LoggerProtocol
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine
+
 from .orderbook_simulator import OrderbookSimulator
 from .rate_limiter import TokenBucketRateLimiter
 
@@ -147,8 +151,8 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
             limit_price = order.payload.price
             if limit_price is None:
                 continue
-            can_fill = (
-                side == "BUY" and price <= limit_price or (side == "SELL" and price >= limit_price)
+            can_fill = (side == "BUY" and price <= limit_price) or (
+                side == "SELL" and price >= limit_price
             )
             if can_fill:
                 fill_event = FillEvent(

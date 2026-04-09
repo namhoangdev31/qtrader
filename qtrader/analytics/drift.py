@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import polars as pl
 from scipy.stats import ks_2samp

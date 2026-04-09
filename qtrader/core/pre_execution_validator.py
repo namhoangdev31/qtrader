@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 from loguru import logger
+
 from qtrader.audit.float_scanner import FloatScanner
 from qtrader.core.container import container
 from qtrader.core.enforcement_engine import enforcement_engine
@@ -27,7 +30,7 @@ class PreExecutionValidator:
         logger.info("PRECHECK_START | Initiating system readiness validation.")
         self._check_authorities(seed_manager)
         self._check_float_usage()
-        is_ready = all((r.status for r in self.results))
+        is_ready = all(r.status for r in self.results)
         self._generate_reports(is_ready)
         if is_ready:
             logger.success(

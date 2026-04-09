@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import json
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
 from qtrader.alerts.alert_engine import alert_engine
 from qtrader.core.container import container
 

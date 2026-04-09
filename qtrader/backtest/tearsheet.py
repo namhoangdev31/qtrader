@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import json
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
+
 import numpy as np
 import polars as pl
 
@@ -309,7 +311,7 @@ class TearsheetGenerator:
             margin=dict(l=60, r=40, t=50, b=50),
         )
         charts_html.append(fig_rs.to_html(full_html=False, include_plotlyjs=False))
-        return "".join((f'<div class="tearsheet-chart">{h}</div>' for h in charts_html))
+        return "".join(f'<div class="tearsheet-chart">{h}</div>' for h in charts_html)
 
     def to_html(
         self,

@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any
+
 from qtrader.execution.routing.cost_model import RoutingCostModel
 from qtrader.execution.routing.fill_model import VenueFillProbabilityModel
 from qtrader.execution.routing.liquidity_model import MultiVenueLiquidityModel

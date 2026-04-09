@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import math
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
+
 import numpy as np
 import polars as pl
+
 from qtrader.core.events import (
     SandboxErrorEvent,
     SandboxErrorPayload,
@@ -23,7 +26,6 @@ class Strategy(Protocol):
     def on_candle(self, df_candle: pl.DataFrame) -> None: ...
 
     def get_signal(self) -> dict[str, Any]: ...
-        pass
 
 
 class StrategySandbox:

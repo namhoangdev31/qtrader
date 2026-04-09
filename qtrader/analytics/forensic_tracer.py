@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 from datetime import datetime
 from typing import Any
+
 from qtrader.core.dynamic_config import config_manager
 from qtrader.core.latency_enforcer import latency_enforcer
 

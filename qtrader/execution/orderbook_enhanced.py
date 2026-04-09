@@ -4,7 +4,9 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
+
 import numpy as np
+
 from qtrader.core.types import FillEvent, OrderEvent
 from qtrader.execution.latency_model import LatencyModel
 from qtrader.execution.slippage_model import SlippageModel
@@ -184,7 +186,7 @@ class OrderbookEnhanced:
             fill_at_level = min(quantity_to_fill, available_volume)
             cost_at_level = fill_at_level * price
             if slippage_model and (not deterministic):
-                total_volume_on_side = sum((Decimal(str(level[1])) for level in book_side))
+                total_volume_on_side = sum(Decimal(str(level[1])) for level in book_side)
                 if total_volume_on_side > 0:
                     participation_rate = fill_at_level / total_volume_on_side
                     temp_slippage = slippage_model.temporary_impact * participation_rate * price

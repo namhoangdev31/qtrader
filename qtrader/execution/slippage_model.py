@@ -1,6 +1,7 @@
 import logging
 from decimal import Decimal
 from typing import Any
+
 from qtrader_core import SlippageModel as RustSlippageModel
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class SlippageModel(RustSlippageModel):
             if not bids or not asks:
                 return Decimal("0")
             mid_price = (float(bids[0][0]) + float(asks[0][0])) / 2.0
-            total_volume = sum((float(l[1]) for l in bids)) + sum((float(l[1]) for l in asks))
+            total_volume = sum(float(l[1]) for l in bids) + sum(float(l[1]) for l in asks)
             slippage = super().compute_slippage(
                 side_is_buy=side.upper() == "BUY",
                 quantity=float(quantity),

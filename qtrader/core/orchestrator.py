@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.container import container
 from qtrader.core.enforcement_engine import enforcement_engine, guard
 from qtrader.core.event_store import FileEventStore
@@ -34,6 +35,7 @@ except ImportError:
     MLFLOW_MANAGER_AVAILABLE = False
     MLflowManager = None
 from loguru import logger
+
 from qtrader.alerts.alert_engine import alert_engine
 from qtrader.alpha.base import BaseAlpha
 from qtrader.analytics.accounting import FundAccountingEngine
@@ -472,14 +474,14 @@ class TradingOrchestrator:
         if not signals or not weights:
             return 0.0
         epsilon = 1e-12
-        weighted_sum = sum((signals.get(m, 0.0) * weights.get(m, 0.0) for m in weights))
+        weighted_sum = sum(signals.get(m, 0.0) * weights.get(m, 0.0) for m in weights)
         total_weight = sum(weights.values())
         return weighted_sum / (total_weight + epsilon)
 
     def adapt_model_weights(self, performance: Mapping[str, float]) -> dict[str, float]:
         if not performance:
             return {}
-        total = sum((max(0.0, p) for p in performance.values()))
+        total = sum(max(0.0, p) for p in performance.values())
         if total <= 0:
             return {m: 1.0 / len(performance) for m in performance}
         return {m: max(0.0, p) / total for (m, p) in performance.items()}
@@ -874,12 +876,12 @@ class TradingOrchestrator:
                                 live_data[feature_name] = live_vals
                     if reference_data and live_data:
                         min_ref_len = (
-                            min((len(vals) for vals in reference_data.values()))
+                            min(len(vals) for vals in reference_data.values())
                             if reference_data
                             else 0
                         )
                         min_live_len = (
-                            min((len(vals) for vals in live_data.values())) if live_data else 0
+                            min(len(vals) for vals in live_data.values()) if live_data else 0
                         )
                         target_len = min(min_ref_len, min_live_len)
                         if target_len >= 2:

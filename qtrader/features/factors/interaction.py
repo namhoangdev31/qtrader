@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import itertools
+
 import polars as pl
 
 

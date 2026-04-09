@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
+
 from qtrader.ml.walk_forward import WalkForwardPipeline
 
 if TYPE_CHECKING:
@@ -187,8 +190,10 @@ class NestedCrossValidation:
 
 if __name__ == "__main__":
     import asyncio
+
     import polars as pl
     from sklearn.linear_model import LinearRegression
+
     from qtrader.core.event_bus import EventBus
     from qtrader.core.orchestrator import TradingOrchestrator
 

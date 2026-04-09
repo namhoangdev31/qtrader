@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
+
 from qtrader.core.events import BaseEvent, EventType, FillEvent, OrderEvent, SignalEvent
 
 if TYPE_CHECKING:
@@ -80,14 +82,12 @@ class LoggerProtocol(Protocol):
     def debug(self, message: str, **kwargs: Any) -> None: ...
 
     def critical(self, message: str, **kwargs: Any) -> None: ...
-        pass
 
 
 class ConfigProtocol(Protocol):
     def __getattr__(self, name: str) -> Any: ...
 
     def __setattr__(self, name: str, value: Any) -> None: ...
-        pass
 
 
 @dataclass
@@ -150,4 +150,3 @@ class EventBusProtocol(Protocol):
     async def start(self) -> None: ...
 
     async def stop(self) -> None: ...
-        pass

@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import time
 from typing import TYPE_CHECKING, Any, cast
+
 import numpy as np
 import polars as pl
 from loguru import logger

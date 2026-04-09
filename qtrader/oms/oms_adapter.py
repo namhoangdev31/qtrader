@@ -3,6 +3,7 @@ import time
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.execution_guard import require_initialized
 from qtrader.core.logger import logger
 from qtrader.core.types import AllocationWeights, OrderEvent, RiskMetrics

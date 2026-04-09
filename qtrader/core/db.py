@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Any
+
 import asyncpg
 import duckdb
 import polars as pl
+
 from qtrader.core.config import settings
 
 __all__ = ["DBClient", "DuckDBClient"]

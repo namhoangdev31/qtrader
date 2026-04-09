@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 import time
+
 from qtrader.core.dynamic_config import config_manager
 from qtrader.ml.embedding_worker import embedding_manager
 from qtrader.persistence.db_writer import TradeDBWriter
@@ -84,6 +86,7 @@ class LifecycleTaskManager:
 
     async def _do_health_log(self, session_id: str) -> None:
         import os
+
         import psutil
 
         process = psutil.Process(os.getpid())

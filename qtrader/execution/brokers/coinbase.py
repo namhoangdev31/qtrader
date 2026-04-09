@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -9,7 +10,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
+
 import aiohttp
+
 from qtrader.core.config import Config, settings
 from qtrader.core.decimal_adapter import d
 
@@ -28,6 +31,7 @@ from qtrader.execution.paper_engine import AdaptiveConfig
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from qtrader.risk.kill_switch import GlobalKillSwitch
     from qtrader.security.order_signing import OrderSigner
 logger = logging.getLogger("qtrader.broker.coinbase")
@@ -237,7 +241,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             return {
                 "cash": float(self.sim_engine._cash),
                 "positions": {
-                    k: sum((l.qty for l in v)) for (k, v) in self.sim_engine._open_positions.items()
+                    k: sum(l.qty for l in v) for (k, v) in self.sim_engine._open_positions.items()
                 },
                 "equity": float(self.sim_engine.equity),
                 "realized_pnl": float(self.sim_engine.realized_pnl),
@@ -262,7 +266,7 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             "realized_pnl": float(self.paper_account.realized_pnl),
             "total_commissions": float(self.paper_account.total_commissions),
             "order_count": len(self.paper_account.orders),
-            "fill_count": sum((len(v) for v in self.paper_account.fills.values())),
+            "fill_count": sum(len(v) for v in self.paper_account.fills.values()),
         }
 
     def reset_paper_account(self, initial_balance: Decimal = Decimal("100000.0")) -> None:
@@ -299,8 +303,8 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
         asset = order.symbol.split("-")[0]
         current_qty = self.paper_account.positions.get(asset, d(0))
         avg_entry = self.paper_account.avg_entry_prices.get(asset, d(0))
-        is_exit = (
-            current_qty > 0 and order.side == "SELL" or (current_qty < 0 and order.side == "BUY")
+        is_exit = (current_qty > 0 and order.side == "SELL") or (
+            current_qty < 0 and order.side == "BUY"
         )
         if is_exit:
             closing_qty = min(abs(current_qty), order.quantity)

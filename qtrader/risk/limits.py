@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Protocol
+
 from qtrader.core.events import RiskEvent, RiskPayload
 
 if TYPE_CHECKING:

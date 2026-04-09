@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -57,7 +58,7 @@ class AlertEngine:
             logger.warning(f"[ALERT] No alert channels configured: {alert.title}")
             return False
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        success = all((not isinstance(r, Exception) for r in results))
+        success = all(not isinstance(r, Exception) for r in results)
         if not success:
             self._failed_count += 1
             for r in results:

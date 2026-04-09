@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -33,9 +35,7 @@ class PipelineLatencyReport:
 
     @property
     def sla_compliant(self) -> bool:
-        return not self.pipeline_breached and (
-            not any((m.breached for m in self.stage_measurements))
-        )
+        return not self.pipeline_breached and (not any(m.breached for m in self.stage_measurements))
 
 
 class LatencyEnforcer:
@@ -137,9 +137,9 @@ class LatencyEnforcer:
 
     def get_status(self) -> dict[str, Any]:
         recent = self._reports[-10:] if self._reports else []
-        avg_latency = sum((r.total_latency_ms for r in recent)) / len(recent) if recent else 0.0
+        avg_latency = sum(r.total_latency_ms for r in recent) / len(recent) if recent else 0.0
         max_latency = max((r.total_latency_ms for r in recent), default=0.0)
-        compliant_count = sum((1 for r in recent if r.sla_compliant))
+        compliant_count = sum(1 for r in recent if r.sla_compliant)
         return {
             "budgets": self.budgets,
             "fail_on_breach": self.fail_on_breach,

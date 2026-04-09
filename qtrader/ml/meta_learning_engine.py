@@ -1,4 +1,5 @@
 from collections import deque
+
 import numpy as np
 
 
@@ -106,7 +107,7 @@ class MetaLearningEngine:
     def _softmax(self, scores: dict[str, float]) -> dict[str, float]:
         if not scores:
             return {}
-        if all((v == 0 for v in scores.values())):
+        if all(v == 0 for v in scores.values()):
             n = len(scores)
             return {k: 1.0 / n for k in scores}
         max_score = max(scores.values())
@@ -136,7 +137,7 @@ class MetaLearningEngine:
 
     def get_weights(self) -> dict[str, dict[str, float] | float]:
         if not self.global_strategy_history or all(
-            (len(v) < self.min_trades for v in self.global_strategy_history.values())
+            len(v) < self.min_trades for v in self.global_strategy_history.values()
         ):
             n_strats = len(self.global_strategy_history) or 1
             global_strategy_weights = (
@@ -148,7 +149,7 @@ class MetaLearningEngine:
             strategy_scores = self._compute_strategy_scores(self.global_strategy_history)
             global_strategy_weights = self._softmax(strategy_scores)
         if not self.global_feature_history or all(
-            (len(v) < self.min_trades for v in self.global_feature_history.values())
+            len(v) < self.min_trades for v in self.global_feature_history.values()
         ):
             n_feats = len(self.global_feature_history) or 1
             global_feature_weights = (
@@ -163,10 +164,8 @@ class MetaLearningEngine:
             self.current_regime is None
             or self.current_regime not in self.regime_strategy_history
             or all(
-                (
-                    len(v) < self.min_trades
-                    for v in self.regime_strategy_history[self.current_regime].values()
-                )
+                len(v) < self.min_trades
+                for v in self.regime_strategy_history[self.current_regime].values()
             )
         ):
             regime_strategy_weights = global_strategy_weights
@@ -179,10 +178,8 @@ class MetaLearningEngine:
             self.current_regime is None
             or self.current_regime not in self.regime_feature_history
             or all(
-                (
-                    len(v) < self.min_trades
-                    for v in self.regime_feature_history[self.current_regime].values()
-                )
+                len(v) < self.min_trades
+                for v in self.regime_feature_history[self.current_regime].values()
             )
         ):
             regime_feature_weights = global_feature_weights

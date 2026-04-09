@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from decimal import Decimal
+
 import polars as pl
+
 from qtrader.core.events import SignalPayload
 from qtrader.core.types import SignalEvent, ValidatedFeatures
 
@@ -161,7 +164,7 @@ class EnsembleStrategy:
                 avg_performance[i] = sum(performance_list) / len(performance_list)
             else:
                 avg_performance[i] = 0.0
-        if all((p <= 0 for p in avg_performance.values())):
+        if all(p <= 0 for p in avg_performance.values()):
             equal_weight = 1.0 / len(self.strategies)
             for i in range(len(self.strategies)):
                 self._strategy_weights[i] = equal_weight

@@ -2,7 +2,9 @@ import json
 import logging
 from collections.abc import Callable
 from typing import Any
+
 import websockets
+
 from qtrader.core.config import Config
 from qtrader.core.events import MarketEvent
 

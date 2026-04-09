@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
+
 import polars as pl
+
 from qtrader.analytics.tca_models import TCAReport, TradeCostComponents, get_tca_input_schema
 
 

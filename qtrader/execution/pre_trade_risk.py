@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.dynamic_config import DynamicSettingsMixin
 
 logger = logging.getLogger("qtrader.execution.pre_trade_risk")
@@ -162,14 +164,14 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         now = time.time()
         self._order_timestamps.append(now)
         max_ops = self.TS_MAX_ORDERS_PER_SECOND
-        recent_1s = sum((1 for t in self._order_timestamps if now - t < 1.0))
+        recent_1s = sum(1 for t in self._order_timestamps if now - t < 1.0)
         if recent_1s > max_ops:
             checks_failed.append(
                 f"RATE_LIMIT_1S: {recent_1s} > {max_ops} orders/sec (DYNAMIC_OVERRIDE_ACTIVE)"
             )
         else:
             checks_passed.append("RATE_LIMIT_1S_OK")
-        recent_60s = sum((1 for t in self._order_timestamps if now - t < 60.0))
+        recent_60s = sum(1 for t in self._order_timestamps if now - t < 60.0)
         max_opm = self.config.max_orders_per_minute
         if recent_60s > max_opm:
             checks_failed.append(f"RATE_LIMIT_60S: {recent_60s} > {max_opm}")

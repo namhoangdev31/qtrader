@@ -2,7 +2,9 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from pathlib import Path
+
 import polars as pl
+
 from qtrader.core.config import Config
 
 logger = logging.getLogger(__name__)
@@ -94,7 +96,7 @@ class DuckDBClient:
             )
         read_query = f"SELECT * FROM read_parquet('{parquet_path}', union_by_name=true)"
         if columns:
-            col_list = ", ".join((f"'{col}'" for col in columns))
+            col_list = ", ".join(f"'{col}'" for col in columns)
             read_query = (
                 f"SELECT {col_list} FROM read_parquet('{parquet_path}', union_by_name=true)"
             )
@@ -113,7 +115,7 @@ class DuckDBClient:
             raise FileNotFoundError(
                 f"No datalake partition for {symbol} {timeframe} at {parquet_path.parent}"
             )
-        col_list = ", ".join((f"'{col}'" for col in columns))
+        col_list = ", ".join(f"'{col}'" for col in columns)
         sql = f"SELECT {col_list} FROM read_parquet('{parquet_path}', union_by_name=true, compression='snappy', hive_partitioning=1)"
         if filter_sql:
             sql += f" WHERE {filter_sql}"
@@ -153,7 +155,7 @@ class DuckDBClient:
             self.datalake_path / "symbol=*" / f"tf={timeframe}" / "*.parquet"
         )
         if columns:
-            col_list = ", ".join((f"'{col}'" for col in columns))
+            col_list = ", ".join(f"'{col}'" for col in columns)
             sql = (
                 f"SELECT {col_list} FROM read_parquet('{parquet_path_pattern}', union_by_name=true)"
             )

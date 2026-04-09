@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import json
 import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
+
 from qtrader.security.rbac import Permission, RBACProcessor
 
 _LOG = logging.getLogger("qtrader.security.secret_manager")

@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import threading
 from enum import Enum
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 from qtrader.core.config import settings
 
 

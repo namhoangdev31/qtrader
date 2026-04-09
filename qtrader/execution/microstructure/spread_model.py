@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import statistics
 from collections import deque
 from typing import TYPE_CHECKING

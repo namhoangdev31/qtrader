@@ -1,4 +1,5 @@
 import logging
+
 from qtrader_core import RoutingMode as RustRoutingMode
 from qtrader_core import SmartOrderRouter as RustSmartOrderRouter
 

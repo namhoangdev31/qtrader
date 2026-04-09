@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 import polars as pl
+
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.core.db import DBClient
 from qtrader.ml.vector_store import EliteExemplar, memory_store
@@ -200,7 +203,7 @@ class SessionAnalyzer:
                 "avg_confidence": 0.0,
                 "botched_calls": [],
             }
-        avg_confidence = sum((float(t["confidence"]) for t in thinking)) / len(thinking)
+        avg_confidence = sum(float(t["confidence"]) for t in thinking) / len(thinking)
         botched_calls = []
         thinking_error_count = 0
         for t in thinking:

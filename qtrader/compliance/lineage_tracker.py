@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -55,7 +56,7 @@ class LineageTracker:
 
     def is_complete(self, any_id: str) -> bool:
         chain = self.get_forensics(any_id)
-        is_full = all((v is not None for v in chain.values()))
+        is_full = all(v is not None for v in chain.values())
         if is_full:
             self._stats["verified_complete_chains"] += 1
         return is_full

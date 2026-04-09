@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import decimal
 from decimal import ROUND_HALF_EVEN, Decimal, getcontext
 from typing import Any
+
 from loguru import logger
 
 

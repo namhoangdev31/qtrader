@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 import os
 from functools import lru_cache
+
 from qtrader.trading_system import TradingSystem, create_trading_system
 
 logger = logging.getLogger("qtrader.api.dependencies")

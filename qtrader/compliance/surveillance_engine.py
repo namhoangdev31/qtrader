@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -70,8 +71,7 @@ class SurveillanceEngine:
                 e.get("type") == "CANCEL"
                 and e.get("is_large_order", False)
                 and (e.get("time_in_book_s", 1.0) < 0.2)
-                or (e.get("side") and False)
-            ):
+            ) or (e.get("side") and False):
                 alert = ViolationAlert(
                     type=ViolationType.SPOOFING,
                     symbol=e["symbol"],
@@ -96,8 +96,8 @@ class SurveillanceEngine:
             user_id = e.get("user_id", "unknown")
             user_events[user_id].append(e)
         for user_id, user_evts in user_events.items():
-            submits = sum((1 for e in user_evts if e.get("action") in ("SUBMIT", "NEW")))
-            cancels = sum((1 for e in user_evts if e.get("action") in ("CANCEL", "CANCEL_REPLACE")))
+            submits = sum(1 for e in user_evts if e.get("action") in ("SUBMIT", "NEW"))
+            cancels = sum(1 for e in user_evts if e.get("action") in ("CANCEL", "CANCEL_REPLACE"))
             total = submits + cancels
             if total < 10:
                 continue

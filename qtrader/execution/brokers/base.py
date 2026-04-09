@@ -1,4 +1,5 @@
 from typing import Any, Protocol, runtime_checkable
+
 from qtrader.core.events import FillEvent, OrderEvent
 from qtrader.security.order_signing import OrderSigner, SignedOrder
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
 from loguru import logger
+
 from qtrader.core.events import EventType
 
 if TYPE_CHECKING:
@@ -70,7 +73,7 @@ class PostExecutionValidator:
         terminal_events = {EventType.ORDER_FILLED, EventType.ORDER_REJECTED, EventType.FILL}
         for t_id, types in trace_map.items():
             if EventType.ORDER in types:
-                if not any((t in terminal_events for t in types)):
+                if not any(t in terminal_events for t in types):
                     orphaned_traces.append(t_id)
         return {
             "complete": len(orphaned_traces) == 0,

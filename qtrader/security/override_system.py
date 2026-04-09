@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass, field
@@ -68,7 +69,7 @@ class HumanOverrideEnforcer:
         if approver_id == request.requester_id:
             _LOG.warning(f"[OVERRIDE] SOD_VIOLATION | Req: {request_id} | Self-Approval Denied")
             return False
-        if any((a.user_id == approver_id for a in request.approvals)):
+        if any(a.user_id == approver_id for a in request.approvals):
             _LOG.warning(f"[OVERRIDE] DUPLICATE_SIGN_DENY | Req: {request_id} | {approver_id}")
             return False
         approval = OverrideApproval(approver_id, approver_role, time.time())

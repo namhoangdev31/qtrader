@@ -2,6 +2,7 @@ import asyncio
 import logging
 from decimal import Decimal
 from typing import Any
+
 from qtrader.core.types import OrderEvent
 from qtrader.execution.execution_engine import ExchangeAdapter
 from qtrader.execution.smart_router import SmartOrderRouter

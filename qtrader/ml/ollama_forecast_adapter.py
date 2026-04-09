@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import json
 import logging
 import time
 from typing import Any
+
 import aiohttp
 import numpy as np
+
 from qtrader.ml.chronos_adapter import ForecastResult
 
 logger = logging.getLogger("qtrader.ml.ollama_forecast")

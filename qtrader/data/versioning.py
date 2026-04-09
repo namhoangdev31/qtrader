@@ -3,7 +3,9 @@ import json
 import logging
 from datetime import datetime
 from typing import Any
+
 import polars as pl
+
 from qtrader.core.db import DBClient
 
 _LOG = logging.getLogger(__name__)

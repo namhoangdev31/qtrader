@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 import math
 import time
@@ -42,7 +43,7 @@ class InvestorReportingEngine:
         trading_sessions_pa = 252
         annualization_scalar = math.sqrt(trading_sessions_pa)
         avg_daily_return = sum(returns) / num_sessions
-        variance = sum(((r - avg_daily_return) ** 2 for r in returns)) / num_sessions
+        variance = sum((r - avg_daily_return) ** 2 for r in returns) / num_sessions
         daily_volatility = math.sqrt(variance)
         annualized_return = avg_daily_return * trading_sessions_pa
         annualized_volatility = daily_volatility * annualization_scalar

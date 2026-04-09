@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 import polars as pl
 
 try:
@@ -116,7 +118,7 @@ class VectorizedEngine:
             weights = [1.0 / float(n)] * n
         if len(weights) != n:
             raise ValueError("weights length must match signal_cols length.")
-        composite_expr = sum((w * pl.col(c) for (w, c) in zip(weights, signal_cols, strict=True)))
+        composite_expr = sum(w * pl.col(c) for (w, c) in zip(weights, signal_cols, strict=True))
         df_comp = df.with_columns(composite_expr.alias("_composite_signal"))
         return self.backtest(
             df=df_comp,

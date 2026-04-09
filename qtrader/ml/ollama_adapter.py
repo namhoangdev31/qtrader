@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import json
 import logging
 import os
 import time
 from typing import Any
+
 import aiohttp
+
 from qtrader.ml.types import DecisionAction, TradingDecision
 
 logger = logging.getLogger("qtrader.ml.ollama")
@@ -33,7 +36,7 @@ class OllamaDecisionAdapter:
                     if resp.status == HTTP_OK:
                         data = await resp.json()
                         models = [m["name"] for m in data.get("models", [])]
-                        if any((self.model_id in m for m in models)):
+                        if any(self.model_id in m for m in models):
                             self._is_loaded = True
                             return True
         except Exception as e:

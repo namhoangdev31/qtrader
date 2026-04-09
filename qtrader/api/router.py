@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 import random
@@ -6,7 +7,9 @@ import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+
 from qtrader.analytics.session_analyzer import SessionAnalyzer
 from qtrader.api.dependencies import get_system
 from qtrader.api.schemas import OrderRequest, PositionRow, SimulationConfig, StatusResponse

@@ -1,12 +1,17 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
+
 import polars as pl
+
 from qtrader.risk.limits import PortfolioState, RiskLimit
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
     from qtrader.core.event_bus import EventBus
     from qtrader.core.events import RiskEvent
     from qtrader.risk.kill_switch import GlobalKillSwitch
@@ -211,14 +216,12 @@ class RealTimeRiskEngine:
         if not breaches:
             return breaches
         critical_breach = any(
-            (
-                event.metadata.get("risk_type") in ("DRAWDOWN", "VAR", "EXPOSURE")
-                or (
-                    getattr(event, "payload", None)
-                    and getattr(event.payload, "risk_type", None) in ("DRAWDOWN", "VAR", "EXPOSURE")
-                )
-                for event in breaches
+            event.metadata.get("risk_type") in ("DRAWDOWN", "VAR", "EXPOSURE")
+            or (
+                getattr(event, "payload", None)
+                and getattr(event.payload, "risk_type", None) in ("DRAWDOWN", "VAR", "EXPOSURE")
             )
+            for event in breaches
         )
         if self.event_bus:
             for event in breaches:

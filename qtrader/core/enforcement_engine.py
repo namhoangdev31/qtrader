@@ -1,12 +1,15 @@
 from __future__ import annotations
+
 import asyncio
 from typing import TYPE_CHECKING, Any, NoReturn
+
 from qtrader.core.container import container
 from qtrader.core.exceptions import ConstraintViolation
 from qtrader.core.violation_handler import violation_handler
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from qtrader.core.events import BaseEvent
 
 

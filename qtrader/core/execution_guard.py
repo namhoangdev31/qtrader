@@ -3,7 +3,9 @@ import json
 import os
 from collections.abc import Callable
 from typing import Any, Optional, TypeVar
+
 from loguru import logger
+
 from qtrader.core.system_state import SystemState, state_manager
 
 F = TypeVar("F", bound=Callable[..., Any])

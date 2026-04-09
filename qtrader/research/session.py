@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -6,9 +7,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import httpx
 from datetime import datetime, timedelta
+
 import numpy as np
 import polars as pl
 from loguru import logger
+
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.tearsheet import TearsheetGenerator

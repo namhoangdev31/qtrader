@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
+
 import polars as pl
 
 if TYPE_CHECKING:
@@ -109,7 +111,7 @@ class FeatureStore:
             return pl.DataFrame()
         cols = "*"
         if feature_names is not None:
-            safe_cols = ", ".join((f'"{c}"' for c in ["timestamp", *feature_names]))
+            safe_cols = ", ".join(f'"{c}"' for c in ["timestamp", *feature_names])
             cols = safe_cols
         filters: list[str] = []
         if start_ts:

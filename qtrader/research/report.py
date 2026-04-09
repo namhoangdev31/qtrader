@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import base64
 import io
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 import polars as pl
 
 log = logging.getLogger("qtrader.research.report")
@@ -77,7 +79,7 @@ class ReportBuilder:
     def build_html(self) -> str:
         from datetime import datetime
 
-        body = "\n".join((f'<div class="section">{s.content_html}</div>' for s in self._sections))
+        body = "\n".join(f'<div class="section">{s.content_html}</div>' for s in self._sections)
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
         return f'<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>{self.title}</title>\n  {self._CSS}\n</head>\n<body>\n  <h1>{self.title}</h1>\n  <p class="meta">Generated: {ts} | QTrader Analyst Platform</p>\n  {body}\n</body>\n</html>'
 
@@ -91,9 +93,9 @@ class ReportBuilder:
 
     @staticmethod
     def _df_to_html_table(df: pl.DataFrame) -> str:
-        headers = "".join((f"<th>{c}</th>" for c in df.columns))
+        headers = "".join(f"<th>{c}</th>" for c in df.columns)
         rows = ""
         for row in df.iter_rows():
-            cells = "".join((f"<td>{v}</td>" for v in row))
+            cells = "".join(f"<td>{v}</td>" for v in row)
             rows += f"<tr>{cells}</tr>"
         return f"<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"

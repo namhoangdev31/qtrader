@@ -1,4 +1,5 @@
 from typing import Any, Protocol, runtime_checkable
+
 import polars as pl
 
 
@@ -13,4 +14,3 @@ class Predictor(Protocol):
     def save(self, path: str) -> None: ...
 
     def load(self, path: str) -> None: ...
-        pass

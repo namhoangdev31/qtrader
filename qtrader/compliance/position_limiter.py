@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Any, Final
@@ -33,7 +34,7 @@ class PositionLimiter:
         if abs(target_symbol_pos) > self._config.symbol_limit:
             self._record_violation(symbol, "SYMBOL_CONCENTRATION_LIMIT_BREACH")
             return False
-        current_aggregate = sum((abs(v) for v in all_positions.values()))
+        current_aggregate = sum(abs(v) for v in all_positions.values())
         target_aggregate = current_aggregate - abs(current_pos) + abs(target_symbol_pos)
         if target_aggregate > self._config.aggregate_limit:
             self._record_violation(symbol, "ACCOUNT_EXPOSURE_LIMIT_BREACH")

@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from typing import ClassVar
+
 import polars as pl
+
 from qtrader.features.base import BaseFeature
 
 

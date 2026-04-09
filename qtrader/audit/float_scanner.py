@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import ast
 import csv
 import json
@@ -6,6 +7,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 from loguru import logger
 
 
@@ -92,10 +94,10 @@ class FloatScanner(ast.NodeVisitor):
 
     def _assign_risk(self, file_path: str) -> str:
         high_risk_paths = ["pnl", "oms", "risk", "execution", "fees", "nav"]
-        if any((p in file_path for p in high_risk_paths)):
+        if any(p in file_path for p in high_risk_paths):
             return "HIGH"
         medium_risk_paths = ["alpha", "strategy", "ml", "portfolio"]
-        if any((p in file_path for p in medium_risk_paths)):
+        if any(p in file_path for p in medium_risk_paths):
             return "MEDIUM"
         return "LOW"
 
@@ -110,7 +112,7 @@ class FloatScanner(ast.NodeVisitor):
         return {
             "float_usages": len(self.usages),
             "high_risk": len(high_risk),
-            "modules": sorted(list(set((u.module for u in high_risk)))),
+            "modules": sorted(list(set(u.module for u in high_risk))),
             "status": "PRECISION_RISK" if len(high_risk) > 0 else "SAFE",
             "total_detections": len(self.usages),
         }
