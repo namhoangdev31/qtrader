@@ -1,21 +1,37 @@
 {
   "name": "qtrader-hybrid-control-plane",
-  "version": "2.0.0",
-  "description": "Institutional Control Plane for QTrader Hybrid Platform",
+  "version": "2.1.0",
+  "description": "QTrader NestJS microservices monorepo",
   "private": true,
   "scripts": {
     "build": "nest build",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "generate:protos": "../../common/scripts/generate_protos.sh"
+    "build:api-gateway": "nest build api-gateway",
+    "build:session-control": "nest build session-control",
+    "build:oms-workflow": "nest build oms-workflow",
+    "build:risk-policy": "nest build risk-policy",
+    "build:reporting-query": "nest build reporting-query",
+    "start:api-gateway": "node dist/apps/api-gateway/main.js",
+    "start:session-control": "node dist/apps/session-control/main.js",
+    "start:oms-workflow": "node dist/apps/oms-workflow/main.js",
+    "start:risk-policy": "node dist/apps/risk-policy/main.js",
+    "start:reporting-query": "node dist/apps/reporting-query/main.js",
+    "start:dev:api-gateway": "nest start api-gateway --watch",
+    "start:dev:session-control": "nest start session-control --watch",
+    "start:dev:oms-workflow": "nest start oms-workflow --watch",
+    "start:dev:risk-policy": "nest start risk-policy --watch",
+    "start:dev:reporting-query": "nest start reporting-query --watch",
+    "generate:protos": "../../common/scripts/generate_protos.sh generate",
+    "check:protos": "../../common/scripts/generate_protos.sh check",
+    "test": "jest --runInBand"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.9.0",
+    "@grpc/proto-loader": "^0.7.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/microservices": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
-    "@grpc/grpc-js": "^1.9.0",
-    "@grpc/proto-loader": "^0.7.0",
+    "ioredis": "^5.4.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "uuid": "^9.0.0"
@@ -24,8 +40,12 @@
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@types/express": "^4.17.17",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20.3.1",
     "@types/uuid": "^9.0.1",
+    "jest": "^29.7.0",
+    "supertest": "^7.1.1",
+    "ts-jest": "^29.2.5",
     "typescript": "^5.1.3"
   }
 }

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package qtrader.v1.reporting;
+
+service ReportingService {
+  rpc GetSessionSummary(GetSessionSummaryRequest) returns (GetSessionSummaryReply);
+}
+
+message GetSessionSummaryRequest {
+  string session_id = 1;
+}
+
+message GetSessionSummaryReply {
+  string session_id = 1;
+  double sharpe = 2;
+  double win_rate = 3;
+  int32 trades = 4;
+}

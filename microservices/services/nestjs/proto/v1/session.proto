@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package qtrader.v1.session;
+
+service SessionService {
+  rpc StartSession(StartSessionRequest) returns (SessionStatusReply);
+  rpc HaltSession(HaltSessionRequest) returns (SessionStatusReply);
+  rpc GetStatus(GetStatusRequest) returns (SessionStatusReply);
+}
+
+message StartSessionRequest {
+  string session_id = 1;
+}
+
+message HaltSessionRequest {
+  string reason = 1;
+}
+
+message GetStatusRequest {}
+
+message SessionStatusReply {
+  string session_id = 1;
+  string status = 2;
+}

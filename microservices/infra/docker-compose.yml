@@ -1,16 +1,100 @@
 services:
-  nestjs-control-plane:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api-gateway:
     build:
       context: ../services/nestjs
       dockerfile: Dockerfile
+    command: ["npm", "run", "start:api-gateway"]
     ports:
       - "3100:3100"
     environment:
-      EXECUTION_CORE_URL: http://python-execution-core:8002
-      ALPHA_FEATURE_URL: http://python-alpha-feature:8001
+      API_GATEWAY_HTTP_PORT: 3100
+      SESSION_CONTROL_GRPC_URL: session-control:50061
+      OMS_WORKFLOW_GRPC_URL: oms-workflow:50062
+      RISK_POLICY_GRPC_URL: risk-policy:50063
+      REPORTING_QUERY_GRPC_URL: reporting-query:50064
     depends_on:
-      - python-execution-core
-      - python-alpha-feature
+      - session-control
+      - oms-workflow
+      - risk-policy
+      - reporting-query
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/gateway/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  session-control:
+    build:
+      context: ../services/nestjs
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:session-control"]
+    ports:
+      - "3101:3101"
+    environment:
+      SESSION_CONTROL_HTTP_PORT: 3101
+      SESSION_CONTROL_GRPC_URL: 0.0.0.0:50061
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3101/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  oms-workflow:
+    build:
+      context: ../services/nestjs
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:oms-workflow"]
+    ports:
+      - "3102:3102"
+    environment:
+      OMS_WORKFLOW_HTTP_PORT: 3102
+      OMS_WORKFLOW_GRPC_URL: 0.0.0.0:50062
+      REDIS_URL: redis://redis:6379
+      OMS_IDEMPOTENCY_TTL_SEC: 3600
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3102/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  risk-policy:
+    build:
+      context: ../services/nestjs
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:risk-policy"]
+    ports:
+      - "3103:3103"
+    environment:
+      RISK_POLICY_HTTP_PORT: 3103
+      RISK_POLICY_GRPC_URL: 0.0.0.0:50063
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3103/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  reporting-query:
+    build:
+      context: ../services/nestjs
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:reporting-query"]
+    ports:
+      - "3104:3104"
+    environment:
+      REPORTING_QUERY_HTTP_PORT: 3104
+      REPORTING_QUERY_GRPC_URL: 0.0.0.0:50064
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3104/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   python-execution-core:
     build:
@@ -18,6 +102,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8002:8002"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   python-alpha-feature:
     build:
@@ -25,3 +114,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

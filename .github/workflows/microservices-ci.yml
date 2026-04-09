@@ -1,0 +1,54 @@
+name: microservices-ci
+
+on:
+  push:
+    paths:
+      - 'microservices/**'
+      - '.github/workflows/microservices-ci.yml'
+  pull_request:
+    paths:
+      - 'microservices/**'
+      - '.github/workflows/microservices-ci.yml'
+
+jobs:
+  nestjs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: microservices/services/nestjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: microservices/services/nestjs/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  proto:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: microservices
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install grpcio grpcio-tools
+      - run: ./common/scripts/generate_protos.sh generate
+      - run: ./common/scripts/generate_protos.sh check
+
+  python-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: microservices/services/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile alpha-feature/main.py execution-core/main.py risk-quant/main.py ml-inference/main.py backtest-research/main.py

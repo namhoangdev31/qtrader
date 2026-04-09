@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package qtrader.v1.oms;
+
+service OmsService {
+  rpc CreateOrder(CreateOrderRequest) returns (OrderReply);
+  rpc TransitionOrder(TransitionOrderRequest) returns (OrderReply);
+  rpc GetOrder(GetOrderRequest) returns (OrderReply);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersReply);
+  rpc HandleFill(HandleFillRequest) returns (OrderReply);
+}
+
+message CreateOrderRequest {
+  string order_id = 1;
+  string session_id = 2;
+  string trace_id = 3;
+  string symbol = 4;
+  string action = 5;
+  double quantity = 6;
+  string idempotency_key = 7;
+}
+
+message TransitionOrderRequest {
+  string order_id = 1;
+  string status = 2;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message ListOrdersRequest {}
+
+message HandleFillRequest {
+  string order_id = 1;
+  string fill_id = 2;
+  double price = 3;
+  double quantity = 4;
+  int64 timestamp_ns = 5;
+  string venue = 6;
+}
+
+message OrderReply {
+  string order_id = 1;
+  string session_id = 2;
+  string trace_id = 3;
+  string symbol = 4;
+  string status = 5;
+  string action = 6;
+  double total_quantity = 7;
+  double filled_quantity = 8;
+  double remaining_quantity = 9;
+  string reason = 10;
+}
+
+message ListOrdersReply {
+  repeated OrderReply orders = 1;
+}

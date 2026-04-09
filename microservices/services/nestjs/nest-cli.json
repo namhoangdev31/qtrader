@@ -1,4 +1,54 @@
 {
+  "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "src"
+  "monorepo": true,
+  "root": "apps/api-gateway",
+  "sourceRoot": "apps/api-gateway/src",
+  "projects": {
+    "api-gateway": {
+      "type": "application",
+      "root": "apps/api-gateway",
+      "entryFile": "main",
+      "sourceRoot": "apps/api-gateway/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api-gateway/tsconfig.app.json"
+      }
+    },
+    "session-control": {
+      "type": "application",
+      "root": "apps/session-control",
+      "entryFile": "main",
+      "sourceRoot": "apps/session-control/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/session-control/tsconfig.app.json"
+      }
+    },
+    "oms-workflow": {
+      "type": "application",
+      "root": "apps/oms-workflow",
+      "entryFile": "main",
+      "sourceRoot": "apps/oms-workflow/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/oms-workflow/tsconfig.app.json"
+      }
+    },
+    "risk-policy": {
+      "type": "application",
+      "root": "apps/risk-policy",
+      "entryFile": "main",
+      "sourceRoot": "apps/risk-policy/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/risk-policy/tsconfig.app.json"
+      }
+    },
+    "reporting-query": {
+      "type": "application",
+      "root": "apps/reporting-query",
+      "entryFile": "main",
+      "sourceRoot": "apps/reporting-query/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/reporting-query/tsconfig.app.json"
+      }
+    }
+  }
 }

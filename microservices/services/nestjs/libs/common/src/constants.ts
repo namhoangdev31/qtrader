@@ -1,0 +1,2 @@
+export const DEFAULT_SESSION_ID = 'GLOBAL_IDLE';
+export const DEFAULT_IDEMPOTENCY_TTL_SEC = 3600;

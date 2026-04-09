@@ -1,8 +1,8 @@
 FROM node:20-alpine
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev=false
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund
 COPY . .
-RUN npx nest build
+RUN npm run build
 EXPOSE 3100
-CMD ["node", "dist/src/main.js"]
+CMD ["npm", "run", "start:api-gateway"]

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package qtrader.v1.risk;
+
+service RiskPolicyService {
+  rpc ValidateOrder(ValidateOrderRequest) returns (ValidateOrderReply);
+}
+
+message ValidateOrderRequest {
+  string symbol = 1;
+  string action = 2;
+  double quantity = 3;
+  double price = 4;
+}
+
+message ValidateOrderReply {
+  bool approved = 1;
+  string reason = 2;
+}
