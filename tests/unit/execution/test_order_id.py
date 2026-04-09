@@ -1,11 +1,6 @@
-"""Tests for execution/order_id.py — Idempotent Order ID generation."""
-
 from __future__ import annotations
-
 import asyncio
-
 import pytest
-
 from qtrader.execution.order_id import OrderIDGenerator
 
 
@@ -25,8 +20,8 @@ class TestOrderIDGenerator:
     async def test_id_format(self, generator: OrderIDGenerator) -> None:
         order_id = await generator.generate_order_id("binance", "BTC-USDT")
         parts = order_id.split("-")
-        assert len(parts) >= 3  # UUID-exchange-timestamp
-        assert "BINANCE" in order_id  # Exchange is uppercased
+        assert len(parts) >= 3
+        assert "BINANCE" in order_id
 
     @pytest.mark.asyncio
     async def test_is_duplicate(self, generator: OrderIDGenerator) -> None:
@@ -49,16 +44,13 @@ class TestOrderIDGenerator:
 
     @pytest.mark.asyncio
     async def test_concurrent_generation(self, generator: OrderIDGenerator) -> None:
-        """Test that concurrent generation produces unique IDs."""
         tasks = [generator.generate_order_id("BINANCE", "BTC-USDT") for _ in range(100)]
         ids = await asyncio.gather(*tasks)
-        assert len(set(ids)) == 100  # All unique
+        assert len(set(ids)) == 100
 
     @pytest.mark.asyncio
     async def test_memory_governance(self) -> None:
-        """Test that registry is bounded."""
         gen = OrderIDGenerator()
-        # Generate enough to trigger trimming (max 1M, trims to 500k)
-        for _i in range(10_000):
+        for _i in range(10000):
             await gen.generate_order_id("TEST", "SYM")
-        assert gen.get_registry_size() == 10_000  # Under limit, no trimming yet
+        assert gen.get_registry_size() == 10000

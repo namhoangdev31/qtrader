@@ -1,11 +1,6 @@
-"""Tests for execution/pre_trade_risk.py — Standash §4.6, §4.7."""
-
 from __future__ import annotations
-
 from decimal import Decimal
-
 import pytest
-
 from qtrader.execution.pre_trade_risk import (
     PreTradeRiskConfig,
     PreTradeRiskResult,
@@ -25,7 +20,7 @@ def validator() -> PreTradeRiskValidator:
             max_orders_per_second=10.0,
             max_orders_per_minute=100.0,
             max_concentration_pct=0.05,
-            max_position_usd=Decimal("15000"),  # 15k USD limit
+            max_position_usd=Decimal("15000"),
         )
     )
 
@@ -47,72 +42,63 @@ class TestPreTradeRiskValidator:
     def test_quantity_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
         result = validator.validate_order("AAPL", "BUY", Decimal("2000"), Decimal("150.0"))
         assert not result.approved
-        assert any("QUANTITY_EXCEEDED" in r for r in result.checks_failed)
+        assert any(("QUANTITY_EXCEEDED" in r for r in result.checks_failed))
 
     def test_notional_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
         result = validator.validate_order("AAPL", "BUY", Decimal("10000"), Decimal("200.0"))
         assert not result.approved
-        assert any("NOTIONAL_EXCEEDED" in r for r in result.checks_failed)
+        assert any(("NOTIONAL_EXCEEDED" in r for r in result.checks_failed))
 
     def test_price_deviation_rejected(self, validator: PreTradeRiskValidator) -> None:
         validator.update_mid_price("AAPL", Decimal("150.0"))
         result = validator.validate_order("AAPL", "BUY", Decimal("10"), Decimal("200.0"))
         assert not result.approved
-        assert any("PRICE_DEVIATION" in r for r in result.checks_failed)
+        assert any(("PRICE_DEVIATION" in r for r in result.checks_failed))
 
     def test_position_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
         validator.update_position("AAPL", Decimal("95"))
         result = validator.validate_order("AAPL", "BUY", Decimal("10"), Decimal("150.0"))
         assert not result.approved
-        assert any("POSITION_UNITS_EXCEEDED" in r for r in result.checks_failed)
+        assert any(("POSITION_UNITS_EXCEEDED" in r for r in result.checks_failed))
 
     def test_position_usd_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
         validator.update_mid_price("AAPL", Decimal("150.0"))
-        # 101 shares * 150 = 15150 (> 15000 limit)
         result = validator.validate_order("AAPL", "BUY", Decimal("101"), Decimal("150.0"))
         assert not result.approved
-        assert any("POSITION_USD_EXCEEDED" in r for r in result.checks_failed)
+        assert any(("POSITION_USD_EXCEEDED" in r for r in result.checks_failed))
 
     def test_dynamic_unit_limit_adjustment(self, validator: PreTradeRiskValidator) -> None:
-        """Test that Unit Limits shrink as price increases to keep USD risk constant."""
-        # Setup: 15k USD limit.
-        # At $150, limit is 100 shares.
         validator.update_mid_price("AAPL", Decimal("150.0"))
         assert validator._effective_unit_limits["AAPL"] == Decimal("100")
-
-        # At $300, limit should shrink to 50 shares.
         validator.update_mid_price("AAPL", Decimal("300.0"))
         assert validator._effective_unit_limits["AAPL"] == Decimal("50")
-
-        # Try to buy 51 shares at $300 (Total $15,300 > 15k)
         result = validator.validate_order("AAPL", "BUY", Decimal("51"), Decimal("300.0"))
         assert not result.approved
-        assert any("POSITION_UNITS_EXCEEDED" in r for r in result.checks_failed)
-        assert any("Dynamic" in r for r in result.checks_failed)
+        assert any(("POSITION_UNITS_EXCEEDED" in r for r in result.checks_failed))
+        assert any(("Dynamic" in r for r in result.checks_failed))
 
     def test_concentration_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
         validator.update_portfolio_value(Decimal("100000"))
         result = validator.validate_order("AAPL", "BUY", Decimal("100"), Decimal("150.0"))
         assert not result.approved
-        assert any("CONCENTRATION_EXCEEDED" in r for r in result.checks_failed)
+        assert any(("CONCENTRATION_EXCEEDED" in r for r in result.checks_failed))
 
     def test_rate_limit_per_second(self, validator: PreTradeRiskValidator) -> None:
         validator.update_mid_price("AAPL", Decimal("150.0"))
         validator.update_portfolio_value(Decimal("1000000"))
-        # Submit 11 orders in rapid succession (limit is 10/s)
         for i in range(11):
             result = validator.validate_order("AAPL", "BUY", Decimal("1"), Decimal("150.0"))
             if i < 10:
                 assert result.approved
             else:
                 assert not result.approved
-                assert any("RATE_LIMIT_1S" in r for r in result.checks_failed)
+                assert any(("RATE_LIMIT_1S" in r for r in result.checks_failed))
 
     def test_telemetry(self, validator: PreTradeRiskValidator) -> None:
         validator.update_mid_price("AAPL", Decimal("150.0"))
         validator.update_portfolio_value(Decimal("1000000"))
         validator.validate_order("AAPL", "BUY", Decimal("10"), Decimal("150.0"))
-        validator.validate_order("AAPL", "BUY", Decimal("2000"), Decimal("150.0"))  # rejected
+        validator.validate_order("AAPL", "BUY", Decimal("2000"), Decimal("150.0"))
         telemetry = validator.get_telemetry()
         assert telemetry["total_validated"] == 2
         assert telemetry["total_rejected"] == 1

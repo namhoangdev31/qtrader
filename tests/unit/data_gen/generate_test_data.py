@@ -1,22 +1,18 @@
 from datetime import datetime, timedelta
-
 import numpy as np
 import polars as pl
 
 
 def generate_synthetic_data(symbol: str, days: int = 100) -> pl.DataFrame:
-    """Generates synthetic OHLCV data for testing."""
     np.random.seed(42)
     start_date = datetime(2025, 1, 1)
-    dates = [start_date + timedelta(minutes=j) for j in range(days * 24 * 60 // 60)]  # Hourly data
-
+    dates = [start_date + timedelta(minutes=j) for j in range(days * 24 * 60 // 60)]
     n = len(dates)
     price = 100.0
     prices = []
     for _ in range(n):
         price *= 1 + np.random.normal(0, 0.001)
         prices.append(price)
-
     df = pl.DataFrame(
         {
             "timestamp": dates,

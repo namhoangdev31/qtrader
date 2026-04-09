@@ -1,8 +1,6 @@
 import asyncio
 from unittest.mock import MagicMock
-
 import pytest
-
 from qtrader.core.execution_guard import gate_registry, require_initialized
 from qtrader.core.system_state import SystemState, state_manager
 
@@ -25,9 +23,7 @@ async def dummy_async_function():
 
 
 def test_guard_blocks_in_init():
-    """Verify that execution is blocked in INIT state."""
     state_manager.set_state(SystemState.INIT)
-
     with pytest.raises(RuntimeError) as exc:
         dummy_sync_function()
     assert "requires INITIALIZED system state" in str(exc.value)
@@ -36,9 +32,7 @@ def test_guard_blocks_in_init():
 
 @pytest.mark.asyncio
 async def test_guard_blocks_async_in_init():
-    """Verify that async execution is blocked in INIT state."""
     state_manager.set_state(SystemState.INIT)
-
     with pytest.raises(RuntimeError) as exc:
         await dummy_async_function()
     assert "requires INITIALIZED system state" in str(exc.value)
@@ -46,7 +40,6 @@ async def test_guard_blocks_async_in_init():
 
 
 def test_guard_allows_in_ready():
-    """Verify that execution is allowed in READY state."""
     state_manager.set_state(SystemState.READY)
     assert dummy_sync_function() == "SUCCESS"
     assert gate_registry._blocked_attempts == 0
@@ -54,25 +47,21 @@ def test_guard_allows_in_ready():
 
 @pytest.mark.asyncio
 async def test_guard_allows_in_running():
-    """Verify that execution is allowed in RUNNING state."""
     state_manager.set_state(SystemState.RUNNING)
     assert await dummy_async_function() == "SUCCESS"
     assert gate_registry._blocked_attempts == 0
 
 
 def test_report_generation():
-    """Verify that guard_report.json is correctly updated."""
     state_manager.set_state(SystemState.INIT)
     try:
         dummy_sync_function()
     except RuntimeError:
         pass
-
     import json
 
     with open("qtrader/audit/guard_report.json") as f:
         report = json.load(f)
-
     assert report["blocked_attempts"] > 0
     assert report["status"] == "GUARD_ACTIVE"
     assert report["system_state"] == "INIT"

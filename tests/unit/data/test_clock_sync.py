@@ -1,11 +1,6 @@
-"""Tests for data/clock_sync.py — Standash §4.10."""
-
 from __future__ import annotations
-
 import time
-
 import pytest
-
 from qtrader.data.clock_sync import ClockSynchronizer, ClockSyncResult
 
 
@@ -30,19 +25,15 @@ class TestClockSynchronizer:
 
     def test_correction_offset(self) -> None:
         sync = ClockSynchronizer(max_drift_ms=1.0)
-        # Add some drift measurements
         for i in range(10):
             sync.check_drift(system_time_ms=1000000.0 + i, exchange_time_ms=1000000.0)
-
         offset = sync.get_correction_offset_ms()
         assert isinstance(offset, float)
 
     def test_correct_timestamp(self) -> None:
         sync = ClockSynchronizer(max_drift_ms=1.0)
-        # Add drift measurements
         for _i in range(10):
             sync.check_drift(system_time_ms=1000000.0 + 2.0, exchange_time_ms=1000000.0)
-
         corrected = sync.correct_timestamp(1000000.0)
         assert isinstance(corrected, float)
 
@@ -55,6 +46,6 @@ class TestClockSynchronizer:
 
     def test_status_with_alerts(self) -> None:
         sync = ClockSynchronizer(max_drift_ms=1.0)
-        sync.check_drift(system_time_ms=1000000.0, exchange_time_ms=999995.0)  # 5ms drift
+        sync.check_drift(system_time_ms=1000000.0, exchange_time_ms=999995.0)
         status = sync.get_status()
         assert status["alert_count"] == 1

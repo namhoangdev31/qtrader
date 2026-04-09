@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 
 
@@ -16,7 +15,7 @@ class TradeRecord:
     venue: str
     DEFAULT_SL_PCT: float = 0.02
     DEFAULT_TP_PCT: float = 0.05
-    EPSILON_QTY: float = 1e-8
+    EPSILON_QTY: float = 1e-08
     MIN_HISTORY_FOR_ANALYSIS: int = 20
     SIGNIFICANT_PRICE_CHANGE: float = 0.0001
     reason: str = "SIGNAL"
@@ -42,7 +41,6 @@ class OpenPosition:
 
     @property
     def commission(self) -> float:
-        """Total commission paid for this lot (entry share)."""
         return self.avg_comm_per_unit * self.qty
 
 
@@ -50,24 +48,20 @@ class OpenPosition:
 class AdaptiveConfig:
     base_stop_loss_pct: float = 0.02
     base_take_profit_pct: float = 0.03
-    base_position_size_pct: float = 0.20
+    base_position_size_pct: float = 0.2
     max_position_usd: float = 5000.0
-
     win_streak: int = 0
     loss_streak: int = 0
     total_wins: int = 0
     total_losses: int = 0
     total_pnl: float = 0.0
-
     streak_adjust_step: float = 0.005
     max_sl_adjustment: float = 0.03
     max_tp_adjustment: float = 0.05
     min_position_pct: float = 0.05
-    max_position_pct: float = 0.50
+    max_position_pct: float = 0.5
     min_stop_loss_pct: float = 0.01
     min_take_profit_pct: float = 0.01
-
-    # Streak thresholds
     STREAK_LOSS_CRITICAL: int = 3
     STREAK_WIN_STABLE: int = 2
     STREAK_MAX_ADJUST_WINDOWS: int = 6
@@ -81,8 +75,7 @@ class AdaptiveConfig:
             return min(base + adj, base + self.max_sl_adjustment)
         if self.win_streak >= self.STREAK_WIN_STABLE:
             return max(
-                base - self.streak_adjust_step * min(self.win_streak, 4),
-                self.min_stop_loss_pct,
+                base - self.streak_adjust_step * min(self.win_streak, 4), self.min_stop_loss_pct
             )
         return base
 
@@ -97,7 +90,6 @@ class AdaptiveConfig:
                 base + self.streak_adjust_step * min(self.win_streak, 4),
                 base + self.max_tp_adjustment,
             )
-        # Ensure TP doesn't drop below floor
         return max(base, self.min_take_profit_pct)
 
     @property
@@ -135,6 +127,6 @@ class AdaptiveConfig:
         if wr in {0, 1} or self.total_losses == 0:
             return 0.0
         avg_w = self.total_pnl / max(self.total_wins, 1) if self.total_wins > 0 else 0
-        loss_pnl = self.total_pnl - (avg_w * self.total_wins)
+        loss_pnl = self.total_pnl - avg_w * self.total_wins
         avg_l = abs(loss_pnl) / self.total_losses
         return wr * avg_w - (1 - wr) * avg_l

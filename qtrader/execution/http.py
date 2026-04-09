@@ -1,7 +1,6 @@
 import asyncio
 from dataclasses import dataclass
 from typing import Any
-
 import aiohttp
 
 
@@ -26,38 +25,23 @@ async def request_json(
     json_body: Any = None,
     retry: RetryConfig = RetryConfig(),
 ) -> Any:
-    """
-    Minimal REST helper with timeout + retry/backoff.
-    - Retries only network/timeouts and 5xx.
-    - Raises on 4xx (fail-closed).
-    """
     method_u = method.upper()
     timeout = aiohttp.ClientTimeout(total=retry.request_timeout_s)
-
     last_exc: Exception | None = None
     for attempt in range(retry.max_retries + 1):
         try:
             async with session.request(
-                method_u,
-                url,
-                headers=headers,
-                params=params,
-                json=json_body,
-                timeout=timeout,
+                method_u, url, headers=headers, params=params, json=json_body, timeout=timeout
             ) as resp:
                 if resp.status in (401, 403):
                     body = await resp.text()
                     raise PermissionError(f"Auth error {resp.status}: {body}")
-
                 if 400 <= resp.status <= 499:
                     body = await resp.text()
                     raise ValueError(f"Client error {resp.status}: {body}")
-
                 if _is_retryable_status(resp.status):
                     body = await resp.text()
                     raise RuntimeError(f"Server error {resp.status}: {body}")
-
-                # Assume JSON on success; fall back to text for robustness.
                 try:
                     return await resp.json()
                 except Exception:
@@ -66,8 +50,5 @@ async def request_json(
             last_exc = e
             if attempt >= retry.max_retries:
                 raise
-
-            # Zero Latency: Immediate retry without backoff or jitter
             continue
-
     raise last_exc or RuntimeError("request_json failed unexpectedly")

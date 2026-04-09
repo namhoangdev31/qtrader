@@ -1,22 +1,17 @@
 from enum import Enum, auto
 from typing import Optional
-
 from loguru import logger
 
 
 class SystemState(Enum):
-    """Sovereign System States for QTrader."""
-
-    INIT = auto()  # UNINITIALIZED
-    READY = auto()  # INITIALIZED
-    RUNNING = auto()  # RUNNING
-    ERROR = auto()  # FAILED
-    SHUTDOWN = auto()  # HALTED
+    INIT = auto()
+    READY = auto()
+    RUNNING = auto()
+    ERROR = auto()
+    SHUTDOWN = auto()
 
 
 class SystemStateManager:
-    """Singleton Manager for Global System State Visibility."""
-
     _instance: Optional["SystemStateManager"] = None
     _state: SystemState = SystemState.INIT
 
@@ -30,10 +25,8 @@ class SystemStateManager:
         return self._state
 
     def set_state(self, new_state: SystemState) -> None:
-        """Update the global system state with audit logging."""
         logger.info(f"SYSTEM_STATE_TRANSITION | {self._state.name} -> {new_state.name}")
         self._state = new_state
 
 
-# Global Proxy
 state_manager = SystemStateManager()

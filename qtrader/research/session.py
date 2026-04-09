@@ -1,28 +1,14 @@
-"""Extended AnalystSession - role-aware notebook workflow helpers for QTrader.
-
-Roles
------
-RoleContext.ANALYST     - EDA, backtest reports, risk summaries, HTML export
-RoleContext.RESEARCHER  - feature engineering, regime detection, ML experiments
-RoleContext.TRADER      - live bot monitoring, execution audit, slippage analysis
-"""
-
 from __future__ import annotations
-
 import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import httpx
-
-
 from datetime import datetime, timedelta
-
 import numpy as np
 import polars as pl
 from loguru import logger
-
 from qtrader.analytics.performance import PerformanceAnalytics
 from qtrader.backtest.engine_vectorized import VectorizedEngine
 from qtrader.backtest.tearsheet import TearsheetGenerator
@@ -34,24 +20,12 @@ from qtrader.data.market.coinbase_market import CoinbaseMarketDataClient
 
 
 class RoleContext(str, Enum):
-    """Role context for AnalystSession.  Determines workflow guidance in notebooks."""
-
     ANALYST = "analyst"
     RESEARCHER = "researcher"
     TRADER = "trader"
 
 
 class AnalystSession:
-    """Full-featured analyst helpers for notebook workflows.
-
-    Create a session and optionally specify the user's role::
-
-        session = AnalystSession(role=RoleContext.ANALYST)
-
-    All methods are useable regardless of role - the role is mainly used for
-    ``info()`` guidance and future notebook auto-navigation.
-    """
-
     def __init__(self, role: RoleContext | str = RoleContext.ANALYST) -> None:
         self._log = logging.getLogger("qtrader.research")
         self.role = RoleContext(role) if isinstance(role, str) else role
@@ -65,7 +39,6 @@ class AnalystSession:
         source: str = "duckdb",
         days: int | None = None,
     ) -> pl.DataFrame:
-        """Load OHLCV from the datalake using DuckDB when available."""
         if source == "duckdb":
             try:
                 return self._load_from_duckdb(symbol, timeframe, filter_sql)
@@ -77,7 +50,6 @@ class AnalystSession:
     async def load_from_datalake(
         self, symbol: str, timeframe: str, days: int | None = None
     ) -> pl.DataFrame:
-        """Load OHLCV from UniversalDataLake/DataLake fallback."""
         try:
             return self._load_from_universal(symbol, timeframe)
         except FileNotFoundError as exc:
@@ -88,11 +60,9 @@ class AnalystSession:
                 self._log.warning("DataLake missing. Falling back to Live API.")
                 if days is None:
                     days = 365 if self.role == RoleContext.RESEARCHER else 7
-
                 return await self.load_live_ohlcv(symbol, timeframe, days=days)
 
     def sample_ohlcv(self, symbol: str = "AAPL", days: int = 5) -> pl.DataFrame:
-        """Generate synthetic OHLCV for quick analysis (no data source required)."""
         self._log.warning(f"⚠️ DATA_SOURCE: Generating SYNTHETIC data for {symbol}.")
         try:
             from scripts.generate_test_data import generate_synthetic_data
@@ -103,10 +73,7 @@ class AnalystSession:
             return pl.DataFrame()
 
     async def load_live_ohlcv(self, symbol: str, timeframe: str, days: int = 7) -> pl.DataFrame:
-        """Load real Coinbase REST API data and persist it to the DataLake."""
-
         self._log.info(f"Requesting {days} days of live data for {symbol}...")
-
         tf_map = {
             "1m": "ONE_MINUTE",
             "5m": "FIVE_MINUTE",
@@ -118,7 +85,6 @@ class AnalystSession:
             "1d": "ONE_DAY",
         }
         granularity = tf_map.get(timeframe, "ONE_HOUR")
-
         client = CoinbaseMarketDataClient()
         end_dt = datetime.now(Config.tz)
         start_dt = end_dt - timedelta(days=days)
@@ -130,7 +96,6 @@ class AnalystSession:
                 lake.save_data(df, symbol, timeframe)
             except Exception as e:
                 self._log.warning(f"Failed to persist live data to DataLake: {e}")
-
         else:
             self._log.warning(
                 f"No live data returned for {symbol}. Falling back to synthetic mock data."
@@ -139,20 +104,17 @@ class AnalystSession:
         return df
 
     async def get_live_orderbook(self, symbol: str, limit: int = 20) -> dict[str, Any]:
-        """Fetch the live L2 orderbook from Coinbase."""
         client = CoinbaseMarketDataClient()
         return await client.get_product_book(symbol, limit)
 
     async def run_paper_simulation(
         self, symbol: str, strategy_fn: Any, timeframe: str = "1h", days: int = 7
     ) -> Any:
-        """Run a strategy logic function against live data to compute expected EV."""
         from qtrader.analytics.ev_calculator import EVCalculator
         from qtrader.execution.paper_engine import PaperTradingEngine
 
         df = await self.load_live_ohlcv(symbol, timeframe, days)
         engine = PaperTradingEngine(starting_capital=10000.0)
-
         for row in df.iter_rows(named=True):
             market_state = {
                 "bid": float(row["close"]) * 0.9999,
@@ -163,15 +125,10 @@ class AnalystSession:
             order = strategy_fn(row)
             if order:
                 engine.simulate_fill(order, market_state)
-
         calculator = EVCalculator(engine.closed_trades)
         return calculator.diagnose(symbol)
 
     def load_features(self, symbol: str, timeframe: str) -> pl.DataFrame:
-        """Load pre-computed features from the FeatureStore.
-
-        Returns an empty DataFrame if no features are stored yet.
-        """
         from qtrader.features.store import FeatureStore
 
         store = FeatureStore()
@@ -183,26 +140,13 @@ class AnalystSession:
         return df
 
     def make_returns(self, df: pl.DataFrame, price_col: str = "close") -> pl.DataFrame:
-        """Add *returns* column (pct_change of price_col) to DataFrame."""
         if price_col not in df.columns:
             raise ValueError(f"Missing price column: {price_col}")
         return df.with_columns(pl.col(price_col).pct_change().alias("returns"))
 
     def add_rolling_features(
-        self,
-        df: pl.DataFrame,
-        windows: list[int] | None = None,
-        price_col: str = "close",
+        self, df: pl.DataFrame, windows: list[int] | None = None, price_col: str = "close"
     ) -> pl.DataFrame:
-        """Add rolling mean, rolling std, and RSI-like momentum features.
-
-        Parameters
-        ----------
-        df:
-            DataFrame with at least *price_col*.
-        windows:
-            List of window sizes for rolling statistics. Default [5, 14, 21].
-        """
         windows = windows or [5, 14, 21]
         cols = []
         for w in windows:
@@ -220,29 +164,19 @@ class AnalystSession:
         return df
 
     def describe(self, df: pl.DataFrame) -> dict[str, Any]:
-        """Lightweight describe helper for notebooks."""
-        return {
-            "shape": df.shape,
-            "columns": df.columns,
-            "head": df.head(5),
-        }
+        return {"shape": df.shape, "columns": df.columns, "head": df.head(5)}
 
     def rich_describe(self, df: pl.DataFrame, numeric_only: bool = True) -> dict[str, Any]:
-        """Extended descriptive statistics including skew, kurtosis, and outlier %.
-
-        Returns a dict suitable for ``add_table`` in a ReportBuilder.
-        """
         num_cols = (
             [c for c in df.columns if df[c].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32)]
             if numeric_only
             else df.columns
         )
-
         stats: dict[str, Any] = {"shape": df.shape, "numeric_columns": num_cols, "columns": {}}
         for col in num_cols:
             s = df[col].drop_nulls()
             arr = s.to_numpy()
-            q25, q75 = float(np.percentile(arr, 25)), float(np.percentile(arr, 75))
+            (q25, q75) = (float(np.percentile(arr, 25)), float(np.percentile(arr, 75)))
             iqr = q75 - q25
             outlier_pct = float(((arr < q25 - 1.5 * iqr) | (arr > q75 + 1.5 * iqr)).mean() * 100)
             mean_ = float(arr.mean())
@@ -266,7 +200,6 @@ class AnalystSession:
         return stats
 
     def rich_describe_table(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Return rich_describe as a tidy Polars DataFrame for display in notebooks."""
         info = self.rich_describe(df)
         rows = []
         for col, metrics in info["columns"].items():
@@ -280,63 +213,43 @@ class AnalystSession:
         signal_col: str,
         price_col: str = "close",
         transaction_cost: float = 0.0001,
-        slippage: float = 0.00005,
+        slippage: float = 5e-05,
     ) -> pl.DataFrame:
-        """Run vectorized backtest using VectorizedEngine."""
         engine = VectorizedEngine()
         return engine.backtest(
             df=df,
             signal_col=signal_col,
             price_col=price_col,
-            transaction_cost_bps=transaction_cost * 10_000,
-            slippage_bps=slippage * 10_000,
+            transaction_cost_bps=transaction_cost * 10000,
+            slippage_bps=slippage * 10000,
         )
 
     def get_monthly_returns(self, backtest_df: pl.DataFrame) -> pl.DataFrame:
-        """Helper to get a clean, robust monthly returns table (pivot year x month)."""
         gen = TearsheetGenerator()
-        return gen.monthly_returns_table(
-            backtest_df["equity_curve"],
-            backtest_df["timestamp"],
-        )
+        return gen.monthly_returns_table(backtest_df["equity_curve"], backtest_df["timestamp"])
 
     def performance_metrics(self, equity_curve: pl.Series | pl.DataFrame) -> dict[str, float]:
-        """Compute core performance metrics (Sharpe, total return, max drawdown, vol)."""
         series = self._resolve_equity_series(equity_curve)
-        return PerformanceAnalytics.calculate_metrics(series)  # type: ignore[arg-type]
+        return PerformanceAnalytics.calculate_metrics(series)
 
     def compute_extended_metrics(
         self, equity_curve: pl.Series | pl.DataFrame, periods_per_year: int = 252
     ) -> dict[str, float]:
-        """Extended performance metrics: Sortino, Calmar, Win Rate, Profit Factor.
-
-        Parameters
-        ----------
-        equity_curve:
-            Equity curve as a Polars Series or single-column DataFrame.
-        periods_per_year:
-            Annualisation factor (252 for daily, 365 for crypto daily, 8760 hourly).
-        """
         series = self._resolve_equity_series(equity_curve)
-        base = PerformanceAnalytics.calculate_metrics(series)  # type: ignore[arg-type]
-
+        base = PerformanceAnalytics.calculate_metrics(series)
         returns = series.pct_change().drop_nulls().to_numpy()
         ann = float(periods_per_year)
         downside = returns[returns < 0]
         downside_vol = float(np.std(downside) * np.sqrt(ann)) if len(downside) > 0 else 1e-10
         ann_ret = float(returns.mean() * ann)
         sortino = ann_ret / downside_vol if downside_vol > 0 else 0.0
-
         max_dd = abs(base["max_drawdown"])
         calmar = ann_ret / max_dd if max_dd > 0 else 0.0
-
         win_rate = float((returns > 0).mean())
-
         gains = returns[returns > 0].sum()
         losses = abs(returns[returns < 0].sum())
         profit_factor = gains / losses if losses > 0 else float("inf")
         omega = gains / losses if losses > 0 else float("inf")
-
         return {
             **base,
             "sortino_ratio": round(sortino, 4),
@@ -348,18 +261,8 @@ class AnalystSession:
         }
 
     def run_alpha_score(
-        self,
-        df: pl.DataFrame,
-        forward_periods: list[int] | None = None,
+        self, df: pl.DataFrame, forward_periods: list[int] | None = None
     ) -> pl.DataFrame:
-        """Compute forward-return alpha scores for each row in *df*.
-
-        Returns a new DataFrame with additional ``fwd_ret_{n}`` columns (forward
-        returns over *n* periods) plus a composite ``alpha_score``.
-
-        This is a standalone scoring helper - it does NOT require a fitted model.
-        Use the Researcher notebooks to train and register actual alpha models via MLflow.
-        """
         forward_periods = forward_periods or [1, 5, 10]
         if "returns" not in df.columns:
             df = self.make_returns(df)
@@ -374,34 +277,8 @@ class AnalystSession:
         return df
 
     def connect_live_api(
-        self,
-        host: str = "localhost",
-        port: int = 8000,
-        timeout: float = 5.0,
+        self, host: str = "localhost", port: int = 8000, timeout: float = 5.0
     ) -> dict[str, Any]:
-        """Fetch live bot status from the QTrader FastAPI ``/status`` endpoint.
-
-        Parameters
-        ----------
-        host:
-            Host where the FastAPI app is running (default ``localhost``).
-        port:
-            Port (default ``8000``).
-        timeout:
-            HTTP timeout in seconds.
-
-        Returns
-        -------
-        dict
-            JSON payload from ``/status``.  Keys: ``uptime_seconds``,
-            ``regime``, ``active_model``, ``engine_status``, ``iteration``, etc.
-
-        Raises
-        ------
-        RuntimeError
-            If the API is unreachable.
-        """
-
         url = f"http://{host}:{port}/status"
         try:
             resp = httpx.get(url, timeout=timeout)
@@ -411,12 +288,10 @@ class AnalystSession:
             return data
         except Exception as exc:
             raise RuntimeError(
-                f"Could not reach QTrader API at {url}: {exc}\n"
-                "Make sure the bot is running and the API is started (see docs/analyst.md)."
+                f"Could not reach QTrader API at {url}: {exc}\nMake sure the bot is running and the API is started (see docs/analyst.md)."
             ) from exc
 
     def ping_live_api(self, host: str = "localhost", port: int = 8000) -> bool:
-        """Return True if the FastAPI health endpoint is reachable."""
         try:
             import httpx
 
@@ -426,44 +301,8 @@ class AnalystSession:
             return False
 
     def export_report(
-        self,
-        title: str,
-        sections: dict[str, Any],
-        path: str = "analyst_report.html",
+        self, title: str, sections: dict[str, Any], path: str = "analyst_report.html"
     ) -> str:
-        """Build and save an HTML report from a dict of sections.
-
-        Parameters
-        ----------
-        title:
-            Report heading.
-        sections:
-            Ordered dict mapping section heading → content.
-            Content can be:
-            * ``str`` - rendered as text paragraph
-            * ``pl.DataFrame`` - rendered as HTML table
-            * ``dict`` - flat metric dict (key → numeric value), rendered as 2-col table
-            * matplotlib ``Figure`` - embedded as base64 PNG
-
-        Returns
-        -------
-        str
-            Absolute path to the saved HTML file.
-
-        Example
-        -------
-        ::
-
-            path = session.export_report(
-                title="BTC-USD Backtest",
-                sections={
-                    "Overview": "Strategy: momentum 1h.",
-                    "Metrics": metrics_dict,
-                    "Equity Curve": equity_figure,
-                },
-                path="reports/btc_backtest.html",
-            )
-        """
         from qtrader.research.report import ReportBuilder
 
         rb = ReportBuilder(title)
@@ -485,34 +324,10 @@ class AnalystSession:
         return str(saved)
 
     def info(self) -> None:
-        """Print role-specific workflow guidance to stdout."""
         guides = {
-            RoleContext.ANALYST: (
-                "📊 Quant Analyst Workflow\n"
-                "  1. load_ohlcv / sample_ohlcv → load market data\n"
-                "  2. make_returns + add_rolling_features → prepare features\n"
-                "  3. run_vector_backtest → backtest a signal\n"
-                "  4. compute_extended_metrics → Sharpe, Sortino, Calmar, Win Rate\n"
-                "  5. export_report → save interactive HTML report\n"
-                "\n  📓 Notebooks: notebooks/analyst/01_EDA_Report.ipynb, ...\n"
-            ),
-            RoleContext.RESEARCHER: (
-                "🔬 Quant Researcher Workflow\n"
-                "  1. load_ohlcv → raw OHLCV\n"
-                "  2. add_rolling_features → compute & store features via FeatureStore\n"
-                "  3. run_alpha_score → forward-return scoring\n"
-                "  4. Use MLflow for experiment tracking (see notebooks/researcher/)\n"
-                "  5. load_features → pull pre-computed features\n"
-                "\n  📓 Notebooks: notebooks/researcher/01_Feature_Lab.ipynb, ...\n"
-            ),
-            RoleContext.TRADER: (
-                "⚡ Quant Trader Workflow\n"
-                "  1. ping_live_api → check if bot is running\n"
-                "  2. connect_live_api → fetch live status (P&L, regime, active model)\n"
-                "  3. load_ohlcv + fills → execution audit\n"
-                "  4. compute_extended_metrics on live equity curve\n"
-                "\n  📓 Notebooks: notebooks/trader/01_Live_Monitor.ipynb, ...\n"
-            ),
+            RoleContext.ANALYST: "📊 Quant Analyst Workflow\n  1. load_ohlcv / sample_ohlcv → load market data\n  2. make_returns + add_rolling_features → prepare features\n  3. run_vector_backtest → backtest a signal\n  4. compute_extended_metrics → Sharpe, Sortino, Calmar, Win Rate\n  5. export_report → save interactive HTML report\n\n  📓 Notebooks: notebooks/analyst/01_EDA_Report.ipynb, ...\n",
+            RoleContext.RESEARCHER: "🔬 Quant Researcher Workflow\n  1. load_ohlcv → raw OHLCV\n  2. add_rolling_features → compute & store features via FeatureStore\n  3. run_alpha_score → forward-return scoring\n  4. Use MLflow for experiment tracking (see notebooks/researcher/)\n  5. load_features → pull pre-computed features\n\n  📓 Notebooks: notebooks/researcher/01_Feature_Lab.ipynb, ...\n",
+            RoleContext.TRADER: "⚡ Quant Trader Workflow\n  1. ping_live_api → check if bot is running\n  2. connect_live_api → fetch live status (P&L, regime, active model)\n  3. load_ohlcv + fills → execution audit\n  4. compute_extended_metrics on live equity curve\n\n  📓 Notebooks: notebooks/trader/01_Live_Monitor.ipynb, ...\n",
         }
         logger.info(guides.get(self.role, "QTrader AnalystSession ready."))
 

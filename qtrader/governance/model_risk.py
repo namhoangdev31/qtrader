@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
 from uuid import UUID
-
 from qtrader.core.events import (
     ModelRiskScoreEvent,
     ModelRiskScorePayload,
@@ -16,19 +14,9 @@ if TYPE_CHECKING:
 
 
 class ModelRiskScorer:
-    """
-    Quantitative Risk Scoring Engine for Algorithmic Models.
-
-    Evaluates model risk using weighted volatility, drawdown, and stability.
-    High risk scores trigger deployment blocks in the governance pipeline.
-    """
-
     def __init__(
         self, event_bus: EventBus, w_vol: float = 0.4, w_dd: float = 0.4, w_stability: float = 0.2
     ) -> None:
-        """
-        Initialize the risk scorer with weighted appraisal benchmarks.
-        """
         self._event_bus = event_bus
         self._w_vol = w_vol
         self._w_dd = w_dd
@@ -38,18 +26,12 @@ class ModelRiskScorer:
     async def compute_risk_score(
         self, model_id: str, metrics: dict[str, float]
     ) -> ModelRiskScoreEvent | None:
-        """
-        Calculate and broadcast the structural risk score for a model.
-        """
         try:
             if metrics is None:
                 raise ValueError("Metrics dictionary is NULL")
-
-            # 1. Metric Extraction & Validation
             vol = metrics.get("volatility")
             dd = metrics.get("drawdown")
             stability = metrics.get("stability")
-
             if vol is None or dd is None or stability is None:
                 await self._emit_error(
                     str(model_id),
@@ -57,11 +39,7 @@ class ModelRiskScorer:
                     "Required risk metrics (vol, dd, stability) are missing.",
                 )
                 return None
-
-            # 2. Score Calculation: S = w1*Vol + w2*DD - w3*Stability
-            score = (self._w_vol * vol) + (self._w_dd * dd) - (self._w_stability * stability)
-
-            # 3. Success Broadcast
+            score = self._w_vol * vol + self._w_dd * dd - self._w_stability * stability
             event = ModelRiskScoreEvent(
                 trace_id=self._system_trace,
                 source="ModelRiskScorer",
@@ -73,11 +51,9 @@ class ModelRiskScorer:
                     stability=float(stability),
                 ),
             )
-
             await self._event_bus.publish(event)
             logger.info(f"MODEL_RISK_SCORED | {model_id} | Score: {score:.4f}")
             return event
-
         except Exception as e:
             logger.error(f"RISK_SCORING_FAILURE | {model_id} | {e!s}")
             try:
@@ -87,7 +63,6 @@ class ModelRiskScorer:
             return None
 
     async def _emit_error(self, model_id: str, err_type: str, details: str) -> None:
-        """Emit a RiskScoreErrorEvent to the global bus."""
         error_event = RiskScoreErrorEvent(
             trace_id=self._system_trace,
             source="ModelRiskScorer",

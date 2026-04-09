@@ -1,7 +1,4 @@
-"""FastAPI Routes for QTrader."""
-
 from __future__ import annotations
-
 import asyncio
 import logging
 import random
@@ -9,17 +6,10 @@ import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-
 from qtrader.analytics.session_analyzer import SessionAnalyzer
 from qtrader.api.dependencies import get_system
-from qtrader.api.schemas import (
-    OrderRequest,
-    PositionRow,
-    SimulationConfig,
-    StatusResponse,
-)
+from qtrader.api.schemas import OrderRequest, PositionRow, SimulationConfig, StatusResponse
 from qtrader.core.events import (
     EventType,
     ForensicNoteEvent,
@@ -32,13 +22,11 @@ from qtrader.persistence.db_writer import TradeDBWriter
 from qtrader.trading_system import TradingSystem
 
 logger = logging.getLogger("qtrader.api.router")
-
 router = APIRouter(prefix="/api/v1", tags=["Trading"])
 ws_router = APIRouter(tags=["WebSockets"])
 health_router = APIRouter(tags=["Internal"])
 sim_router = APIRouter(prefix="/api/v1/sim", tags=["Simulation"])
 session_router = APIRouter(prefix="/api/v1/sessions", tags=["Sessions"])
-
 _simulation_engine: Any | None = None
 _simulation_task: asyncio.Task | None = None
 _is_subscribed: bool = False
@@ -50,10 +38,7 @@ def get_sim_engine() -> Any:
         from qtrader.execution.paper_engine import PaperTradingEngine
 
         _simulation_engine = PaperTradingEngine(
-            starting_capital=1000.0,
-            sl_pct=0.02,
-            tp_pct=0.03,
-            tick_interval=1.0,
+            starting_capital=1000.0, sl_pct=0.02, tp_pct=0.03, tick_interval=1.0
         )
     return _simulation_engine
 
@@ -61,21 +46,18 @@ def get_sim_engine() -> Any:
 async def start_simulation(sys: TradingSystem | None = None) -> None:
     global _simulation_task, _is_subscribed
     engine = get_sim_engine()
-
     if sys:
         if not sys._running:
             await sys.start()
             logger.info(
                 f"[SIM] Started TradingSystem Orchestrator (Session: {sys.active_session_id})"
             )
-
         if sys.db_writer and sys.active_session_id:
             engine.set_db_writer(sys.db_writer, sys.active_session_id)
             engine.set_event_bus(sys.event_bus)
             logger.info(
                 f"[SIM] Unified Persistence Layer & EventBus for Session {sys.active_session_id}"
             )
-
         try:
             from qtrader.execution.brokers.coinbase import CoinbaseBrokerAdapter
 
@@ -91,22 +73,19 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
                 logger.info(
                     f"[SIM] Synced simulation to real price: {real_price:.2f} and cleared history"
                 )
-
             if not _is_subscribed:
                 sys.event_bus.subscribe(EventType.MARKET_DATA, engine.handle_market_event)
                 _is_subscribed = True
                 logger.info("[SIM] Subscribed PaperTradingEngine to live MARKET_DATA via EventBus")
-
         except Exception as e:
             logger.warning(f"[SIM] Failed to setup real-time sync: {e}")
-
     if _simulation_task is None or _simulation_task.done():
         _simulation_task = asyncio.create_task(engine.run_continuous())
 
 
 async def stop_simulation() -> None:
     global _simulation_task
-    if _simulation_task and not _simulation_task.done():
+    if _simulation_task and (not _simulation_task.done()):
         _simulation_task.cancel()
         try:
             await _simulation_task
@@ -178,9 +157,6 @@ async def update_sim_config(cfg: SimulationConfig) -> dict[str, Any]:
     return {"status": "configured", "message": "Simulation restarted with new config"}
 
 
-# --- Session Management ---
-
-
 @session_router.post("/start")
 async def start_session(
     metadata: dict[str, Any] | None = None, sys: TradingSystem = Depends(get_system)
@@ -194,9 +170,7 @@ async def start_session(
             "session_id": active["session_id"],
             "mode": active.get("mode", "UNKNOWN"),
         }
-
     await sys.start()
-
     return {
         "status": "started",
         "session_id": sys.active_session_id,
@@ -208,29 +182,17 @@ async def start_session(
 async def stop_session(
     session_id: str | None = None, sys: TradingSystem = Depends(get_system)
 ) -> dict[str, Any]:
-    # DEACTIVATE the entire system
     await sys.stop()
-
     writer = TradeDBWriter()
     analyzer = SessionAnalyzer()
-
-    # Get the session we just stopped (or the last one)
     s_id = session_id or getattr(sys, "_last_session_id", None)
     if not s_id:
-        # Fallback to DB
         active = await writer.get_active_session()
         if active:
             s_id = active["session_id"]
-
     if not s_id:
         raise HTTPException(status_code=404, detail="No session identifier found to analyze")
-
-    # Generate forensic report from finalized DB data
-    # Note: sys.stop() already closed the DB session recording.
-    report = await analyzer.analyze_session(
-        s_id, "2000-01-01"
-    )  # Analyzer handles time windows via DB
-
+    report = await analyzer.analyze_session(s_id, "2000-01-01")
     return {"status": "completed", "report": report}
 
 
@@ -249,7 +211,6 @@ async def get_session_history(limit: int = 10) -> list[dict[str, Any]]:
 
 @session_router.post("/purge")
 async def purge_database_endpoint() -> dict[str, str]:
-    """NUCLEAR RESET: Purge all trading data and recreate schema."""
     try:
         writer = TradeDBWriter()
         await writer.purge_database()
@@ -270,19 +231,16 @@ async def get_session_report(session_id: str) -> dict[str, Any]:
 
 @health_router.get("/health")
 async def health() -> dict[str, str]:
-    """Health check endpoint for Docker."""
     return {"status": "healthy", "service": "API_DASHBOARD"}
 
 
 @router.get("/status", response_model=StatusResponse)
-async def get_status(sys: TradingSystem = Depends(get_system)) -> dict[str, Any]:  # noqa: B008
-    """Get overall system status."""
+async def get_status(sys: TradingSystem = Depends(get_system)) -> dict[str, Any]:
     return sys.get_status()
 
 
 @router.get("/forensic_notes")
 async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, Any]]:
-    """Retrieve forensic notes for RAG/UI."""
     from qtrader.core.db import DBClient
 
     try:
@@ -313,19 +271,15 @@ async def get_forensic_notes(session_id: str | None = None) -> list[dict[str, An
 async def add_forensic_note(
     note: dict[str, Any], sys: TradingSystem = Depends(get_system)
 ) -> dict[str, Any]:
-    """Persist a forensic note and ENQUEUE for async embedding (Zero Latency)."""
     writer = TradeDBWriter()
     try:
         content = note.get("content", "")
         note_type = note.get("type", "OBSERVATION")
         session_id = sys.active_session_id
-
         note_id = await writer.write_forensic_note(
             content=content, note_type=note_type, session_id=session_id
         )
-
         embedding_manager.enqueue_note(note_id, content, session_id)
-
         if note_type in ["ALERT", "TRIAL"]:
             embedding_manager.refresh_sentiment(f"Manual Forensic Intervention: {content}")
         try:
@@ -339,7 +293,6 @@ async def add_forensic_note(
             )
         except Exception as e:
             logger.warning(f"[API] Failed to publish forensic event: {e}")
-
         return {"status": "success", "note_id": note_id}
     except Exception as e:
         logger.error(f"[API] Failed to save note: {e}")
@@ -347,12 +300,8 @@ async def add_forensic_note(
 
 
 @router.get("/positions", response_model=list[PositionRow])
-async def get_positions(
-    sys: TradingSystem = Depends(get_system),  # noqa: B008
-) -> list[dict[str, Any]]:
-    """Get active positions from the system (Redundant, use WebSocket)."""
+async def get_positions(sys: TradingSystem = Depends(get_system)) -> list[dict[str, Any]]:
     positions = await sys.state_store.get_positions()
-
     rows = []
     for sym, pos in positions.items():
         q = float(pos.quantity)
@@ -363,7 +312,7 @@ async def get_positions(
                     "quantity": q,
                     "average_price": float(pos.average_price),
                     "unrealized_pnl": float(pos.unrealized_pnl),
-                    "unrealized_pnl_pct": 0.0,  # Will improve later
+                    "unrealized_pnl_pct": 0.0,
                 }
             )
     return rows
@@ -371,10 +320,8 @@ async def get_positions(
 
 @router.post("/order")
 async def place_order(
-    req: OrderRequest,
-    sys: TradingSystem = Depends(get_system),  # noqa: B008
+    req: OrderRequest, sys: TradingSystem = Depends(get_system)
 ) -> dict[str, Any]:
-    """Submit a manual paper trade."""
     import uuid
 
     order = OrderEvent(
@@ -388,7 +335,6 @@ async def place_order(
             order_type=req.order_type,
         ),
     )
-
     try:
         order_id = await sys.broker.submit_order(order)
         return {
@@ -405,24 +351,19 @@ async def place_order(
 async def get_market_history(
     symbol: str = "BTC-USD", sys: TradingSystem = Depends(get_system)
 ) -> list[dict[str, Any]]:
-    """Return simulated historical candles for TradingView."""
     now = int(time.time())
-    start = now - (100 * 60)  # 100 minutes ago
-
+    start = now - 100 * 60
     quote = sys.broker._quotes.get(symbol, {})
     current_price = float(quote.get("price") or 50000.0)
-
     candles = []
     temp_price = current_price
-
     for t in range(now - 60, start - 60, -60):
         volatility = 0.1
         c = temp_price
-        o = c + random.uniform(-volatility, volatility)  # noqa: S311
-        h = max(o, c) + random.uniform(0, volatility / 2)  # noqa: S311
-        px_l = min(o, c) - random.uniform(0, volatility / 2)  # noqa: S311
-        v = random.uniform(10, 100)  # noqa: S311
-
+        o = c + random.uniform(-volatility, volatility)
+        h = max(o, c) + random.uniform(0, volatility / 2)
+        px_l = min(o, c) - random.uniform(0, volatility / 2)
+        v = random.uniform(10, 100)
         candles.append(
             {
                 "time": t,
@@ -433,14 +374,12 @@ async def get_market_history(
                 "volume": round(v, 2),
             }
         )
-        temp_price = o  # Next candle's close is this one's open (walking backwards)
-
+        temp_price = o
     return sorted(candles, key=lambda x: x["time"])
 
 
 @ws_router.websocket("/ws/trading")
 async def trading_updates(websocket: WebSocket) -> None:
-    """Concentrated WebSocket for Portfolio: Positions, Cash, PnL."""
     await websocket.accept()
     sys = get_system()
     engine = get_sim_engine()
@@ -473,8 +412,6 @@ async def trading_updates(websocket: WebSocket) -> None:
                         "entry_time": lot.entry_time,
                     }
                 )
-
-        # Read trade history from sim engine
         trade_history = [
             {
                 "trade_id": t.trade_id or f"trade-{i}",
@@ -490,9 +427,8 @@ async def trading_updates(websocket: WebSocket) -> None:
                 "entry_time": t.entry_time or "",
                 "exit_time": t.exit_time or "",
             }
-            for i, t in enumerate(engine.closed_trades[-50:])
+            for (i, t) in enumerate(engine.closed_trades[-50:])
         ]
-
         return {
             "type": "portfolio_update",
             "timestamp": datetime.now().isoformat(),
@@ -513,7 +449,6 @@ async def trading_updates(websocket: WebSocket) -> None:
 
     sys.event_bus.subscribe(EventType.FILL, handler)
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
-
     try:
         while True:
             await queue.get()
@@ -527,7 +462,6 @@ async def trading_updates(websocket: WebSocket) -> None:
 
 @ws_router.websocket("/ws/forensics")
 async def forensics_updates(websocket: WebSocket) -> None:
-    """High-fidelity WebSocket for Logic Matrix, AI Thinking, and Traces."""
     await websocket.accept()
     sys = get_system()
     engine = get_sim_engine()
@@ -536,7 +470,6 @@ async def forensics_updates(websocket: WebSocket) -> None:
         trace = getattr(sys, "_last_module_traces", {})
         if engine._running:
             trace = engine._last_trace.get("module_traces", trace)
-
         return {
             "type": "forensic_update",
             "timestamp": datetime.now().isoformat(),
@@ -550,18 +483,14 @@ async def forensics_updates(websocket: WebSocket) -> None:
 
     async def handler(event):
         if event.event_type == EventType.DECISION_TRACE:
-            # Sync cross-container trace into local system state for dashboard visualization
             sys._last_module_traces = getattr(event.payload, "module_traces", {})
         await queue.put(True)
 
-    # Forensics subscribes to more granular events
     sys.event_bus.subscribe(EventType.SIGNAL, handler)
     sys.event_bus.subscribe(EventType.DECISION_TRACE, handler)
-    sys.event_bus.subscribe(EventType.MARKET_DATA, handler)  # Pulse on every tick
+    sys.event_bus.subscribe(EventType.MARKET_DATA, handler)
     engine.add_update_listener(lambda x: queue.put_nowait(True))
-
     try:
-        # Initial snapshot
         await websocket.send_json(await get_snapshot())
         while True:
             await queue.get()
@@ -577,15 +506,12 @@ async def forensics_updates(websocket: WebSocket) -> None:
 
 @ws_router.websocket("/ws/telemetry")
 async def telemetry_updates(websocket: WebSocket) -> None:
-    """System Health WebSocket: Latency, Heartbeats, Clock Sync."""
     await websocket.accept()
     sys = get_system()
     engine = get_sim_engine()
 
     async def get_snapshot():
         status = sys.get_status()
-
-        # 1. Prioritize simulation metrics if engine is active (fixes Bug 2)
         if engine._running:
             status["status"] = "RUNNING"
             status["running"] = True
@@ -597,15 +523,13 @@ async def telemetry_updates(websocket: WebSocket) -> None:
             status["module_traces"] = engine._last_trace.get(
                 "module_traces", status.get("module_traces", {})
             )
-            status["market_price"] = engine._current_price  # Injection for dashboard widget
-
+            status["market_price"] = engine._current_price
             uptime = time.time() - getattr(engine, "_start_time", time.time())
             latency = getattr(engine, "_last_latency_ms", 0.0)
         else:
             status["running"] = sys._running
             uptime = time.time() - getattr(sys, "_start_time", time.time())
             latency = getattr(sys, "_last_latency_ms", 0.0)
-
         return {
             "type": "telemetry_update",
             "timestamp": datetime.now().isoformat(),
@@ -616,17 +540,13 @@ async def telemetry_updates(websocket: WebSocket) -> None:
         }
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
-
-    # Subscribe to sim engine updates (fires every tick)
     engine.add_update_listener(lambda x: queue.put_nowait(True))
 
     async def handler(event):
         await queue.put(True)
 
-    # SYSTEM events for lifecycle, MARKET_DATA for real-time price updates
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
     sys.event_bus.subscribe(EventType.MARKET_DATA, handler)
-
     try:
         await websocket.send_json(await get_snapshot())
         while True:
@@ -643,13 +563,11 @@ async def telemetry_updates(websocket: WebSocket) -> None:
 
 @ws_router.websocket("/ws/simulation")
 async def simulation_updates(websocket: WebSocket) -> None:
-    """WebSocket for real-time simulation updates."""
     try:
         await websocket.accept()
     except Exception as e:
         logger.error(f"[WS/SIM] Failed to accept: {e}", exc_info=True)
         return
-
     engine = get_sim_engine()
     update_queue: asyncio.Queue[bool] = asyncio.Queue()
 
@@ -660,13 +578,11 @@ async def simulation_updates(websocket: WebSocket) -> None:
             pass
 
     engine.add_update_listener(on_sim_update)
-
     try:
         snapshot = engine._build_snapshot()
         await websocket.send_json(snapshot)
     except Exception:
         pass
-
     update_count = 0
     try:
         while True:
@@ -686,13 +602,11 @@ async def simulation_updates(websocket: WebSocket) -> None:
 
 @ws_router.websocket("/ws/audit")
 async def audit_updates(websocket: WebSocket) -> None:
-    """Dedicated Forensic WebSocket for Audit History, Notes, and Portfolio Inventory."""
     await websocket.accept()
     sys = get_system()
     engine = get_sim_engine()
 
     async def get_audit_snapshot():
-        # 1. Fetch recent notes from DB
         from qtrader.core.db import DBClient
 
         try:
@@ -711,8 +625,6 @@ async def audit_updates(websocket: WebSocket) -> None:
         except Exception as e:
             logger.error(f"[API] Failed to fetch notes for audit snapshot: {e}")
             notes = []
-
-        # 2. Fetch trade history from sim engine (primary source)
         trades = [
             {
                 "trade_id": t.trade_id or f"trade-{i}",
@@ -728,10 +640,8 @@ async def audit_updates(websocket: WebSocket) -> None:
                 "entry_time": t.entry_time or "",
                 "exit_time": t.exit_time or "",
             }
-            for i, t in enumerate(engine.closed_trades[-50:])
+            for (i, t) in enumerate(engine.closed_trades[-50:])
         ]
-
-        # 3. Fetch positions from sim engine (primary source)
         pos_list = []
         for sym, lots in engine._open_positions.items():
             for lot in lots:
@@ -741,7 +651,7 @@ async def audit_updates(websocket: WebSocket) -> None:
                     else (lot.avg_price - engine._current_price) * abs(lot.qty)
                 )
                 unrealized_pct = (
-                    ((engine._current_price - lot.avg_price) / lot.avg_price * 100)
+                    (engine._current_price - lot.avg_price) / lot.avg_price * 100
                     if lot.avg_price > 0
                     else 0
                 )
@@ -759,7 +669,6 @@ async def audit_updates(websocket: WebSocket) -> None:
                         "entry_time": lot.entry_time,
                     }
                 )
-
         return {
             "type": "audit_update",
             "timestamp": datetime.now().isoformat(),
@@ -773,14 +682,10 @@ async def audit_updates(websocket: WebSocket) -> None:
     async def handler(event: Any) -> None:
         await queue.put(True)
 
-    # Audit stream reacts to fills, system signals, and new notes
     sys.event_bus.subscribe(EventType.FILL, handler)
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
     sys.event_bus.subscribe(EventType.FORENSIC_NOTE, handler)
-
-    # Also listen to simulation engine updates if running
     engine.add_update_listener(lambda x: queue.put_nowait(True))
-
     try:
         await websocket.send_json(await get_audit_snapshot())
         while True:

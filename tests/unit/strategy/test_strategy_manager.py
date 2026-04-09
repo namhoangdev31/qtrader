@@ -1,7 +1,5 @@
 from unittest.mock import MagicMock, patch
-
 import pytest
-
 from qtrader.core.dynamic_config import config_manager
 from qtrader.strategy.manager import StrategyManager
 
@@ -14,7 +12,6 @@ def test_strategy_manager_init():
 
 def test_strategy_manager_switching():
     sm = StrategyManager(symbol="BTC-USD")
-
     with patch.object(config_manager, "get", return_value="PROBABILISTIC"):
         strat = sm.active_strategy
         assert sm.active_strategy_name == "PROBABILISTIC"
@@ -23,7 +20,6 @@ def test_strategy_manager_switching():
 
 def test_strategy_manager_fallback():
     sm = StrategyManager(symbol="BTC-USD")
-
     with patch.object(config_manager, "get", return_value="INVALID_STRAT"):
         strat = sm.active_strategy
         assert sm.active_strategy_name == "MOMENTUM"

@@ -1,39 +1,22 @@
-"""Ensemble strategy combiner that combines multiple strategies with dynamic weighting."""
-
 from __future__ import annotations
-
 from decimal import Decimal
-
 import polars as pl
-
 from qtrader.core.events import SignalPayload
 from qtrader.core.types import SignalEvent, ValidatedFeatures
 
 try:
     from qtrader.ml.meta_learning_engine import MetaLearningEngine
 except ImportError:
-    MetaLearningEngine = None  # type: ignore
-
+    MetaLearningEngine = None
 from qtrader.core.container import container
 
 _DEFAULT_META_WEIGHTS = (0.4, 0.3, 0.2, 0.1)
 _DEFAULT_DECAY_PENALTY = 0.5
 _DEFAULT_TEMPERATURE = 1.0
-
 _LOG = container.get("logger")
 
 
 class EnsembleStrategy:
-    """
-    Ensemble strategy that combines multiple strategies with dynamic weighting.
-
-    This strategy:
-    - Takes multiple sub-strategies (that have a compute_signals method)
-    - Combines their signals using weighted voting
-    - Dynamically adjusts weights based on recent performance via meta-learning
-    - Can incorporate regime detection for context-aware weighting
-    """
-
     def __init__(
         self,
         strategies: list,
@@ -45,26 +28,12 @@ class EnsembleStrategy:
         meta_learning_window: int = 50,
         meta_learning_min_trades: int = 10,
     ) -> None:
-        """
-        Initialize the ensemble strategy.
-
-        Args:
-            strategies: List of sub-strategies to combine (each must have a compute_signals method)
-            performance_window: Window for performance evaluation
-            min_weight: Minimum weight per strategy
-            max_weight: Maximum weight per strategy
-            rebalance_frequency: How often to rebalance weights (in signals)
-            enable_meta_learning: Whether to use meta-learning for weight adjustment
-            meta_learning_window: Window size for meta-learning performance memory
-            meta_learning_min_trades: Minimum trades required for meta-learning updates
-        """
         self.strategies = strategies
         self.performance_window = performance_window
         self.min_weight = min_weight
         self.max_weight = max_weight
         self.rebalance_frequency = rebalance_frequency
         self.enable_meta_learning = enable_meta_learning
-
         if self.enable_meta_learning and MetaLearningEngine is not None:
             self.meta_learning_engine = MetaLearningEngine(
                 window_size=meta_learning_window,
@@ -77,45 +46,28 @@ class EnsembleStrategy:
             )
         else:
             self.meta_learning_engine = None
-
         self._strategy_performance: dict[int, list[float]] = {i: [] for i in range(len(strategies))}
         self._strategy_weights: dict[int, float] = {
             i: 1.0 / len(strategies) for i in range(len(strategies))
         }
         self._signal_count = 0
-
         self._current_regime: str | None = None
         self._regime_probability: float = 0.0
 
     def update_regime_info(self, regime: str, regime_prob: float) -> None:
-        """Update current regime information for meta-learning."""
         self._current_regime = regime
         self._regime_probability = regime_prob
-
         if self.meta_learning_engine:
             self.meta_learning_engine.update_regime_info(regime, regime_prob)
 
     def compute_signals(self, features: dict[str, pl.Series]) -> SignalEvent:
-        """
-        Compute signals by combining outputs from all sub-strategies.
-
-        Args:
-            features: Dictionary mapping alpha names to their feature series
-
-        Returns:
-            SignalEvent containing combined signal and metadata
-        """
         if not self.strategies:
             return SignalEvent(
                 source="EnsembleStrategy",
                 payload=SignalPayload(
-                    symbol="UNKNOWN",
-                    signal_type="HOLD",
-                    strength=Decimal("0.0"),
-                    metadata={},
+                    symbol="UNKNOWN", signal_type="HOLD", strength=Decimal("0.0"), metadata={}
                 ),
             )
-
         strategy_signals = {}
         for i, strategy in enumerate(self.strategies):
             try:
@@ -126,19 +78,13 @@ class EnsembleStrategy:
                 strategy_signals[i] = SignalEvent(
                     source="EnsembleStrategy",
                     payload=SignalPayload(
-                        symbol="UNKNOWN",
-                        signal_type="HOLD",
-                        strength=Decimal("0.0"),
-                        metadata={},
+                        symbol="UNKNOWN", signal_type="HOLD", strength=Decimal("0.0"), metadata={}
                     ),
                 )
-
         self._update_performance(strategy_signals)
-
         self._signal_count += 1
         if self._signal_count % self.rebalance_frequency == 0:
             self._rebalance_weights()
-
         if self.enable_meta_learning and self.meta_learning_engine:
             weights_dict = self.meta_learning_engine.get_weights()
             strategy_weights = weights_dict.get("strategy_weights")
@@ -152,16 +98,13 @@ class EnsembleStrategy:
                 current_weights = self._strategy_weights.copy()
         else:
             current_weights = self._strategy_weights.copy()
-
         weight_sum = sum(current_weights.values())
         if weight_sum > 0:
-            normalized_weights = {k: v / weight_sum for k, v in current_weights.items()}
+            normalized_weights = {k: v / weight_sum for (k, v) in current_weights.items()}
         else:
             equal_weight = 1.0 / len(self.strategies)
             normalized_weights = {i: equal_weight for i in range(len(self.strategies))}
-
         combined_signal = self._combine_signals(strategy_signals, normalized_weights)
-
         ensemble_signal = SignalEvent(
             source="EnsembleStrategy",
             payload=SignalPayload(
@@ -183,64 +126,54 @@ class EnsembleStrategy:
                             else 0.0,
                             "metadata": sig.payload.metadata if hasattr(sig, "payload") else {},
                         }
-                        for i, sig in strategy_signals.items()
+                        for (i, sig) in strategy_signals.items()
                     },
                 },
             ),
         )
-
         return ensemble_signal
 
     def _get_strategy_name(self, index: int) -> str:
-        """Get strategy name from index (fallback to string representation)."""
         strategy = self.strategies[index]
         if hasattr(strategy, "__class__"):
             return strategy.__class__.__name__
         return str(strategy)
 
     def _update_performance(self, strategy_signals: dict) -> None:
-        """Update performance tracking for each strategy based on their signals."""
         for i, signal in strategy_signals.items():
             if i not in self._strategy_performance:
                 self._strategy_performance[i] = []
-
             buy_prob = signal.metadata.get("buy_prob", 0.0) if hasattr(signal, "metadata") else 0.0
             sell_prob = (
                 signal.metadata.get("sell_prob", 0.0) if hasattr(signal, "metadata") else 0.0
             )
             signal_conviction = abs(buy_prob - sell_prob)
             self._strategy_performance[i].append(signal_conviction)
-
             if len(self._strategy_performance[i]) > self.performance_window:
                 self._strategy_performance[i] = self._strategy_performance[i][
                     -self.performance_window :
                 ]
 
     def _rebalance_weights(self) -> None:
-        """Rebalance strategy weights based on recent performance (legacy method)."""
         avg_performance = {}
         for i, performance_list in self._strategy_performance.items():
             if performance_list:
                 avg_performance[i] = sum(performance_list) / len(performance_list)
             else:
                 avg_performance[i] = 0.0
-
-        if all(p <= 0 for p in avg_performance.values()):
+        if all((p <= 0 for p in avg_performance.values())):
             equal_weight = 1.0 / len(self.strategies)
             for i in range(len(self.strategies)):
                 self._strategy_weights[i] = equal_weight
             return
-
         min_perf = min(avg_performance.values())
-        shifted_perf = {i: perf - min_perf + 1e-8 for i, perf in avg_performance.items()}
-
+        shifted_perf = {i: perf - min_perf + 1e-08 for (i, perf) in avg_performance.items()}
         total_shifted = sum(shifted_perf.values())
         if total_shifted > 0:
-            raw_weights = {i: perf / total_shifted for i, perf in shifted_perf.items()}
+            raw_weights = {i: perf / total_shifted for (i, perf) in shifted_perf.items()}
         else:
             equal_weight = 1.0 / len(self.strategies)
             raw_weights = {i: equal_weight for i in range(len(self.strategies))}
-
         constrained_weights = {}
         for i, weight in raw_weights.items():
             if weight < self.min_weight:
@@ -249,7 +182,6 @@ class EnsembleStrategy:
                 constrained_weights[i] = self.max_weight
             else:
                 constrained_weights[i] = weight
-
         weight_sum = sum(constrained_weights.values())
         if weight_sum > 0:
             for i in range(len(self.strategies)):
@@ -258,21 +190,17 @@ class EnsembleStrategy:
             equal_weight = 1.0 / len(self.strategies)
             for i in range(len(self.strategies)):
                 self._strategy_weights[i] = equal_weight
-
         _LOG.debug(f"Rebalanced ensemble weights: {self._strategy_weights}")
 
     def _combine_signals(self, strategy_signals: dict, weights: dict[int, float]) -> dict:
-        """Combine signals from all strategies using current weights."""
         buy_prob = 0.0
         sell_prob = 0.0
         hold_prob = 0.0
         for i, signal in strategy_signals.items():
             weight = weights.get(i, 0.0)
-
             buy_prob += weight * signal.metadata.get("buy_prob", 0.0)
             sell_prob += weight * signal.metadata.get("sell_prob", 0.0)
             hold_prob += weight * signal.metadata.get("hold_prob", 0.0)
-
         total_prob = buy_prob + sell_prob + hold_prob
         if total_prob > 0:
             buy_prob /= total_prob
@@ -280,10 +208,8 @@ class EnsembleStrategy:
             hold_prob /= total_prob
         else:
             buy_prob = sell_prob = hold_prob = 1.0 / 3.0
-
         uniform_prob = 1.0 / 3.0
         strength = max(0.0, max(buy_prob, sell_prob, hold_prob) - uniform_prob) * 1.5
-
         return {
             "buy_prob": buy_prob,
             "sell_prob": sell_prob,
@@ -292,17 +218,6 @@ class EnsembleStrategy:
         }
 
     async def generate_signal(self, validated_features: ValidatedFeatures) -> SignalEvent:
-        """
-        Generate a trading signal from validated features.
-
-        This method adapts the ValidatedFeatures to the format expected by compute_signals.
-
-        Args:
-            validated_features: Validated features containing the latest feature values
-
-        Returns:
-            SignalEvent containing the trading signal
-        """
         features_dict = {}
         for name, value in validated_features.features.items():
             features_dict[name] = pl.Series([value])

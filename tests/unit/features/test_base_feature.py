@@ -1,23 +1,12 @@
-"""
-Level 2 Critical Tests: Feature Base Contract
-Covers: BaseFeature validate_inputs(), Feature Protocol compliance,
-missing columns, below-min-periods, and statelessness.
-"""
-
 import polars as pl
 import pytest
-
 from qtrader.features.base import BaseFeature, Feature
-
-# ---------------------------------------------------------------------------
-# Concrete stub for testing BaseFeature mixin
-# ---------------------------------------------------------------------------
 
 
 class PriceReturnFeature(BaseFeature):
     name = "price_return"
     version = "1.0"
-    required_cols = ["close"]
+    required_cols: ClassVar[list[str]] = ["close"]
     min_periods = 2
 
     def compute(self, df: pl.DataFrame) -> pl.Series:
@@ -29,17 +18,12 @@ class PriceReturnFeature(BaseFeature):
 class MultiColFeature(BaseFeature):
     name = "hl_spread"
     version = "1.0"
-    required_cols = ["high", "low"]
+    required_cols: ClassVar[list[str]] = ["high", "low"]
     min_periods = 1
 
     def compute(self, df: pl.DataFrame) -> pl.Series:
         self.validate_inputs(df)
         return (df["high"] - df["low"]).rename(self.name)
-
-
-# ---------------------------------------------------------------------------
-# validate_inputs()
-# ---------------------------------------------------------------------------
 
 
 def test_validate_missing_column_raises():
@@ -50,7 +34,7 @@ def test_validate_missing_column_raises():
 
 
 def test_validate_below_min_periods_raises():
-    f = PriceReturnFeature()  # min_periods = 2
+    f = PriceReturnFeature()
     df_one_row = pl.DataFrame({"close": [100.0]})
     with pytest.raises(ValueError, match="Requires at least"):
         f.validate_inputs(df_one_row)
@@ -58,20 +42,15 @@ def test_validate_below_min_periods_raises():
 
 def test_validate_passes_exact_min_periods():
     f = PriceReturnFeature()
-    df = pl.DataFrame({"close": [100.0, 101.0]})  # exactly 2 rows
-    f.validate_inputs(df)  # Must not raise
+    df = pl.DataFrame({"close": [100.0, 101.0]})
+    f.validate_inputs(df)
 
 
 def test_validate_multi_col_missing_one():
     f = MultiColFeature()
-    df = pl.DataFrame({"high": [1.0, 2.0]})  # missing "low"
+    df = pl.DataFrame({"high": [1.0, 2.0]})
     with pytest.raises(ValueError, match="low"):
         f.validate_inputs(df)
-
-
-# ---------------------------------------------------------------------------
-# compute() contract
-# ---------------------------------------------------------------------------
 
 
 def test_compute_output_length_matches_input():
@@ -82,7 +61,6 @@ def test_compute_output_length_matches_input():
 
 
 def test_compute_first_row_is_null():
-    """Return at index 0 is undefined (no prior row) → must be null."""
     f = PriceReturnFeature()
     df = pl.DataFrame({"close": [100.0, 102.0, 104.0]})
     result = f.compute(df)
@@ -90,16 +68,14 @@ def test_compute_first_row_is_null():
 
 
 def test_compute_correctness():
-    """100 → 110 → 121: returns should be 0.10, 0.10."""
     f = PriceReturnFeature()
     df = pl.DataFrame({"close": [100.0, 110.0, 121.0]})
     result = f.compute(df)
-    assert result[1] == pytest.approx(0.10, abs=1e-9)
-    assert result[2] == pytest.approx(0.10, abs=1e-9)
+    assert result[1] == pytest.approx(0.1, abs=1e-09)
+    assert result[2] == pytest.approx(0.1, abs=1e-09)
 
 
 def test_compute_stateless():
-    """Two calls with the same input must return identical results."""
     f = PriceReturnFeature()
     df = pl.DataFrame({"close": [100.0, 110.0, 105.0, 115.0]})
     r1 = f.compute(df)
@@ -112,16 +88,10 @@ def test_spread_feature_all_positive():
     df = pl.DataFrame({"high": [105.0, 106.0, 107.0], "low": [100.0, 101.0, 102.0]})
     result = f.compute(df)
     assert result.len() == 3
-    assert all(v == pytest.approx(5.0) for v in result.to_list())
-
-
-# ---------------------------------------------------------------------------
-# Protocol compliance
-# ---------------------------------------------------------------------------
+    assert all((v == pytest.approx(5.0) for v in result.to_list()))
 
 
 def test_base_feature_satisfies_protocol():
-    """BaseFeature (with concrete stub) must satisfy the Feature Protocol."""
     f: Feature = PriceReturnFeature()
     assert hasattr(f, "name")
     assert hasattr(f, "version")

@@ -2,22 +2,12 @@ import json
 import logging
 from collections.abc import Callable
 from typing import Any
-
 import websockets
-
 from qtrader.core.config import Config
 from qtrader.core.events import MarketEvent
 
 
 class CoinbaseConnector:
-    """
-    Connects to Coinbase Advanced Trade WebSocket API and emits MarketEvent.
-
-    Notes:
-    - This is a minimal public-channel connector meant to feed OMS market_state/SOR.
-    - Events are normalized into `MarketEvent(symbol=..., data={...})` with `venue="coinbase"`.
-    """
-
     WS_URL = "wss://advanced-trade-websocket.coinbase.com"
 
     def __init__(
@@ -38,17 +28,15 @@ class CoinbaseConnector:
     async def connect(self, callback: Callable[[MarketEvent], Any]) -> None:
         self.callback = callback
         self.is_running = True
-
         while self.is_running:
             try:
                 async with websockets.connect(self.WS_URL) as websocket:
                     subscribe_msg = {
                         "type": "subscribe",
                         "product_ids": self.product_ids,
-                        "channel": self.channel,  # e.g. "ticker"
+                        "channel": self.channel,
                     }
                     await websocket.send(json.dumps(subscribe_msg))
-
                     async for message in websocket:
                         data = json.loads(message)
                         event = self._normalize(data)
@@ -56,19 +44,15 @@ class CoinbaseConnector:
                             await self.callback(event)
             except websockets.ConnectionClosed:
                 self._log.warning("Connection closed. Reconnecting...")
-                # Zero Latency: Immediate reconnection without sleep
                 continue
             except Exception as e:
                 self._log.error("Coinbase WS error: %s", e)
-                # Zero Latency: Immediate retry without sleep
                 continue
 
     def _normalize(self, data: dict[str, Any]) -> MarketEvent | None:
-        # Coinbase Advanced Trade WS envelopes contain channel + events list.
         channel = data.get("channel")
         if channel != "ticker":
             return None
-
         events = data.get("events", [])
         for e in events:
             tickers = e.get("tickers", [])
@@ -76,11 +60,9 @@ class CoinbaseConnector:
                 symbol = t.get("product_id")
                 if not symbol:
                     continue
-                # Prefer best bid/ask if present; fall back to last trade price.
                 price = float(t.get("price") or 0.0)
                 bid = float(t.get("best_bid") or price or 0.0)
                 ask = float(t.get("best_ask") or price or 0.0)
-
                 return MarketEvent(
                     symbol=symbol,
                     data={

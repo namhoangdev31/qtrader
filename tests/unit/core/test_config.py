@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
-
 import pytest
-
 from qtrader.core.config import Config, QTraderSettings
 
 
@@ -19,8 +17,6 @@ def test_config_default_values():
 def test_config_env_override(monkeypatch):
     monkeypatch.setenv("BINANCE_API_KEY", "test_key")
     monkeypatch.setenv("SIMULATE_MODE", "False")
-
-    # Reload settings or create new instance
     settings = QTraderSettings(binance_api_key="test_key", simulate_mode=False)
     assert settings.binance_api_key == "test_key"
     assert settings.simulate_mode is False
@@ -35,7 +31,6 @@ def test_config_resolve_paths():
 
 
 def test_config_live_mode_validation():
-    # Live mode without API keys should raise ValueError
     with pytest.raises(ValueError, match="Live mode requires at least one exchange API key"):
         QTraderSettings(simulate_mode=False, binance_api_key="", coinbase_api_key="")
 

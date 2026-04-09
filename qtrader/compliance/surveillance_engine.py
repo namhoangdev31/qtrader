@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -9,11 +8,6 @@ _LOG = logging.getLogger("qtrader.compliance.surveillance_engine")
 
 
 class ViolationType(Enum):
-    """
-    Principal types of manipulative or illegal trading conduct.
-    Definitions aligned with MiFID II and Reg NMS.
-    """
-
     WASH_TRADING = auto()
     SPOOFING = auto()
     LAYERING = auto()
@@ -23,11 +17,6 @@ class ViolationType(Enum):
 
 @dataclass(slots=True, frozen=True)
 class ViolationAlert:
-    """
-    Industrial Violation Event Payload for market surveillance.
-    Stores deterministic evidence for forensic audit trails.
-    """
-
     type: ViolationType
     symbol: str
     user_id: str
@@ -36,62 +25,27 @@ class ViolationAlert:
 
 
 class SurveillanceEngine:
-    """
-    Principal Market Surveillance Engine.
-
-    Objective: Detect patterns and signatures of market manipulation in real-time.
-    Analyzes order and execution sequences to identify Wash Trading, Spoofing,
-    Layering, and Quote Stuffing before they can destabilize market integrity.
-    """
-
     def __init__(self, wash_window_ms: float = 100.0) -> None:
-        """
-        Initialize with institutional detection windows.
-
-        Args:
-            wash_window_ms: Terminal time window for self-matching detection.
-        """
         self._wash_window_s: Final[float] = wash_window_ms / 1000.0
-
-        # Telemetry for situational awareness.
         self._stats = {"violations_detected": 0}
 
     def analyze_events(self, events: list[dict[str, Any]]) -> list[ViolationAlert]:
-        """
-        Perform a multi-pass analysis on a sequence of market events.
-
-        Detects signatures of market abuse across multiple temporal dimensions.
-        """
         alerts: list[ViolationAlert] = []
-
-        # 1. Detection Pass: Wash Trading (Self-Matching)
-        # Signature: Instantaneous Buy/Sell for same user/symbol.
         alerts.extend(self._detect_wash_trading(events))
-
-        # 2. Detection Pass: Spoofing (Non-intent Large Orders)
-        # Signature: Large liquidity entry followed by rapid cancellation.
         alerts.extend(self._detect_spoofing(events))
-
-        # 3. Detection Pass: Quote Stuffing
-        # Signature: Excessive message-to-trade ratio or high cancellation rates.
         alerts.extend(self._detect_quote_stuffing(events))
-
         self._stats["violations_detected"] += len(alerts)
         return alerts
 
     def _detect_wash_trading(self, events: list[dict[str, Any]]) -> list[ViolationAlert]:
-        """
-        Detect Wash Trading signatures: Same entity self-matching.
-        """
         alerts = []
-        # Structural check on temporal sequential events.
         for i in range(len(events) - 1):
-            e1, e2 = events[i], events[i + 1]
+            (e1, e2) = (events[i], events[i + 1])
             if (
                 e1["user_id"] == e2["user_id"]
                 and e1["symbol"] == e2["symbol"]
-                and e1["side"] != e2["side"]
-                and (e2["timestamp"] - e1["timestamp"]) < self._wash_window_s
+                and (e1["side"] != e2["side"])
+                and (e2["timestamp"] - e1["timestamp"] < self._wash_window_s)
             ):
                 alert = ViolationAlert(
                     type=ViolationType.WASH_TRADING,
@@ -107,23 +61,16 @@ class SurveillanceEngine:
                 )
                 alerts.append(alert)
                 _LOG.warning(f"[SURVEILLANCE] WASH_TRADING Detected | User: {e1['user_id']}")
-
         return alerts
 
     def _detect_spoofing(self, events: list[dict[str, Any]]) -> list[ViolationAlert]:
-        """
-        Detect Spoofing: Large orders intended for price manipulation.
-        """
         alerts = []
         for e in events:
-            # Operational signature of Spoofing: Large non-fill cancellation in < 200ms
             if (
                 e.get("type") == "CANCEL"
                 and e.get("is_large_order", False)
-                and e.get("time_in_book_s", 1.0) < 0.2  # noqa: PLR2004
-            ) or (
-                e.get("side")  # Fallback for trade-only event sequences in tests
-                and False
+                and (e.get("time_in_book_s", 1.0) < 0.2)
+                or (e.get("side") and False)
             ):
                 alert = ViolationAlert(
                     type=ViolationType.SPOOFING,
@@ -138,41 +85,25 @@ class SurveillanceEngine:
                 )
                 alerts.append(alert)
                 _LOG.warning(f"[SURVEILLANCE] SPOOFING Detected | User: {e['user_id']}")
-
         return alerts
 
     def _detect_quote_stuffing(self, events: list[dict[str, Any]]) -> list[ViolationAlert]:
-        """
-        Detect Quote Stuffing: Extreme message rates designed to induce latency.
-
-        Algorithm: Count order submissions and cancellations per user per window.
-        If cancel-to-submit ratio > 90% AND message rate > threshold, flag as quote stuffing.
-        """
         from collections import defaultdict
 
         alerts: list[ViolationAlert] = []
-
-        # Group events by user
         user_events: dict[str, list[dict]] = defaultdict(list)
         for e in events:
             user_id = e.get("user_id", "unknown")
             user_events[user_id].append(e)
-
         for user_id, user_evts in user_events.items():
-            submits = sum(1 for e in user_evts if e.get("action") in ("SUBMIT", "NEW"))
-            cancels = sum(1 for e in user_evts if e.get("action") in ("CANCEL", "CANCEL_REPLACE"))
+            submits = sum((1 for e in user_evts if e.get("action") in ("SUBMIT", "NEW")))
+            cancels = sum((1 for e in user_evts if e.get("action") in ("CANCEL", "CANCEL_REPLACE")))
             total = submits + cancels
-
             if total < 10:
-                continue  # Insufficient sample
-
+                continue
             cancel_ratio = cancels / total
             message_rate = total / max(1.0, self._get_window_seconds(user_evts))
-
-            # Quote stuffing criteria:
-            # 1. Cancel ratio > 90%
-            # 2. Message rate > 100 messages/second
-            if cancel_ratio > 0.90 and message_rate > 100:
+            if cancel_ratio > 0.9 and message_rate > 100:
                 alert = ViolationAlert(
                     violation_type="QUOTE_STUFFING",
                     user_id=user_id,
@@ -189,15 +120,12 @@ class SurveillanceEngine:
                 alerts.append(alert)
                 self._stats["violations_detected"] += 1
                 _LOG.warning(
-                    f"[SURVEILLANCE] QUOTE_STUFFING Detected | User: {user_id} | "
-                    f"Cancel Ratio: {cancel_ratio:.1%} | Rate: {message_rate:.0f}/s"
+                    f"[SURVEILLANCE] QUOTE_STUFFING Detected | User: {user_id} | Cancel Ratio: {cancel_ratio:.1%} | Rate: {message_rate:.0f}/s"
                 )
-
         return alerts
 
     @staticmethod
     def _get_window_seconds(events: list[dict]) -> float:
-        """Get time window span of events in seconds."""
         if not events:
             return 1.0
         timestamps = [e.get("timestamp", 0) for e in events if "timestamp" in e]
@@ -206,9 +134,6 @@ class SurveillanceEngine:
         return max(1.0, max(timestamps) - min(timestamps))
 
     def get_report(self) -> dict[str, Any]:
-        """
-        Generate market integrity situational awareness report.
-        """
         return {
             "status": "REPORT",
             "violations_detected": self._stats["violations_detected"],

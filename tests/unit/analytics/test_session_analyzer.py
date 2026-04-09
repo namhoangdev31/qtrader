@@ -1,20 +1,15 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
-
 import pytest
-
 from qtrader.analytics.session_analyzer import SessionAnalyzer
 
 
 @pytest.mark.asyncio
 async def test_session_analyzer_no_trades():
     analyzer = SessionAnalyzer()
-
     with patch("qtrader.core.db.DBClient.fetch", new_callable=AsyncMock) as mock_fetch:
-        mock_fetch.return_value = []  # No fills
-
+        mock_fetch.return_value = []
         report = await analyzer.analyze_session("test-id", "2024-01-01T00:00:00Z")
-
         assert report["status"] == "NO_TRADES"
         assert "No trades executed" in report["summary"]
 
@@ -22,8 +17,6 @@ async def test_session_analyzer_no_trades():
 @pytest.mark.asyncio
 async def test_session_analyzer_basic_pnl():
     analyzer = SessionAnalyzer()
-
-    # Mock data
     mock_fills = [
         {
             "symbol": "BTC-USD",
@@ -49,7 +42,7 @@ async def test_session_analyzer_basic_pnl():
             "confidence": 0.9,
             "thinking": "Long signal",
             "timestamp": datetime(2024, 1, 1, 9, 59),
-        },
+        }
     ]
     mock_pnl = [
         {"total_equity": 100000.0, "timestamp": datetime(2024, 1, 1, 9, 0)},
@@ -67,11 +60,10 @@ async def test_session_analyzer_basic_pnl():
 
     with patch("qtrader.core.db.DBClient.fetch", side_effect=side_effect):
         report = await analyzer.analyze_session("test-id", "2024-01-01T00:00:00Z")
-
         metrics = report["metrics"]
         assert metrics["total_trades"] == 2
         assert metrics["win_count"] == 1
-        assert metrics["total_pnl"] == 980.0  # (51000-50000) - 20 commission
-        assert metrics["total_gross_pnl"] == 1000.0  # (51000-50000)
+        assert metrics["total_pnl"] == 980.0
+        assert metrics["total_gross_pnl"] == 1000.0
         assert metrics["avg_ai_confidence"] == 0.9
         assert "Session ended in profit." in report["highlights"]

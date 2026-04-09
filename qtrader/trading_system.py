@@ -1,11 +1,4 @@
-"""Unified Trading System — Optimized & Fragmented Orchestration.
-
-Wires together specialized sub-engines:
-  Market Data → Alpha (Atomic Trio ML) → Strategy (SignalEngine) → Risk → Order
-"""
-
 from __future__ import annotations
-
 import asyncio
 import os
 import time
@@ -14,9 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
-
 from loguru import logger
-
 from qtrader.analytics.forensic_tracer import ForensicTracer
 from qtrader.core.config import settings
 from qtrader.core.dynamic_config import config_manager
@@ -27,6 +18,8 @@ from qtrader.core.events import (
     MarketPayload,
     RiskRejectedEvent,
     RiskRejectedPayload,
+    SystemEvent,
+    SystemPayload,
 )
 from qtrader.core.forensic_auditor import ForensicAuditor
 from qtrader.core.latency_enforcer import LatencyEnforcer
@@ -56,8 +49,6 @@ from qtrader.strategy.signal_engine import SignalEngine
 
 @dataclass
 class TradingSystemConfig:
-    """Configuration for the Trading System (Legacy Wrapper for QTraderSettings)."""
-
     simulate: bool = settings.simulate_mode
     symbols: list[str] = field(default_factory=lambda: settings.trading_symbols)
     max_position_usd: float = field(
@@ -74,15 +65,17 @@ class TradingSystemConfig:
     forecast_model_id: str = settings.ts_forecast_model
     risk_model_id: str = settings.ts_risk_model
     decision_model_id: str = settings.ts_decision_model
-
     recon_interval_s: float = 60.0
     heartbeat_interval_s: float = 10.0
     reference_price: float = settings.ts_reference_price
 
 
-class TradingSystem:
-    """Unified Trading System — Complete End-to-End Orchestrator."""
+MAX_HISTORY_LEN = 1000
+MIN_HISTORY_FOR_ANALYSIS = 20
+ALPHA_LOOKBACK_WINDOW = 100
 
+
+class TradingSystem:
     def __init__(
         self, config: TradingSystemConfig | None = None, ml_pipeline: Any | None = None
     ) -> None:
@@ -92,7 +85,6 @@ class TradingSystem:
         self.session_state = SessionState()
         self.tracer = ForensicTracer()
         self.signal_engine = SignalEngine(self.session_state)
-
         if ml_pipeline is not None:
             self.ml_pipeline = ml_pipeline
         else:
@@ -105,8 +97,7 @@ class TradingSystem:
                     risk_model_id=self.config.risk_model_id,
                     decision_model_id=self.config.decision_model_id,
                 )
-
-        self.retrain_system = RetrainSystem(psi_threshold=0.20, performance_drop_delta=0.15)
+        self.retrain_system = RetrainSystem(psi_threshold=0.2, performance_drop_delta=0.15)
         self.kill_switch = GlobalKillSwitch(
             dd_limit=self.config.max_drawdown_pct,
             loss_limit=self.config.max_position_usd * 2,
@@ -127,20 +118,16 @@ class TradingSystem:
             simulate=self.config.simulate, kill_switch=self.kill_switch
         )
         self.broker.set_market_data_handler(self._on_market_data_update)
-
         self.oms = UnifiedOMS(state_store=self.state_store, event_bus=self.event_bus)
-
         self.oms_adapter = ExecutionOMSAdapter(
             exchange_adapters={"coinbase": self.broker},
             oms=self.oms,
             routing_mode="smart",
             name="MainExecutionOMSAdapter",
         )
-
         self.allocator = CapitalAllocationEngine(max_cap=Decimal("0.2"))
         self.guardrail_manager = DynamicGuardrailManager()
         self.atr_indicator = ATRFeature(window=settings.ts_atr_window)
-
         self.recon = ReconciliationEngine(
             event_bus=self.event_bus,
             oms=self.oms,
@@ -152,12 +139,10 @@ class TradingSystem:
         self.latency_enforcer = LatencyEnforcer(fail_on_breach=False)
         self.db_writer = TradeDBWriter()
         self.strategy_manager = StrategyManager(symbol=self.config.symbols[0])
-
         self.lifecycle = LifecycleTaskManager(
             self.broker, self.db_writer, self.config.symbols, self.event_bus
         )
         self.auditor = ForensicAuditor(self.event_bus, self.db_writer)
-
         self._running = False
         self._shutdown_event = asyncio.Event()
         self._market_data: dict[str, list[dict[str, float]]] = {s: [] for s in self.config.symbols}
@@ -190,31 +175,23 @@ class TradingSystem:
         logger.info("[TS] STARTING Unified Orchestrator")
         self._running = True
         self._stats["start_time"] = time.time()
-
         for symbol in self.config.symbols:
             self.broker.add_product(symbol)
         await self.broker.start_websocket()
         await self.event_bus.start()
         await embedding_manager.start()
         await self.oms_adapter.start()
-
-        # Subscribe to MarketEvents for event-driven orchestration (Zero Latency Rule)
         self.event_bus.subscribe(EventType.MARKET_DATA, self._on_market_event)
-
         balance = await self.broker.get_paper_balance()
         self.session_state.session_id = await self.db_writer.start_session(
             initial_capital=Decimal(str(balance["equity"])),
             metadata={"mode": "SIM" if self.config.simulate else "LIVE"},
         )
-
         self.lifecycle.is_running = True
         self.auditor.session_id = self.active_session_id
         if settings.ENABLE_AUTO_FORENSIC:
             self.auditor.start()
-
         self.lifecycle.start(session_id=self.active_session_id, last_latency_provider=self)
-
-        # Heartbeat task for background maintenance (not the trading pipeline)
         self._tasks.add(asyncio.create_task(self._heartbeat_loop()))
 
     async def stop(self) -> None:
@@ -228,7 +205,6 @@ class TradingSystem:
         await self.broker.close()
         await embedding_manager.stop()
         await self.oms_adapter.stop()
-
         if self.active_session_id:
             balance = await self.broker.get_paper_balance()
             await self.db_writer.stop_session(
@@ -251,23 +227,17 @@ class TradingSystem:
             self.pre_trade_risk.update_mid_price(symbol, price)
             if abs(float(price) - old_ref) / old_ref > 0.01:
                 logger.info(f"[TS] Reference Price shifted > 1%: {old_ref:.2f} -> {price:.2f}")
-
             try:
                 await self.event_bus.publish(
                     MarketEvent(
                         source="coinbase_ws",
                         payload=MarketPayload(
-                            symbol=symbol,
-                            price=price,
-                            data=data,
-                            bid=bid,
-                            ask=ask,
+                            symbol=symbol, price=price, data=data, bid=bid, ask=ask
                         ),
                     )
                 )
             except Exception as e:
                 logger.debug(f"[TS] Failed to publish MarketEvent: {e}")
-
         if self.active_session_id:
             await self.db_writer.write_raw_market_data(
                 symbol=symbol,
@@ -277,9 +247,6 @@ class TradingSystem:
                 ask=ask,
                 volume=Decimal(str(data.get("volume_24h", "0"))),
             )
-
-            # Emit heartbeat event to drive background lifecycle tasks
-            # This follows Standash §6.2 as the pulse of the system
             await self.event_bus.publish(
                 SystemEvent(
                     source="TradingSystem",
@@ -292,7 +259,6 @@ class TradingSystem:
             )
 
     async def _heartbeat_loop(self) -> None:
-        """Periodic heartbeat for system metadata maintenance."""
         while self._running:
             try:
                 await asyncio.sleep(self.config.heartbeat_interval_s)
@@ -301,24 +267,18 @@ class TradingSystem:
                 await asyncio.sleep(1)
 
     async def _on_market_event(self, event: MarketEvent) -> None:
-        """Event-driven pipeline trigger (Zero Latency Rule)."""
         if not self._running:
             return
-
         symbol = event.payload.symbol
         if symbol not in self.config.symbols:
             return
-
-        # Standardize: Trigger symbol process on every market event (tick/candle)
         asyncio.create_task(self._process_symbol(symbol))
 
     async def _process_symbol(self, symbol: str) -> None:
         with TraceAuthority.inject_trace():
             self.latency_enforcer.start_pipeline(f"pipeline-{symbol}")
-
             market_data = await self._get_market_data(symbol)
             ml_result = await self._run_ml_alpha(symbol, market_data)
-
             if ml_result:
                 positions = self.broker.paper_account.get_positions().get(symbol, [])
                 exit_signal = self.signal_engine.check_exit_triggers(
@@ -328,7 +288,6 @@ class TradingSystem:
                     settings.ts_min_sl_pct,
                     settings.ts_max_sl_pct,
                 )
-
                 if exit_signal:
                     await self._execute_exit(symbol, exit_signal)
                 else:
@@ -342,25 +301,22 @@ class TradingSystem:
                         if risk_result.approved:
                             await self._execute_order(signal)
                         else:
-                            # [FORENSIC] Emit RiskRejectedEvent for auditor visibility
                             await self.event_bus.publish(
                                 RiskRejectedEvent(
                                     source="TradingSystem",
                                     payload=RiskRejectedPayload(
                                         order_id=f"REJECTED-{uuid4()}",
                                         reason=risk_result.reason,
-                                        metric_value=0.0,  # detailed metrics omitted for brevity
+                                        metric_value=0.0,
                                         threshold=0.0,
                                         metadata={"checks_failed": risk_result.checks_failed},
                                     ),
                                 )
                             )
-
             self.latency_enforcer.end_pipeline(f"pipeline-{symbol}")
         trace = self.latency_enforcer.get_pipeline_data(f"pipeline-{symbol}")
         if trace:
             self.last_latency_ms = trace.total_latency_ms
-
         self._last_module_traces = self.tracer.aggregate_traces(
             symbol,
             ml_result or {},
@@ -371,7 +327,6 @@ class TradingSystem:
             self.recon,
             self.session_state,
         )
-
         from qtrader.core.events import DecisionTraceEvent, DecisionTracePayload
 
         await self.event_bus.publish(
@@ -396,15 +351,10 @@ class TradingSystem:
             or self.broker._quotes.get(symbol.replace("/", "-"))
             or {}
         )
-
-        from qtrader.core.config import settings
-
         price = float(quote.get("price") or settings.ts_reference_price)
-
         self._market_data[symbol].append({"close": price})
-        if len(self._market_data[symbol]) > 1000:
+        if len(self._market_data[symbol]) > MAX_HISTORY_LEN:
             self._market_data[symbol].pop(0)
-
         return {
             "symbol": symbol,
             "price": price,
@@ -416,9 +366,9 @@ class TradingSystem:
         self, symbol: str, market_data: dict[str, Any]
     ) -> dict[str, Any] | None:
         hist = market_data["historical_prices"]
-        if len(hist) < 20:
+        if len(hist) < MIN_HISTORY_FOR_ANALYSIS:
             return None
-        res = await self.ml_pipeline.run(historical_prices=hist[-100:])
+        res = await self.ml_pipeline.run(historical_prices=hist[-ALPHA_LOOKBACK_WINDOW:])
         return {
             "decision": res.decision,
             "chronos": res.chronos_forecast,
@@ -428,16 +378,12 @@ class TradingSystem:
     async def _execute_order(self, signal: dict[str, Any]) -> None:
         symbol = signal["symbol"]
         qty = Decimal(str(signal["position_size_multiplier"]))
-
         account = await self.broker.get_paper_balance()
         equity = Decimal(str(account.get("equity", self.config.max_position_usd)))
-
         weight = qty / equity if equity > 0 else Decimal("0")
-
         weights = AllocationWeights(
             timestamp=datetime.now(), weights={symbol: weight}, trace_id=str(uuid4())
         )
-
         risk = RiskMetrics(
             timestamp=datetime.now(),
             portfolio_var=Decimal("0.02"),
@@ -446,9 +392,7 @@ class TradingSystem:
             leverage=Decimal("1.0"),
             trace_id=weights.trace_id,
         )
-
         await self.oms_adapter.create_order(weights, risk)
-
         self._stats["orders"] += 1
 
     async def _execute_exit(self, symbol: str, signal: dict[str, Any]) -> None:
@@ -459,7 +403,6 @@ class TradingSystem:
 def create_trading_system(
     simulate: bool = True, symbols: list[str] | None = None, ml_pipeline: Any | None = None
 ) -> TradingSystem:
-    """Factory function to create and configure a TradingSystem instance."""
     config = TradingSystemConfig(simulate=simulate, symbols=symbols or settings.trading_symbols)
     return TradingSystem(config=config, ml_pipeline=ml_pipeline)
 

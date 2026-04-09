@@ -1,5 +1,3 @@
-"""Execution microstructure models for market analysis."""
-
 from .hidden_liquidity import HiddenLiquidityDetector
 from .imbalance import OrderbookImbalance
 from .microprice import Microprice

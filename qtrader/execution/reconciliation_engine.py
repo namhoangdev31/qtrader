@@ -4,7 +4,6 @@ import time
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any
-
 from qtrader.core.events import EventType, FillEvent, SystemEvent, SystemPayload
 from qtrader.core.state_store import StateStore
 from qtrader.core.types import EventBusProtocol
@@ -13,18 +12,6 @@ from qtrader.risk.kill_switch import GlobalKillSwitch
 
 
 class ReconciliationEngine:
-    """Real-time position reconciliation engine.
-
-    Subscribes to all Fill events and performs a mandatory audit between
-    the internal OMS state and the actual Exchange exposure after every fill.
-
-    Additionally runs periodic reconciliation every 60 seconds (Standash §4.9).
-
-    Mathematical Model:
-    Diff = Position_OMS - Position_Exchange
-    Constraint: Diff == 0
-    """
-
     def __init__(
         self,
         event_bus: EventBusProtocol,
@@ -48,17 +35,14 @@ class ReconciliationEngine:
         self._last_audit: dict[str, Any] = {}
 
     async def start(self) -> None:
-        """Subscribe to necessary events and start periodic reconciliation."""
         self.event_bus.subscribe(EventType.FILL, self._on_fill)
         self.event_bus.subscribe(EventType.SYSTEM, self._on_system_event)
         self._running = True
         self._log.info(
-            f"RECONCILIATION_ENGINE | Monitoring started | "
-            f"Periodic interval: {self.recon_interval_s}s"
+            f"RECONCILIATION_ENGINE | Monitoring started | Periodic interval: {self.recon_interval_s}s"
         )
 
     async def stop(self) -> None:
-        """Stop periodic reconciliation."""
         self._running = False
         if self._periodic_task:
             self._periodic_task.cancel()
@@ -69,28 +53,20 @@ class ReconciliationEngine:
         self._log.info("RECONCILIATION_ENGINE | Stopped")
 
     async def _on_system_event(self, event: Any) -> None:
-        """Handle system heartbeat events for periodic reconciliation."""
         if not self._running:
             return
-
         from qtrader.core.events import SystemEvent
 
         if isinstance(event, SystemEvent) and event.payload.action == "HEARTBEAT":
             now = time.time()
             if now - self._last_recon_time >= self.recon_interval_s:
-                # Trigger periodic reconciliation (Standash §4.9)
                 asyncio.create_task(self._run_periodic_reconciliation())
 
     async def _run_periodic_reconciliation(self) -> None:
-        """Full portfolio reconciliation across all symbols."""
         self._log.info("PERIODIC_RECON | Starting full portfolio reconciliation")
         self._last_recon_time = time.time()
         self._recon_count += 1
-
-        # Get all tracked positions from OMS
         oms_positions = await self._get_all_oms_positions()
-
-        # Also check assets that might be in broker but NOT in OMS yet
         all_symbols = set(oms_positions.keys())
         for _name, adapter in self.oms.adapters.items():
             try:
@@ -99,22 +75,18 @@ class ReconciliationEngine:
                     all_symbols.add(asset)
             except Exception:
                 pass
-
         mismatches: list[dict] = []
         for symbol in all_symbols:
             oms_qty = oms_positions.get(symbol, Decimal("0"))
             try:
                 exchange_qty = await self._fetch_exchange_position(symbol)
                 diff = oms_qty - exchange_qty
-
-                if abs(diff) > Decimal("1e-5"):  # Increased tolerance for paper trading
-                    # SPECIAL CASE: If OMS is 0 and it's paper trading, we might want to sync
+                if abs(diff) > Decimal("1e-5"):
                     if oms_qty == 0 and exchange_qty != 0:
                         self._log.info(
                             f"PERIODIC_RECON | First-run sync: {symbol} -> {exchange_qty}"
                         )
                         from datetime import datetime
-
                         from qtrader.core.state_store import Position
 
                         pos = Position(
@@ -125,7 +97,6 @@ class ReconciliationEngine:
                         )
                         await self.state_store.set_position(pos)
                         continue
-
                     mismatches.append(
                         {
                             "symbol": symbol,
@@ -136,19 +107,14 @@ class ReconciliationEngine:
                     )
                     self._mismatch_count += 1
                     self._log.warning(
-                        f"PERIODIC_RECON | Mismatch: {symbol} | "
-                        f"OMS={oms_qty} vs EXCH={exchange_qty} | Diff={diff}"
+                        f"PERIODIC_RECON | Mismatch: {symbol} | OMS={oms_qty} vs EXCH={exchange_qty} | Diff={diff}"
                     )
             except Exception as e:
                 self._log.error(f"PERIODIC_RECON | Failed to reconcile {symbol}: {e}")
-
-        # If any mismatch, trigger halt
         if mismatches:
             self._log.critical(
-                f"PERIODIC_RECON | {len(mismatches)} mismatch(es) detected | "
-                f"Triggering TRADING_HALT"
+                f"PERIODIC_RECON | {len(mismatches)} mismatch(es) detected | Triggering TRADING_HALT"
             )
-            # Trigger kill switch for reconciliation mismatch
             if self.kill_switch:
                 self.kill_switch.trigger_on_critical_failure(
                     "RECON_MISMATCH",
@@ -171,7 +137,6 @@ class ReconciliationEngine:
             await self.event_bus.publish(halt_event)
         else:
             self._log.info(f"Recon #{self._recon_count}")
-
         self._last_audit = {
             "timestamp": self._last_recon_time,
             "mismatches": mismatches,
@@ -181,13 +146,10 @@ class ReconciliationEngine:
         }
 
     def get_last_audit(self) -> dict[str, Any]:
-        """Return the latest reconciliation result."""
         return self._last_audit
 
     async def _get_all_oms_positions(self) -> dict[str, Decimal]:
-        """Get all positions from the OMS."""
         positions: dict[str, Decimal] = {}
-        # Iterate through all adapters and their symbols
         for name, adapter in self.oms.adapters.items():
             try:
                 balances = await adapter.get_balance()
@@ -199,35 +161,23 @@ class ReconciliationEngine:
         return positions
 
     async def _on_fill(self, event: FillEvent) -> None:
-        """Mandatory audit triggered on every fill."""
         symbol = event.payload.symbol
         order_id = event.payload.order_id
-
-        # Event-driven wait: signal OMS to process, then wait for completion
         processed_event = self._fill_processed_events[order_id]
         processed_event.clear()
-
-        # Wait for OMS processing with timeout instead of blind sleep
         try:
             await asyncio.wait_for(processed_event.wait(), timeout=1.0)
         except asyncio.TimeoutError:
             self._log.warning(
                 f"RECONCILIATION_ENGINE | OMS processing timeout for {symbol}/{order_id}"
             )
-
         oms_pos = await self.state_store.get_position(symbol)
         oms_qty = oms_pos.quantity if oms_pos else Decimal("0")
-
-        # 2. Poll Exchange for actual position
         exchange_qty = await self._fetch_exchange_position(symbol)
-
-        # 3. Reconcile
         diff = oms_qty - exchange_qty
-
         if abs(diff) > Decimal("1e-8"):
             self._log.critical(
-                f"RECONCILIATION_HALT | Position mismatch for {symbol}! "
-                f"OMS: {oms_qty} vs Exchange: {exchange_qty} | Diff: {diff}"
+                f"RECONCILIATION_HALT | Position mismatch for {symbol}! OMS: {oms_qty} vs Exchange: {exchange_qty} | Diff: {diff}"
             )
             halt_event = SystemEvent(
                 source="ReconciliationEngine",
@@ -246,12 +196,9 @@ class ReconciliationEngine:
             await self.event_bus.publish(halt_event)
 
     async def _fetch_exchange_position(self, symbol: str) -> Decimal:
-        """Fetch actual position from the broker adapter."""
-        # For now, we take the first adapter that has the symbol
         for name, adapter in self.oms.adapters.items():
             try:
                 balances = await adapter.get_balance()
-                # Assuming crypto where asset name is position
                 asset = symbol.split("/", maxsplit=1)[0].split("-", maxsplit=1)[0]
                 return Decimal(str(balances.get(asset, 0)))
             except Exception as e:
@@ -259,12 +206,10 @@ class ReconciliationEngine:
         return Decimal("0")
 
     def signal_oms_processed(self, order_id: str) -> None:
-        """Signal that OMS has finished processing a fill (called by OMS after fill handling)."""
         if order_id in self._fill_processed_events:
             self._fill_processed_events[order_id].set()
 
     def get_status(self) -> dict:
-        """Return reconciliation status for monitoring."""
         return {
             "running": self._running,
             "recon_interval_s": self.recon_interval_s,

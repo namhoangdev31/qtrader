@@ -1,19 +1,10 @@
-"""ML Shared Types — Central Schema for Atomic Trio.
-
-Contains common data structures for decisions, risk classification,
-and forecasting used across different model adapters and the main pipeline.
-"""
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 
 class DecisionAction(str, Enum):
-    """Trading decision actions."""
-
     BUY = "BUY"
     SELL = "SELL"
     HOLD = "HOLD"
@@ -24,17 +15,15 @@ class DecisionAction(str, Enum):
 
 @dataclass(slots=True)
 class TradingDecision:
-    """Output of a decision controller (LLM or Rule-based)."""
-
     action: DecisionAction
     confidence: float
     reasoning: str
-    risk_adjustment: float  # 0.0 (no risk) to 1.0 (max risk)
-    position_size_multiplier: float  # 0.0 (no position) to 1.0 (full size)
+    risk_adjustment: float
+    position_size_multiplier: float
     stop_loss_pct: float
     take_profit_pct: float
-    time_horizon: str  # "short", "medium", "long"
-    explanation: str  # ML Explainability for Standash §13
+    time_horizon: str
+    explanation: str
     inference_time_ms: float
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -56,9 +45,7 @@ class TradingDecision:
 
 @dataclass(slots=True)
 class RiskClassificationResult:
-    """Result of risk classification (TabPFN or LLM)."""
-
-    class_label: str  # "SAFE", "WARNING", "DANGER"
+    class_label: str
     probabilities: dict[str, float]
     confidence: float
     inference_time_ms: float

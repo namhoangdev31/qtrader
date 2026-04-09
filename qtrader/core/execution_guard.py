@@ -3,17 +3,13 @@ import json
 import os
 from collections.abc import Callable
 from typing import Any, Optional, TypeVar
-
 from loguru import logger
-
 from qtrader.core.system_state import SystemState, state_manager
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
 class ExecutionGateRegistry:
-    """Audit Layer for Sovereign Execution Attempt Tracking."""
-
     _instance: Optional["ExecutionGateRegistry"] = None
     _blocked_attempts: int = 0
     _report_path: str = "qtrader/audit/guard_report.json"
@@ -24,7 +20,6 @@ class ExecutionGateRegistry:
         return cls._instance
 
     def log_blocked(self, module: str, function: str) -> None:
-        """Track and log an unauthorized execution attempt."""
         self._blocked_attempts += 1
         logger.critical(
             f"EXECUTION_GUARD_VIOLATION | Blocked attempt: {module}.{function} | SystemState: {state_manager.state.name}"
@@ -32,26 +27,20 @@ class ExecutionGateRegistry:
         self.generate_report()
 
     def generate_report(self) -> None:
-        """Produce the global guard status report."""
         report = {
             "blocked_attempts": self._blocked_attempts,
             "status": "GUARD_ACTIVE",
             "system_state": state_manager.state.name,
         }
-
-        # Ensure audit directory exists
         os.makedirs(os.path.dirname(self._report_path), exist_ok=True)
-
         with open(self._report_path, "w") as f:
             json.dump(report, f, indent=2)
 
 
-# Global Registry
 gate_registry = ExecutionGateRegistry()
 
 
 def require_initialized(func: F) -> F:
-    """Decorator to enforce that a function is called only in INITIALIZED/RUNNING state."""
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -63,8 +52,7 @@ def require_initialized(func: F) -> F:
             )
         return func(*args, **kwargs)
 
-    # Check for async functions
-    if hasattr(func, "__await__") or (hasattr(func, "__code__") and func.__code__.co_flags & 0x80):
+    if hasattr(func, "__await__") or (hasattr(func, "__code__") and func.__code__.co_flags & 128):
 
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -76,6 +64,5 @@ def require_initialized(func: F) -> F:
                 )
             return await func(*args, **kwargs)
 
-        return async_wrapper  # type: ignore
-
-    return wrapper  # type: ignore
+        return async_wrapper
+    return wrapper

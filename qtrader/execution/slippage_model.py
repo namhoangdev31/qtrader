@@ -1,19 +1,12 @@
-"""Slippage model for realistic trade simulation (Rust-backed)."""
-
 import logging
 from decimal import Decimal
 from typing import Any
-
 from qtrader_core import SlippageModel as RustSlippageModel
 
 logger = logging.getLogger(__name__)
 
 
 class SlippageModel(RustSlippageModel):
-    """
-    Rust-backed SlippageModel using Almgren-Chriss approach.
-    """
-
     def __init__(
         self,
         temporary_impact_factor: Decimal = Decimal("0.1"),
@@ -34,21 +27,15 @@ class SlippageModel(RustSlippageModel):
         orderbook: dict[str, Any],
         volatility: Decimal,
     ) -> Decimal:
-        """
-        Compute expected slippage using the high-performance Rust core.
-        """
         try:
-            # Simplified mid-price and volume calculation for the Rust core
             bids = orderbook.get("bids", [])
             asks = orderbook.get("asks", [])
             if not bids or not asks:
                 return Decimal("0")
-
             mid_price = (float(bids[0][0]) + float(asks[0][0])) / 2.0
-            total_volume = sum(float(l[1]) for l in bids) + sum(float(l[1]) for l in asks)
-
+            total_volume = sum((float(l[1]) for l in bids)) + sum((float(l[1]) for l in asks))
             slippage = super().compute_slippage(
-                side_is_buy=(side.upper() == "BUY"),
+                side_is_buy=side.upper() == "BUY",
                 quantity=float(quantity),
                 mid_price=mid_price,
                 total_volume=total_volume,

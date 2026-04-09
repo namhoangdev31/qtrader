@@ -1,11 +1,8 @@
 from __future__ import annotations
-
 import threading
 from enum import Enum
 from typing import Any
-
 from pydantic import BaseModel, Field
-
 from qtrader.core.config import settings
 
 
@@ -16,9 +13,6 @@ class ExecutionStyle(str, Enum):
 
 
 class LiveConfigSchema(BaseModel):
-    """Schema for all AI-controllable system parameters."""
-
-    # Alpha & Signal Logic
     min_confidence: float = Field(default=0.55, description="Required signal confidence to enter")
     exit_confidence: float = Field(
         default=0.45, description="Confidence level to trigger early exit"
@@ -38,8 +32,6 @@ class LiveConfigSchema(BaseModel):
     sim_mean_reversion_strength: float = Field(
         default=0.01, description="Strength of drift towards base price"
     )
-
-    # Execution & Simulation Fidelity
     stop_loss_pct: float = Field(default=0.025, description="Dynamic SL base percentage")
     take_profit_pct: float = Field(default=0.05, description="Dynamic TP base percentage")
     trailing_stop_activation_pct: float = Field(
@@ -52,20 +44,16 @@ class LiveConfigSchema(BaseModel):
     sim_slippage_vol_mult: float = Field(
         default=0.5, description="Multiplier for slippage volatility"
     )
-
-    # Risk & System Environment
     max_drawdown_limit: float = Field(default=0.15, description="Hard drawdown limit")
     max_consecutive_losses: int = Field(default=20, description="Circuit breaker threshold")
     execution_style: ExecutionStyle = Field(default=ExecutionStyle.BALANCED)
-    position_size_pct: float = Field(default=0.20, description="Max capital allocation per trade")
+    position_size_pct: float = Field(default=0.2, description="Max capital allocation per trade")
     min_hold_time_s: int = Field(default=5, description="Minimum duration for a trade")
     ts_max_orders_per_second: float = Field(default=10.0, description="Rate limit (orders/sec)")
     lifecycle_sentiment_interval: float = Field(
         default=600.0, description="Sentiment refresh rate (s)"
     )
     sim_anomaly_threshold: float = Field(default=0.01, description="Price jump anomaly trigger")
-
-    # Simulation Data & Baselines
     reference_price_btc: float = Field(default=71522.97, description="Simulator baseline BTC")
     reference_price_eth: float = Field(default=3500.0, description="Simulator baseline ETH")
     max_md_points: int = Field(default=5000, description="Max market data points in memory")
@@ -88,8 +76,6 @@ class LiveConfigSchema(BaseModel):
 
 
 class DynamicConfigManager:
-    """Manages system configuration with real-time AI overrides."""
-
     _instance = None
     _lock = threading.Lock()
 
@@ -110,12 +96,10 @@ class DynamicConfigManager:
         self._initialized = True
 
     def register_callback(self, callback: Any) -> None:
-        """Register a callback for configuration changes."""
         with self._lock:
             self._change_callback = callback
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get parameter value, prioritizing AI overrides."""
         with self._lock:
             if key in self._overrides:
                 return self._overrides[key]
@@ -125,11 +109,9 @@ class DynamicConfigManager:
                 return getattr(self._config, key, default)
 
     def set_override(self, key: str, value: Any) -> None:
-        """Apply an AI or manual override."""
         old_value = self.get(key)
         with self._lock:
             self._overrides[key] = value
-
         if self._change_callback:
             try:
                 self._change_callback(key, old_value, value)
@@ -137,18 +119,15 @@ class DynamicConfigManager:
                 pass
 
     def update(self, key: str, value: Any) -> None:
-        """Alias for set_override to maintain compatibility with real-time update patterns."""
         self.set_override(key, value)
 
     def clear_overrides(self) -> None:
-        """Reset all dynamic shifts to defaults."""
         with self._lock:
             self._overrides = {}
             if self._change_callback:
                 self._change_callback("ALL", "RESTORED", "DEFAULT")
 
     def get_all_live(self) -> dict[str, Any]:
-        """Returns the current effective configuration state."""
         full_state = self._config.model_dump()
         with self._lock:
             for k, v in self._overrides.items():
@@ -160,13 +139,6 @@ config_manager = DynamicConfigManager()
 
 
 class DynamicSettingsMixin:
-    """Provides reactive properties for simulation and risk parameters.
-
-    Classes inheriting from this mixin automatically gain access to
-    dynamically tunable settings that can be overridden by AI at runtime.
-    """
-
-    # --- Dynamic Configuration Properties (AI Controllable) ---
     @property
     def TAKER_FEE(self) -> float:
         return config_manager.get("sim_taker_fee")
@@ -235,7 +207,6 @@ class DynamicSettingsMixin:
     def MARKET_PRICE(self) -> float:
         return config_manager.get("current_market_price")
 
-    # --- Static Settings (Non-AI yet or hard limits) ---
     @property
     def ERROR_PROBABILITY(self) -> float:
         return settings.SIM_ERROR_PROBABILITY

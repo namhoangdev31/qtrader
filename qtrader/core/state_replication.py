@@ -1,12 +1,4 @@
-"""Stateful Replication — Standash §5.2.
-
-Active/Passive OMS state synchronization for high availability.
-Replicates order state, positions, and risk state between primary and standby nodes.
-Ensures failover < 5 seconds without double execution.
-"""
-
 from __future__ import annotations
-
 import hashlib
 import json
 import logging
@@ -26,8 +18,6 @@ class NodeRole(str, Enum):
 
 @dataclass(slots=True)
 class ReplicationState:
-    """Current replication state."""
-
     local_role: NodeRole = NodeRole.STANDBY
     peer_node_id: str = ""
     last_sync_time: float = 0.0
@@ -39,15 +29,6 @@ class ReplicationState:
 
 
 class StateReplicator:
-    """Stateful Replication Engine — Standash §5.2.
-
-    Provides Active/Passive OMS state synchronization:
-    - Primary node publishes state snapshots
-    - Standby node receives and applies snapshots
-    - Automatic failover when primary becomes unresponsive
-    - Checksum verification to prevent state corruption
-    """
-
     def __init__(
         self,
         node_id: str,
@@ -65,25 +46,13 @@ class StateReplicator:
         self._log = logging.getLogger(f"qtrader.replication.{node_id}")
 
     def publish_state(self, oms_state: dict[str, Any]) -> str:
-        """Primary node: publish state snapshot for standby nodes.
-
-        Args:
-            oms_state: Current OMS state (orders, positions, risk).
-
-        Returns:
-            Checksum of the published state.
-        """
         if self.state.local_role != NodeRole.PRIMARY:
             raise RuntimeError("Only PRIMARY node can publish state")
-
-        # Serialize and checksum
         state_json = json.dumps(oms_state, sort_keys=True, default=str)
         checksum = hashlib.sha256(state_json.encode()).hexdigest()[:16]
-
         self._local_state_checksum = checksum
         self.state.last_sync_time = time.time()
         self.state.total_syncs += 1
-
         self._replication_log.append(
             {
                 "action": "PUBLISH",
@@ -93,48 +62,27 @@ class StateReplicator:
                 "timestamp": time.time(),
             }
         )
-
         self._log.debug(
-            f"[REPLICATION] Published | Node: {self.node_id} | "
-            f"Checksum: {checksum} | Keys: {list(oms_state.keys())}"
+            f"[REPLICATION] Published | Node: {self.node_id} | Checksum: {checksum} | Keys: {list(oms_state.keys())}"
         )
-
         return checksum
 
     def receive_state(
-        self,
-        peer_node_id: str,
-        oms_state: dict[str, Any],
-        checksum: str,
+        self, peer_node_id: str, oms_state: dict[str, Any], checksum: str
     ) -> tuple[bool, str]:
-        """Standby node: receive and verify state snapshot from primary.
-
-        Args:
-            peer_node_id: ID of the primary node.
-            oms_state: State snapshot from primary.
-            checksum: SHA-256 checksum for verification.
-
-        Returns:
-            (success, reason) tuple.
-        """
-        # Verify checksum
         state_json = json.dumps(oms_state, sort_keys=True, default=str)
         computed_checksum = hashlib.sha256(state_json.encode()).hexdigest()[:16]
-
         if computed_checksum != checksum:
             self.state.failed_syncs += 1
             self._log.error(
                 f"[REPLICATION] Checksum mismatch | Expected: {checksum} | Got: {computed_checksum}"
             )
-            return False, f"Checksum mismatch: expected {checksum}, got {computed_checksum}"
-
-        # Apply state (in production, this would update local OMS state)
+            return (False, f"Checksum mismatch: expected {checksum}, got {computed_checksum}")
         self.state.peer_node_id = peer_node_id
         self.state.last_sync_time = time.time()
         self.state.last_sync_checksum = checksum
         self.state.total_syncs += 1
         self._last_peer_heartbeat = time.time()
-
         self._replication_log.append(
             {
                 "action": "RECEIVE",
@@ -143,47 +91,35 @@ class StateReplicator:
                 "timestamp": time.time(),
             }
         )
-
         self._log.debug(
             f"[REPLICATION] Received | From: {peer_node_id} | Checksum: {checksum} | Verified OK"
         )
-
-        return True, "State synchronized successfully"
+        return (True, "State synchronized successfully")
 
     def send_heartbeat(self) -> None:
-        """Send heartbeat to peer node."""
         self._log.debug(f"[REPLICATION] Heartbeat | Node: {self.node_id}")
 
     def receive_heartbeat(self, peer_node_id: str) -> None:
-        """Receive heartbeat from peer node."""
         self._last_peer_heartbeat = time.time()
         self.state.peer_node_id = peer_node_id
 
     def check_failover_needed(self) -> bool:
-        """Check if failover is needed (peer unresponsive)."""
         if self.state.local_role == NodeRole.PRIMARY:
             return False
-
         time_since_heartbeat = time.time() - self._last_peer_heartbeat
         if self._last_peer_heartbeat > 0 and time_since_heartbeat > self.failover_threshold_s:
             self._log.critical(
-                f"[REPLICATION] FAILOVER TRIGGERED | "
-                f"Peer {self.state.peer_node_id} unresponsive for {time_since_heartbeat:.1f}s "
-                f"(threshold: {self.failover_threshold_s}s)"
+                f"[REPLICATION] FAILOVER TRIGGERED | Peer {self.state.peer_node_id} unresponsive for {time_since_heartbeat:.1f}s (threshold: {self.failover_threshold_s}s)"
             )
             return True
-
         return False
 
     def execute_failover(self) -> NodeRole:
-        """Execute failover: standby becomes primary."""
         if self.state.local_role == NodeRole.PRIMARY:
             return NodeRole.PRIMARY
-
         self.state.local_role = NodeRole.PRIMARY
         self.state.failover_count += 1
-        self._last_peer_heartbeat = time.time()  # Reset to prevent immediate re-failover
-
+        self._last_peer_heartbeat = time.time()
         self._replication_log.append(
             {
                 "action": "FAILOVER",
@@ -192,23 +128,18 @@ class StateReplicator:
                 "timestamp": time.time(),
             }
         )
-
         self._log.critical(
-            f"[REPLICATION] FAILOVER COMPLETE | Node: {self.node_id} → PRIMARY | "
-            f"Failover #{self.state.failover_count}"
+            f"[REPLICATION] FAILOVER COMPLETE | Node: {self.node_id} → PRIMARY | Failover #{self.state.failover_count}"
         )
-
         return NodeRole.PRIMARY
 
     def get_status(self) -> dict[str, Any]:
-        """Return replication status for monitoring."""
         time_since_sync = (
             time.time() - self.state.last_sync_time if self.state.last_sync_time > 0 else -1
         )
         time_since_heartbeat = (
             time.time() - self._last_peer_heartbeat if self._last_peer_heartbeat > 0 else -1
         )
-
         return {
             "node_id": self.node_id,
             "role": self.state.local_role.value,

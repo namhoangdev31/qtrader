@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import logging
 from datetime import datetime
 from typing import Any
-
 from qtrader.core.dynamic_config import config_manager
 from qtrader.core.latency_enforcer import latency_enforcer
 
@@ -11,12 +9,6 @@ logger = logging.getLogger("qtrader.analytics.forensic")
 
 
 class ForensicTracer:
-    """Consolidates forensic telemetry from all sub-engines for dashboard synchronization.
-
-    This decoupling ensures that generating complex traces doesn't slow down
-    the main high-frequency execution path.
-    """
-
     def __init__(self) -> None:
         pass
 
@@ -31,14 +23,12 @@ class ForensicTracer:
         recon: Any,
         state: Any,
     ) -> dict[str, Any]:
-        """Aggregate traces from all specialized decision engines."""
         latencies = latency_enforcer.get_current_measurements()
         recon_audit = recon.get_last_audit() if hasattr(recon, "get_last_audit") else {}
         from qtrader.core.config import settings
 
         quote = broker_quotes.get(symbol, {})
         live_price = float(quote.get("price") or settings.ts_reference_price)
-
         return {
             "ingestion": {
                 "price": live_price,
@@ -55,7 +45,7 @@ class ForensicTracer:
                 **(kill_switch.get_trace() if hasattr(kill_switch, "get_trace") else {}),
                 "latency_ms": latencies.get("risk_check", {}).get("duration_ms", 0.0),
                 "status": "HALTED"
-                if (hasattr(kill_switch, "is_system_halted") and kill_switch.is_system_halted())
+                if hasattr(kill_switch, "is_system_halted") and kill_switch.is_system_halted()
                 else "OK",
             },
             "RiskGuard": {
@@ -70,7 +60,7 @@ class ForensicTracer:
             },
             "Reconciliation": {
                 **recon_audit,
-                "status": "DANGER" if (recon_audit.get("mismatch_count", 0) > 0) else "OK",
+                "status": "DANGER" if recon_audit.get("mismatch_count", 0) > 0 else "OK",
             },
             "StrategyState": {
                 "streak": state.signal_streak.get(symbol, 0),

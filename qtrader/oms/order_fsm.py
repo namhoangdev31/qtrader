@@ -1,17 +1,7 @@
-"""Strict Finite State Machine for order lifecycle management.
-
-Standash §7.1:
-- Idempotent transitions
-- Timeout for pending states with auto-reconcile
-- No illegal state jumps
-"""
-
 from __future__ import annotations
-
 import logging
 import time
 from enum import Enum
-
 from qtrader_core import OrderFSM as RustOrderFSM
 from qtrader_core import OrderStatus
 
@@ -27,7 +17,6 @@ class OrderState(Enum):
     REJECTED = "REJECTED"
 
 
-# Mapping Python OrderState to Rust OrderStatus
 STATE_TO_STATUS = {
     OrderState.NEW.value: OrderStatus.New,
     OrderState.ACK.value: OrderStatus.Ack,
@@ -39,13 +28,9 @@ STATE_TO_STATUS = {
 
 
 def get_state_from_status(status: OrderStatus) -> str:
-    """Helper to find OrderState value from Rust OrderStatus variant."""
-    # 1. Try direct comparison (fastest)
     for state_val, rust_status in STATE_TO_STATUS.items():
         if rust_status == status:
             return state_val
-
-    # 2. Fallback to string-based mapping if equality fails (C-extension quirk)
     status_repr = str(status)
     if "New" in status_repr:
         return OrderState.NEW.value
@@ -59,13 +44,10 @@ def get_state_from_status(status: OrderStatus) -> str:
         return OrderState.CLOSED.value
     if "Rejected" in status_repr:
         return OrderState.REJECTED.value
-
     raise ValueError(f"Unknown status type: {type(status)} | value: {status}")
 
 
 class OrderFSM:
-    """High-performance Order FSM using Rust Core."""
-
     def __init__(self, pending_timeout_s: float = 30.0) -> None:
         self.pending_timeout_s = pending_timeout_s
         self._rust_fsm = RustOrderFSM(pending_timeout_s)
@@ -75,7 +57,6 @@ class OrderFSM:
         status = STATE_TO_STATUS.get(current_state)
         if status is None:
             raise ValueError(f"Unknown state: {current_state}")
-
         try:
             new_status = self._rust_fsm.transition(status, event)
             return get_state_from_status(new_status)
@@ -91,7 +72,6 @@ class OrderFSM:
         entry_time = self._state_timestamps.get(order_id)
         if entry_time is None:
             return False
-
         elapsed = time.time() - entry_time
         if elapsed > self.pending_timeout_s:
             logger.warning(f"OrderFSM | TIMEOUT | Order {order_id} elapsed {elapsed:.1f}s")

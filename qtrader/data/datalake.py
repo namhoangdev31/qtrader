@@ -1,15 +1,12 @@
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-
 import polars as pl
 
 __all__ = ["DataLake"]
 
 
 class DataLake:
-    """Manages raw market data stored as Parquet files."""
-
     def __init__(self, base_path: str = "qtrader/data/datalake") -> None:
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
@@ -18,14 +15,12 @@ class DataLake:
         return self.base_path / f"symbol={symbol}" / f"tf={timeframe}" / "data.parquet"
 
     def save_data(self, df: pl.DataFrame, symbol: str, timeframe: str) -> None:
-        """Saves a Polars DataFrame to the partitioned datalake."""
         target_path = self._get_path(symbol, timeframe)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         df.write_parquet(target_path, compression="snappy")
         logging.info("Saved %s %s to %s", symbol, timeframe, target_path)
 
     def load_data(self, symbol: str, timeframe: str) -> pl.DataFrame:
-        """Loads data from the datalake."""
         path = self._get_path(symbol, timeframe)
         if not path.exists():
             raise FileNotFoundError(f"No data found for {symbol} at {timeframe}")
@@ -39,22 +34,6 @@ class DataLake:
         end_date: str | None = None,
         last_n_days: int | None = None,
     ) -> pl.DataFrame:
-        """
-        Load OHLCV data for multiple symbols and concatenate with a symbol column.
-
-        Expected columns in stored data: timestamp, open, high, low, close, volume
-        (or at least timestamp, close, volume). Filtering by date uses the timestamp column.
-
-        Args:
-            symbols: List of instrument symbols.
-            timeframe: Timeframe (e.g. "1h", "1d").
-            start_date: Optional start date string (YYYY-MM-DD).
-            end_date: Optional end date string (YYYY-MM-DD).
-            last_n_days: If set, load only the last N calendar days per symbol.
-
-        Returns:
-            Single DataFrame with all rows, plus a "symbol" column.
-        """
         dfs: list[pl.DataFrame] = []
         for sym in symbols:
             try:
@@ -85,5 +64,4 @@ class DataLake:
         return pl.concat(dfs, how="vertical")
 
     def get_all_symbols(self) -> list[str]:
-        """Return list of symbols that have at least one partition."""
         return [p.name.split("=")[1] for p in self.base_path.glob("symbol=*")]

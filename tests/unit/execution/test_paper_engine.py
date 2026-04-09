@@ -1,11 +1,12 @@
+from typing import Any
 import pytest
-
 from qtrader.core.config import settings
 from qtrader.execution.paper_engine import PaperTradingEngine
+from qtrader.execution.paper_mixins import SignalMixin
+from qtrader.execution.paper_models import AdaptiveConfig
 
 
 def test_paper_engine_init():
-    # Verify default base price from settings
     engine = PaperTradingEngine()
     assert engine._base_price == settings.ts_reference_price
     assert engine._current_price == settings.ts_reference_price
@@ -23,17 +24,15 @@ def test_clear_history():
     engine = PaperTradingEngine()
     engine._price_history = [100.0, 101.0, 102.0]
     engine._tick_count = 3
-
     engine.clear_history()
     assert len(engine._price_history) == 0
     assert engine._tick_count == 0
 
 
 def test_rsi_clamping():
-    from qtrader.execution.paper_mixins import SignalMixin
 
     class DummyEngine(SignalMixin):
-        def __init__(self):
+        def __init__(self) -> None:
             self._price_history = [100.0] * 20
             self.RSI_PERIOD = 14
             self.SMA_SHORT_WINDOW = 5
@@ -54,25 +53,20 @@ def test_rsi_clamping():
             self.THINKING_HISTORY_LIMIT = 10
             self._running = True
             self.ANOMALY_THRESHOLD = 0.01
-            from qtrader.execution.paper_models import AdaptiveConfig
-
             self.adaptive = AdaptiveConfig()
             self._cash = 1000.0
             self._open_positions = {}
             self.MEAN_REVERSION_STRENGTH = 0.01
 
-        def _persist_thinking_log(self, **kwargs):
+        def _persist_thinking_log(self, **kwargs: Any) -> None:
             pass
 
-        def _persist_fill(self, **kwargs):
+        def _persist_fill(self, **kwargs: Any) -> None:
             pass
 
     dummy = DummyEngine()
-    # Stagnant price should give RSI 50
-    signal = dummy._generate_signal()
+    _ = dummy._generate_signal()
     assert dummy._last_trace["alpha"]["indicators"]["rsi"] == 50.0
-
-    # Trending up price should give RSI near 100
     dummy._price_history = [100.0 + i for i in range(20)]
     dummy._generate_signal()
     assert dummy._last_trace["alpha"]["indicators"]["rsi"] > 90.0

@@ -1,41 +1,13 @@
-"""Atomic Trio ML Pipeline — Unified Ollama Stack (Mac M4 Optimized).
-
-Kết hợp bộ ba nguyên tử (Forecast, Risk, Decision) thành một pipeline thống nhất:
-
-1. Forecast Stage (Llama 3.2) → Dự báo xu hướng giá dựa trên dữ liệu lịch sử.
-2. Risk Stage (Qwen 3.5) → Phân loại rủi ro và thẩm định tín hiệu.
-3. Decision Stage (Llama 3.2) → Ra quyết định cuối cùng và điều phối lệnh.
-
-Pipeline được tối ưu cho Mac M4 thông qua Unified Ollama Backend:
-- Mọi model (Llama 3.2, Qwen 3.5) được chạy qua GPU/Neural Engine của M4.
-- Hỗ trợ RAG (Institutional Memory) từ DuckDB để cải thiện độ chính xác.
-
-Usage:
-    from qtrader.ml.atomic_trio import AtomicTrioPipeline
-
-    pipeline = AtomicTrioPipeline()
-
-    result = await pipeline.run(
-        historical_prices=[100.0, 101.0, ...],
-        market_features={"rsi": 65, "volatility": 0.02, ...},
-        market_context={"price_change": 0.01, "volatility": 0.02},
-        system_state={"current_drawdown": 0.05},
-    )
-"""
-
 from __future__ import annotations
-
 import asyncio
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
-
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
 from qtrader.ml.chronos_adapter import ChronosForecastAdapter
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
 from qtrader.ml.ollama_forecast_adapter import OllamaForecastAdapter
@@ -48,13 +20,9 @@ logger = logging.getLogger("qtrader.ml.atomic_trio")
 
 @dataclass(slots=True, frozen=True)
 class PipelineConfig:
-    """Configuration for the Unified AI Trio pipeline."""
-
     forecast_model_id: str = "llama3.2:1b"
     risk_model_id: str = "qwen3.5:2b"
     decision_model_id: str = "llama3.2:1b"
-
-    # Backend options (Ollama defaults to auto-optimized for M4)
     backend_url: str = field(
         default_factory=lambda: os.getenv("OLLAMA_URL", "http://localhost:11434")
     )
@@ -62,13 +30,11 @@ class PipelineConfig:
 
 @dataclass(slots=True)
 class PipelineResult:
-    """Complete output of the Unified AI Trio pipeline."""
-
-    decision: Any  # TradingDecision
+    decision: Any
     forecast_results: dict[str, Any] | None = None
     risk_results: dict[str, Any] | None = None
-    chronos_forecast: dict[str, Any] | None = None  # Mapping for TradingSystem
-    tabpfn_risk: dict[str, Any] | None = None  # Mapping for TradingSystem
+    chronos_forecast: dict[str, Any] | None = None
+    tabpfn_risk: dict[str, Any] | None = None
     pipeline_latency_ms: float = 0.0
     forecast_latency_ms: float = 0.0
     risk_latency_ms: float = 0.0
@@ -91,21 +57,9 @@ class PipelineResult:
 
 
 class AtomicTrioPipeline:
-    """Unified AI Trio Pipeline.
-
-    Orchestrates Forecast, Risk, and Decision stages into a unified pipeline
-    optimized for Mac M4 architecture using Ollama.
-
-    Pipeline stages:
-    1. Forecast Stage: Llama 3.2 price/trend projection.
-    2. Risk Stage: Qwen 3.5 risk classification (SAFE/WARNING/DANGER).
-    3. Decision Stage: Llama 3.2 decision orchestration with RAG.
-    """
-
     def __init__(
         self,
         config: PipelineConfig | None = None,
-        # Allow passing IDs directly for backward compatibility with orchestrator
         forecast_model_id: str | None = None,
         risk_model_id: str | None = None,
         decision_model_id: str | None = None,
@@ -118,9 +72,7 @@ class AtomicTrioPipeline:
                 risk_model_id=risk_model_id or "qwen3.5:2b",
                 decision_model_id=decision_model_id or "llama3.2:1b",
             )
-
-        # Lazy-loaded components
-        self._forecast_engine: ChronosForecastAdapter | None = None  # Legacy wrapper for forecast
+        self._forecast_engine: ChronosForecastAdapter | None = None
         self._risk_engine: OllamaRiskAdapter | None = None
         self._decision_engine: OllamaDecisionAdapter | None = None
         self._is_initialized = False
@@ -128,16 +80,11 @@ class AtomicTrioPipeline:
         self._last_result: PipelineResult | None = None
 
     def _initialize(self) -> None:
-        """Lazy initialize the Ollama-based Trio components."""
         if self._is_initialized:
             return
-
         logger.info("[ATOMIC_TRIO] Initializing Unified AI Pipeline...")
-
         ollama_url = self.config.backend_url
         logger.info(f"[ATOMIC_TRIO] Using Unified Ollama Backend at {ollama_url}")
-
-        # Stage 1: Forecast Stage (Hybrid selection)
         if ":" in self.config.forecast_model_id:
             logger.info(
                 f"[ATOMIC_TRIO] Using Ollama Forcast Adapter for {self.config.forecast_model_id}"
@@ -149,22 +96,13 @@ class AtomicTrioPipeline:
             logger.info(
                 f"[ATOMIC_TRIO] Using Specialized Chronos Adapter for {self.config.forecast_model_id}"
             )
-            self._forecast_engine = ChronosForecastAdapter(
-                model_id=self.config.forecast_model_id,
-            )
-
-        # Stage 2: Risk Stage
+            self._forecast_engine = ChronosForecastAdapter(model_id=self.config.forecast_model_id)
         self._risk_engine = OllamaRiskAdapter(
-            model_id=self.config.risk_model_id,
-            base_url=ollama_url,
+            model_id=self.config.risk_model_id, base_url=ollama_url
         )
-
-        # Stage 3: Decision Stage
         self._decision_engine = OllamaDecisionAdapter(
-            model_id=self.config.decision_model_id,
-            base_url=ollama_url,
+            model_id=self.config.decision_model_id, base_url=ollama_url
         )
-
         self._is_initialized = True
         logger.info("[ATOMIC_TRIO] Pipeline initialization complete")
 
@@ -176,12 +114,9 @@ class AtomicTrioPipeline:
         system_state: dict[str, Any] | None = None,
         prediction_length: int = 10,
     ) -> PipelineResult:
-        """Run the complete Unified AI Trio pipeline."""
         self._initialize()
         self._run_count += 1
         pipeline_start = time.time()
-
-        # Parallel Stage 1 & 2: Forecast and Risk
         forecast_results = None
         forecast_latency = 0.0
         risk_results = None
@@ -192,7 +127,7 @@ class AtomicTrioPipeline:
             if (
                 historical_prices
                 and len(historical_prices) > 0
-                and self._forecast_engine is not None
+                and (self._forecast_engine is not None)
             ):
                 try:
                     t0 = time.time()
@@ -200,13 +135,11 @@ class AtomicTrioPipeline:
                         self._forecast_engine.predict
                     ):
                         forecast_res = await self._forecast_engine.predict(
-                            historical_prices=historical_prices,
-                            prediction_length=prediction_length,
+                            historical_prices=historical_prices, prediction_length=prediction_length
                         )
                     else:
                         forecast_res = self._forecast_engine.predict(
-                            historical_prices=historical_prices,
-                            prediction_length=prediction_length,
+                            historical_prices=historical_prices, prediction_length=prediction_length
                         )
                     forecast_results = forecast_res.to_dict()
                     forecast_latency = (time.time() - t0) * 1000
@@ -225,22 +158,17 @@ class AtomicTrioPipeline:
                     logger.warning(f"[ATOMIC_TRIO] Risk validation stage failed: {e}")
 
         await asyncio.gather(run_forecast(), run_risk())
-
-        # Stage 3: Decision Stage with RAG
         decision_latency = 0.0
         decision = None
         if self._decision_engine is not None:
             try:
                 t0 = time.time()
-
-                # RAG Context retrieval
                 m_vector = [
                     float(market_context.get("price_change", 0.0)) if market_context else 0.0,
                     float(market_context.get("volatility", 0.0)) if market_context else 0.0,
                     float(risk_results.get("risk_score", 0.5)) if risk_results else 0.5,
                     float(self._run_count % 100) / 100.0,
                 ]
-
                 from qtrader.ml.embedding_worker import embedding_manager
 
                 rag_context = memory_store.retrieve_similar(
@@ -248,7 +176,6 @@ class AtomicTrioPipeline:
                     semantic_embedding=embedding_manager.current_sentiment_vector,
                     top_k=3,
                 )
-
                 decision = await self._decision_engine.decide(
                     chronos_forecast=forecast_results,
                     tabpfn_risk=risk_results,
@@ -256,16 +183,13 @@ class AtomicTrioPipeline:
                     system_state=system_state,
                     rag_context=rag_context,
                 )
-
                 decision_latency = (time.time() - t0) * 1000
             except Exception as e:
                 logger.error(f"[ATOMIC_TRIO] Decision engine failed: {e}")
                 decision = self._create_safe_hold_decision(f"Inference critical failure: {e}")
         else:
             decision = self._create_safe_hold_decision("Decision engine not initialized")
-
         pipeline_latency = (time.time() - pipeline_start) * 1000
-
         result = PipelineResult(
             decision=decision,
             forecast_results=forecast_results,
@@ -300,15 +224,12 @@ class AtomicTrioPipeline:
         )
 
     def get_trace(self) -> dict[str, Any]:
-        """Produce forensic trace of ML pipeline."""
         if not self._last_result:
             return {}
         res = self._last_result.to_dict()
         res["run_count"] = self._run_count
         return res
 
-
-# --- ML INFERENCE SERVER ---
 
 app = FastAPI(title="QTrader ML Engine", version="1.0.0")
 pipeline = AtomicTrioPipeline()

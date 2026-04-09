@@ -1,8 +1,6 @@
 from datetime import datetime
-
 import polars as pl
 import pytest
-
 from qtrader.alpha.registry import AlphaEngine
 from qtrader.alpha.technical import MomentumAlpha
 
@@ -28,10 +26,8 @@ def test_alpha_engine_compute_all():
             "volume": [1000.0] * 5,
         }
     )
-
     engine = AlphaEngine(alpha_names=["momentum"])
     out = engine.compute_all(df)
-
     assert "momentum" in out.columns
     assert "composite_alpha" in out.columns
     assert out.height == 5
@@ -39,12 +35,9 @@ def test_alpha_engine_compute_all():
 
 def test_alpha_engine_weights():
     engine = AlphaEngine(alpha_names=["momentum", "mean_reversion"])
-    # Default weights should be equal
     weights = engine._compute_weights()
     assert weights["momentum"] == 0.5
     assert weights["mean_reversion"] == 0.5
-
-    # Update IC and check weights
     engine._ic["momentum"] = 0.6
     engine._ic["mean_reversion"] = 0.2
     weights = engine._compute_weights()
