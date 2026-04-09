@@ -8,6 +8,7 @@ import polars as pl
 if TYPE_CHECKING:
     from qtrader.features.base import Feature
 from qtrader.features.factors.lagged import LaggedReturn, ReturnVolatility
+from qtrader.features.factors.microstructure import OrderImbalanceFactor
 from qtrader.features.factors.technical import ATR, MACD, ROC, RSI, BollingerBands, MomentumReturn
 from qtrader.features.factors.volume import OBV, VWAP, DollarVolume, ForceIndex, VolumeRatio
 
@@ -69,6 +70,7 @@ def build_default_registry() -> FeatureRegistry:
         ForceIndex(13),
         LaggedReturn(1, 1),
         ReturnVolatility(20),
+        OrderImbalanceFactor(5),
     ]
     for f in factors:
         registry.register(f.name, f)

@@ -34,6 +34,7 @@ from qtrader.execution.trade_logger import TradeLogger
 from qtrader.risk.kill_switch import GlobalKillSwitch
 from qtrader.risk.war_mode import WarModeEngine
 
+from .microstructure.imbalance import OrderbookImbalance
 from .orderbook_simulator import OrderbookSimulator
 from .rate_limiter import TokenBucketRateLimiter
 
@@ -203,6 +204,7 @@ class ExecutionEngine:
             max_position_usd=max_order_size, max_drawdown_pct=0.1, max_order_notional=max_order_size
         )
         self.war_mode = war_mode or WarModeEngine(rust_engine=self._rust_risk)
+        self.imbalance_calculator = OrderbookImbalance(getattr(exchange_adapter, "config", Any))
         if hasattr(exchange_adapter, "set_fill_callback"):
             exchange_adapter.set_fill_callback(self._on_order_filled)
         self.max_order_size = max_order_size
@@ -339,6 +341,18 @@ class ExecutionEngine:
                             timestamp_ms=int(time.time() * 1000),
                         )
                         market_data = {order.payload.symbol: (100.0, 100.1)}
+                        
+                        try:
+                            ob = loop.run_until_complete(self.exchange_adapter.get_orderbook(order.payload.symbol))
+                            if ob and "bids" in ob and "asks" in ob:
+                                imb = self.imbalance_calculator.compute(ob["bids"], ob["asks"])
+                                if rust_side == RustSide.Buy and imb < -0.6:
+                                    self.logger.warning(f"[ROUTING] Bearish imbalance ({imb:.2f}) detected for BUY order. Reducing aggression.")
+                                elif rust_side == RustSide.Sell and imb > 0.6:
+                                    self.logger.warning(f"[ROUTING] Bullish imbalance ({imb:.2f}) detected for SELL order. Reducing aggression.")
+                        except Exception:
+                            pass
+
                         try:
                             result = self._rust_engine.execute_order(
                                 rust_order, 1000000.0, market_data

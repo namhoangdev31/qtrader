@@ -23,7 +23,6 @@ _LOG = logging.getLogger("qtrader.risk.realtime")
 try:
     import qtrader_core
     from qtrader_core import RiskEngine
-    from qtrader_core import WarModeState as RustWarModeState
 
     stats_engine = qtrader_core.StatsEngine()
     math_engine = qtrader_core.MathEngine()

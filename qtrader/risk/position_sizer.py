@@ -1,10 +1,11 @@
+from typing import Any
+
 import polars as pl
 
 from qtrader.risk.base import RiskModule
 from qtrader.risk.volatility import VolatilityTargeting
 
 try:
-    import qtrader_core
     from qtrader_core import SizingEngine
 
     sizing_engine = SizingEngine()
@@ -26,7 +27,7 @@ class PositionSizer(RiskModule):
         self.volatility_targeting = volatility_targeting
         self.max_position = max_position
 
-    def compute(self, data: pl.DataFrame, **kwargs) -> pl.Series:
+    def compute(self, data: pl.DataFrame, **kwargs: Any) -> pl.Series:
         signals = kwargs.get("signals")
         if signals is None:
             raise ValueError("PositionSizer requires 'signals' in kwargs")

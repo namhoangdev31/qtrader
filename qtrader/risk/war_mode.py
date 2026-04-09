@@ -8,7 +8,7 @@ from typing import Any
 
 _LOG = logging.getLogger("qtrader.risk.war_mode")
 try:
-    from qtrader_core import WarModeState as RustWarModeState
+    import qtrader_core
 except ImportError as e:
     _LOG.error(
         "[WAR_MODE] Institutional Risk Core (qtrader_core) is missing. System startup blocked."
