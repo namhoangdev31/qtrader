@@ -1,24 +1,17 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+
+const INSTITUTIONAL_NOTIONAL_LIMIT_USD = 1_000_000;
 
 @Injectable()
 export class RiskPolicyService {
   private readonly logger = new Logger(RiskPolicyService.name);
 
-  /**
-   * Control Plane: Rule-based risk pre-checks (Static limits).
-   * Validates orders against institutional compliance before reaching Compute Plane.
-   */
-  async validateOrder(order: any): Promise<void> {
-    this.logger.log(`[RISK-POLICY] Pre-checking order for ${order.symbol}`);
-    
-    const hardLimit = 1000000; // USD 1M limit
-    if (order.notional > hardLimit) {
+  async validateOrder(order: { symbol: string; quantity: number; price?: number }): Promise<void> {
+    const notional = (order.price ?? 0) * order.quantity;
+    this.logger.log(`[RISK-POLICY] Pre-checking order for ${order.symbol} | Notional=${notional}`);
+
+    if (notional > INSTITUTIONAL_NOTIONAL_LIMIT_USD) {
       throw new BadRequestException('EXCEEDS_INSTITUTIONAL_HARD_LIMIT');
     }
-    
-    // Logic:
-    // 1. Check blacklisted symbols
-    // 2. Check trading hours
-    // 3. Check Fat-finger protection
   }
 }

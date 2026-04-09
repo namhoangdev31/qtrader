@@ -1,0 +1,29 @@
+flowchart LR
+  UI[Frontend/UI]
+
+  subgraph ControlPlane[NestJS Control Plane]
+    SESSION[session-control]
+    ORDER[order-command]
+    OMS[oms-workflow]
+    REPORT[reporting-query]
+  end
+
+  subgraph ComputePlane[Python Compute Plane]
+    EXEC[execution-core]
+    ALPHA[alpha-feature]
+    RISK[risk-quant]
+    ML[ml-inference]
+  end
+
+  UI --> ORDER
+  UI --> SESSION
+  UI --> REPORT
+
+  ORDER --> OMS
+  ORDER --> EXEC
+  SESSION --> ALPHA
+  OMS --> EXEC
+  EXEC --> OMS
+  ALPHA --> ML
+  ML --> ORDER
+  RISK --> OMS

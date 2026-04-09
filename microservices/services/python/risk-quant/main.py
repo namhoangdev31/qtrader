@@ -1,19 +1,28 @@
-import logging
-import polars as pl
+from __future__ import annotations
+
 from typing import Any
 
-class RiskQuantService:
-    """Compute Plane: Quantitative risk metrics calculation (VaR, HHI, Attribution)."""
-    
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("risk-quant")
-        
-    def calculate_portfolio_var(self, exposure: pl.DataFrame, confidence: float = 0.95) -> float:
-        """Calculate Value-at-Risk using massive Polars datasets."""
-        self.logger.info(f"[RISK-QUANT] Calculating VaR for {exposure.height} symbols")
-        # Logic: historical simulation / monte carlo
-        return 50000.0
+import polars as pl
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    service = RiskQuantService()
+app = FastAPI(title='python-risk-quant', version='2.0.0')
+
+
+class RiskRequest(BaseModel):
+    pnl_series: list[float] = Field(default_factory=list)
+
+
+@app.get('/health')
+async def health() -> dict[str, str]:
+    return {'service': 'python-risk-quant', 'status': 'ok'}
+
+
+@app.post('/var')
+async def portfolio_var(payload: RiskRequest) -> dict[str, Any]:
+    if not payload.pnl_series:
+        return {'var_95': 0.0}
+
+    frame = pl.DataFrame({'pnl': payload.pnl_series})
+    var_95 = float(frame.select(pl.col('pnl').quantile(0.05)).item())
+    return {'var_95': var_95}

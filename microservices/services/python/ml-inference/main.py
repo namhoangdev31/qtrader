@@ -1,19 +1,24 @@
-import logging
+from __future__ import annotations
+
 from typing import Any
 
-class MLInferenceService:
-    """Compute Plane: Real-time ML Inference and model serving."""
-    
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("ml-inference")
-        # Placeholder for model registry (MLflow/Torch/etc)
-        
-    async def predict_regime(self, features: dict[str, Any]) -> str:
-        """Inference logic based on Polars-calculated features."""
-        self.logger.info(f"[ML] Running inference for features. Trace: {features.get('trace_id')}")
-        # Logic: model.predict(features)
-        return "BULLISH_TREND"
+from fastapi import FastAPI
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    service = MLInferenceService()
+app = FastAPI(title='python-ml-inference', version='2.0.0')
+
+
+@app.get('/health')
+async def health() -> dict[str, str]:
+    return {'service': 'python-ml-inference', 'status': 'ok'}
+
+
+@app.post('/predict/regime')
+async def predict_regime(features: dict[str, Any]) -> dict[str, str]:
+    strength = float(features.get('strength', 0.0))
+    if strength > 0.6:
+        regime = 'TRENDING'
+    elif strength < 0.2:
+        regime = 'MEAN_REVERTING'
+    else:
+        regime = 'NEUTRAL'
+    return {'regime': regime}

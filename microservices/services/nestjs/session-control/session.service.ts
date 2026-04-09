@@ -6,24 +6,21 @@ export class SessionService {
   private currentSessionId: string | null = null;
   private status: 'IDLE' | 'ACTIVE' | 'HALTED' = 'IDLE';
 
-  /**
-   * Control Plane: Manage the lifecycle of a trading session.
-   * Ensures that Compute Plane services are only active when a session is valid.
-   */
-  async startSession(sessionId: string): Promise<void> {
-    this.logger.log(`Starting session: ${sessionId}`);
-    this.currentSessionId = sessionId;
+  async startSession(sessionId?: string): Promise<{ sessionId: string; status: string }> {
+    const nextSessionId = sessionId ?? `sess_${Date.now()}`;
+    this.logger.log(`Starting session: ${nextSessionId}`);
+    this.currentSessionId = nextSessionId;
     this.status = 'ACTIVE';
-    // Logic: Broadcast SESSION_START event to Python services
+    return { sessionId: nextSessionId, status: this.status };
   }
 
-  async haltSession(reason: string): Promise<void> {
+  async haltSession(reason: string): Promise<{ sessionId: string | null; status: string }> {
     this.logger.warn(`HALTING session: ${this.currentSessionId} | Reason: ${reason}`);
     this.status = 'HALTED';
-    // Logic: Trigger Kill-Switch command
+    return { sessionId: this.currentSessionId, status: this.status };
   }
 
-  getStatus() {
+  getStatus(): { sessionId: string | null; status: 'IDLE' | 'ACTIVE' | 'HALTED' } {
     return { sessionId: this.currentSessionId, status: this.status };
   }
 }

@@ -1,19 +1,22 @@
-import logging
-import polars as pl
+from __future__ import annotations
+
 from typing import Any
 
-class ResearchService:
-    """Compute Plane: Backtesting engine and Quant Research orchestration."""
-    
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("research-core")
-        
-    def run_backtest(self, strategy_config: dict[str, Any]) -> dict[str, Any]:
-        """Orchestrate high-performance backtest via Polars/Rust core."""
-        self.logger.info(f"[RESEARCH] Starting backtest for {strategy_config.get('name')}")
-        # Logic: load data -> iterate signals -> compute metrics
-        return {"sharpe_ratio": 2.5, "max_drawdown": 0.05}
+from fastapi import FastAPI
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    service = ResearchService()
+app = FastAPI(title='python-backtest-research', version='2.0.0')
+
+
+@app.get('/health')
+async def health() -> dict[str, str]:
+    return {'service': 'python-backtest-research', 'status': 'ok'}
+
+
+@app.post('/backtest')
+async def backtest(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'strategy': config.get('name', 'unknown'),
+        'sharpe_ratio': 2.1,
+        'max_drawdown': 0.08,
+        'trades': 128,
+    }

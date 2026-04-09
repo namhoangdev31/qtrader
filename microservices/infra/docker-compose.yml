@@ -1,0 +1,27 @@
+services:
+  nestjs-control-plane:
+    build:
+      context: ../services/nestjs
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      EXECUTION_CORE_URL: http://python-execution-core:8002
+      ALPHA_FEATURE_URL: http://python-alpha-feature:8001
+    depends_on:
+      - python-execution-core
+      - python-alpha-feature
+
+  python-execution-core:
+    build:
+      context: ../services/python/execution-core
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+
+  python-alpha-feature:
+    build:
+      context: ../services/python/alpha-feature
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
