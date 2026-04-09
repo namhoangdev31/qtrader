@@ -34,7 +34,7 @@ class OllamaDecisionAdapter:
         self,
         model_id: str | None = None,
         base_url: str | None = None,
-        timeout_seconds: int = 60,
+        timeout_seconds: int = 180,
     ) -> None:
         self.model_id = model_id or os.getenv("OLLAMA_MODEL_DECISION", "llama3.2:1b")
         self.base_url = base_url or os.getenv("OLLAMA_URL", "http://ollama:11434")
@@ -104,9 +104,10 @@ class OllamaDecisionAdapter:
             "model": self.model_id,
             "prompt": prompt,
             "stream": False,
+            "format": "json",
             "options": {
                 "temperature": 0.2,
-                "num_predict": 256,
+                "num_predict": 512,
             },
         }
 
@@ -151,7 +152,10 @@ class OllamaDecisionAdapter:
             instruct += "\nIMPORTANT: Prioritize 'FORENSIC INTERVENTION' as these are immediate human directives for the current market state. Use them to override or bias your decision.\n"
 
         instruct += (
-            "JSON Template: {"
+            "IMPORTANT: Response must be a single, valid JSON object only. "
+            "No conversational filler, no markdown blocks, no prefix/suffix. "
+            "Follow this schema exactly:\n\n"
+            "{"
             '"action": "BUY/SELL/HOLD/HEDGE", "confidence": float, '
             '"reasoning": string, "risk_adjustment": float, '
             '"position_size_multiplier": float, "stop_loss_pct": float, '
@@ -178,16 +182,23 @@ class OllamaDecisionAdapter:
     ) -> TradingDecision:
         """Parse the raw LLM string into a TradingDecision object."""
         try:
-            # Simple extractor for markdown blocks if LLM adds them
-            clean_json = response.strip()
-            if "```json" in clean_json:
-                clean_json = clean_json.split("```json")[-1].split("```")[0].strip()
-            elif "```" in clean_json:
-                clean_json = clean_json.split("```")[-1].split("```")[0].strip()
+            # 1. Basic Cleaning
+            clean = response.strip()
+            
+            # 2. Extract JSON block (find first '{' and last '}')
+            start_idx = clean.find("{")
+            end_idx = clean.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                clean = clean[start_idx : end_idx + 1]
+            
+            # 3. Handle truncation in 1B models
+            if clean.startswith("{") and not clean.endswith("}"):
+                # Attempt to close the object if it looks like it was cut off
+                clean += '"}' if '":' in clean else "}"
 
-            data = json.loads(clean_json)
-        except Exception:
-            logger.warning(f"[OLLAMA] Failed to parse JSON from: {response[:100]}...")
+            data = json.loads(clean)
+        except Exception as e:
+            logger.warning(f"[OLLAMA] Failed to parse JSON from: {response[:100]}... Error: {e}")
             data = {}
 
         action_str = data.get("action", "HOLD").upper()

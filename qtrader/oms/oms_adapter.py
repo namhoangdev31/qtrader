@@ -1,6 +1,7 @@
 """OMS adapter for order creation and submission."""
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
@@ -57,14 +58,20 @@ class OMSAdapter(ABC):
 
     def _create_empty_order(self, timestamp: Any) -> OrderEvent:
         """Helper to create a zero-quantity order event."""
+        ts_val = int(timestamp.timestamp() * 1_000_000) if hasattr(timestamp, "timestamp") else int(time.time() * 1_000_000)
+        
+        from qtrader.core.events import OrderPayload
         return OrderEvent(
-            order_id="NO_TRADE",
-            symbol="",
-            timestamp=timestamp,
-            order_type="MARKET",
-            side="BUY",
-            quantity=Decimal('0'),
-            metadata={"reason": "no_allocation"}
+            source="OMSAdapter",
+            timestamp=ts_val,
+            payload=OrderPayload(
+                order_id="NO_TRADE",
+                symbol="",
+                action="BUY", # Placeholder for empty
+                quantity=Decimal('0'),
+                order_type="MARKET",
+                metadata={"reason": "no_allocation"}
+            )
         )
 
 
@@ -89,20 +96,26 @@ class SimpleOMSAdapter(OMSAdapter):
         # Determine side assuming long-only for Simple implementation
         side = "BUY"
         
+        from qtrader.core.events import OrderPayload
+        ts_val = int(allocation_weights.timestamp.timestamp() * 1_000_000)
+        
         return OrderEvent(
-            order_id=f"ORDER_{symbol}_{allocation_weights.timestamp.timestamp()}",
-            symbol=symbol,
-            timestamp=allocation_weights.timestamp,
-            order_type="MARKET",
-            side=side,
-            quantity=weight,  # Using weight as simplified size
-            metadata={
-                "allocated_weight": float(weight),
-                "risk_metrics": {
-                    "portfolio_var": float(risk_metrics.portfolio_var),
-                    "portfolio_volatility": float(risk_metrics.portfolio_volatility),
+            source="SimpleOMSAdapter",
+            timestamp=ts_val,
+            payload=OrderPayload(
+                order_id=f"ORDER_{symbol}_{allocation_weights.timestamp.timestamp()}",
+                symbol=symbol,
+                action=side,
+                quantity=weight,  # Using weight as simplified size
+                order_type="MARKET",
+                metadata={
+                    "allocated_weight": float(weight),
+                    "risk_metrics": {
+                        "portfolio_var": float(risk_metrics.portfolio_var),
+                        "portfolio_volatility": float(risk_metrics.portfolio_volatility),
+                    }
                 }
-            }
+            )
         )
 
     async def cancel_all_orders(self) -> None:
@@ -202,21 +215,27 @@ class ExecutionOMSAdapter(OMSAdapter):
         side = "BUY"
 
         # Create the OrderEvent
+        from qtrader.core.events import OrderPayload
+        ts_val = int(allocation_weights.timestamp.timestamp() * 1_000_000)
+        
         order_event = OrderEvent(
-            order_id=f"ORDER_{symbol}_{allocation_weights.timestamp.timestamp()}",
-            symbol=symbol,
-            timestamp=allocation_weights.timestamp,
-            order_type="MARKET",
-            side=side,
-            quantity=order_size,
-            metadata={
-                "allocated_weight": float(weight),
-                "risk_metrics": {
-                    "portfolio_var": float(risk_metrics.portfolio_var),
-                    "portfolio_volatility": float(risk_metrics.portfolio_volatility),
-                },
-                "_submitted_via_execution": True,
-            }
+            source="ExecutionOMSAdapter",
+            timestamp=ts_val,
+            payload=OrderPayload(
+                order_id=f"ORDER_{symbol}_{allocation_weights.timestamp.timestamp()}",
+                symbol=symbol,
+                action=side,
+                quantity=order_size,
+                order_type="MARKET",
+                metadata={
+                    "allocated_weight": float(weight),
+                    "risk_metrics": {
+                        "portfolio_var": float(risk_metrics.portfolio_var),
+                        "portfolio_volatility": float(risk_metrics.portfolio_volatility),
+                    },
+                    "_submitted_via_execution": True,
+                }
+            )
         )
 
         # [OMS_STATE_CENTRALIZATION]: Persist order to central OMS (delegated to Rust)
@@ -232,18 +251,20 @@ class ExecutionOMSAdapter(OMSAdapter):
     async def _submit_order(self, order_event: OrderEvent) -> None:
         """Submit order via execution engine and log result."""
         try:
-            self.logger.info(f"Submitting order {order_event.order_id} via execution engine")
+            order_id = order_event.payload.order_id
+            self.logger.info(f"Submitting order {order_id} via execution engine")
             success, result = await self.execution_engine.execute_order(order_event)
             if success:
-                await self.oms.on_ack(order_event.order_id)
-                self.logger.info(f"Order {order_event.order_id} submitted successfully, result: {result}")
+                await self.oms.on_ack(order_id)
+                self.logger.info(f"Order {order_id} submitted successfully, result: {result}")
             else:
-                await self.oms.on_reject(order_event.order_id, str(result))
-                self.logger.warning(f"Order {order_event.order_id} submission failed: {result}")
+                await self.oms.on_reject(order_id, str(result))
+                self.logger.warning(f"Order {order_id} submission failed: {result}")
         except Exception as e:
-            self.logger.error(f"Error submitting order {order_event.order_id}: {e}", exc_info=True)
+            oid = getattr(getattr(order_event, "payload", {}), "order_id", "unknown_oid")
+            self.logger.error(f"Error submitting order {oid}: {e}", exc_info=True)
             # Standardize on REJECTED for failed submissions in Rust FSM
-            await self.oms.on_reject(order_event.order_id, f"Submission Error: {str(e)}")
+            await self.oms.on_reject(oid, f"Submission Error: {str(e)}")
 
     async def cancel_all_orders(self) -> None:
         """Cancel all open orders via UnifiedOMS."""

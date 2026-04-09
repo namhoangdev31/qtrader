@@ -25,6 +25,7 @@ def validator() -> PreTradeRiskValidator:
             max_orders_per_second=10.0,
             max_orders_per_minute=100.0,
             max_concentration_pct=0.05,
+            max_position_usd=Decimal("15000"),  # 15k USD limit
         )
     )
 
@@ -63,7 +64,31 @@ class TestPreTradeRiskValidator:
         validator.update_position("AAPL", Decimal("95"))
         result = validator.validate_order("AAPL", "BUY", Decimal("10"), Decimal("150.0"))
         assert not result.approved
-        assert any("POSITION_EXCEEDED" in r for r in result.checks_failed)
+        assert any("POSITION_UNITS_EXCEEDED" in r for r in result.checks_failed)
+
+    def test_position_usd_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
+        validator.update_mid_price("AAPL", Decimal("150.0"))
+        # 101 shares * 150 = 15150 (> 15000 limit)
+        result = validator.validate_order("AAPL", "BUY", Decimal("101"), Decimal("150.0"))
+        assert not result.approved
+        assert any("POSITION_USD_EXCEEDED" in r for r in result.checks_failed)
+
+    def test_dynamic_unit_limit_adjustment(self, validator: PreTradeRiskValidator) -> None:
+        """Test that Unit Limits shrink as price increases to keep USD risk constant."""
+        # Setup: 15k USD limit.
+        # At $150, limit is 100 shares.
+        validator.update_mid_price("AAPL", Decimal("150.0"))
+        assert validator._effective_unit_limits["AAPL"] == Decimal("100")
+        
+        # At $300, limit should shrink to 50 shares.
+        validator.update_mid_price("AAPL", Decimal("300.0"))
+        assert validator._effective_unit_limits["AAPL"] == Decimal("50")
+        
+        # Try to buy 51 shares at $300 (Total $15,300 > 15k)
+        result = validator.validate_order("AAPL", "BUY", Decimal("51"), Decimal("300.0"))
+        assert not result.approved
+        assert any("POSITION_UNITS_EXCEEDED" in r for r in result.checks_failed)
+        assert any("Dynamic" in r for r in result.checks_failed)
 
     def test_concentration_limit_rejected(self, validator: PreTradeRiskValidator) -> None:
         validator.update_portfolio_value(Decimal("100000"))

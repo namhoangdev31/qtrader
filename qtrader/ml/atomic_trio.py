@@ -25,11 +25,15 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import uvicorn
 
 from qtrader.ml.chronos_adapter import ChronosForecastAdapter, ForecastResult
 from qtrader.ml.ollama_adapter import OllamaDecisionAdapter
@@ -60,6 +64,8 @@ class PipelineResult:
     decision: Any  # TradingDecision
     forecast_results: dict[str, Any] | None = None
     risk_results: dict[str, Any] | None = None
+    chronos_forecast: dict[str, Any] | None = None  # Mapping for TradingSystem
+    tabpfn_risk: dict[str, Any] | None = None      # Mapping for TradingSystem
     pipeline_latency_ms: float = 0.0
     forecast_latency_ms: float = 0.0
     risk_latency_ms: float = 0.0
@@ -169,39 +175,44 @@ class AtomicTrioPipeline:
         self._run_count += 1
         pipeline_start = time.time()
 
-        # Stage 1: Forecast Stage
+        # Parallel Stage 1 & 2: Forecast and Risk
         forecast_results = None
         forecast_latency = 0.0
-        if historical_prices and len(historical_prices) > 0 and self._forecast_engine is not None:
-            try:
-                t0 = time.time()
-                # Handle both sync (Chronos) and async (Ollama) forecast engines
-                if hasattr(self._forecast_engine, "predict") and asyncio.iscoroutinefunction(self._forecast_engine.predict):
-                    forecast_res = await self._forecast_engine.predict(
-                        historical_prices=historical_prices,
-                        prediction_length=prediction_length,
-                    )
-                else:
-                    forecast_res = self._forecast_engine.predict(
-                        historical_prices=historical_prices,
-                        prediction_length=prediction_length,
-                    )
-                forecast_results = forecast_res.to_dict()
-                forecast_latency = (time.time() - t0) * 1000
-            except Exception as e:
-                logger.warning(f"[ATOMIC_TRIO] Forecast stage failed: {e}")
-
-        # Stage 2: Risk Stage
         risk_results = None
         risk_latency = 0.0
-        if market_features and self._risk_engine is not None:
-            try:
-                t0 = time.time()
-                risk_res = await self._risk_engine.classify(features=market_features)
-                risk_results = risk_res.to_dict()
-                risk_latency = (time.time() - t0) * 1000
-            except Exception as e:
-                logger.warning(f"[ATOMIC_TRIO] Risk validation stage failed: {e}")
+
+        async def run_forecast():
+            nonlocal forecast_results, forecast_latency
+            if historical_prices and len(historical_prices) > 0 and self._forecast_engine is not None:
+                try:
+                    t0 = time.time()
+                    if hasattr(self._forecast_engine, "predict") and asyncio.iscoroutinefunction(self._forecast_engine.predict):
+                        forecast_res = await self._forecast_engine.predict(
+                            historical_prices=historical_prices,
+                            prediction_length=prediction_length,
+                        )
+                    else:
+                        forecast_res = self._forecast_engine.predict(
+                            historical_prices=historical_prices,
+                            prediction_length=prediction_length,
+                        )
+                    forecast_results = forecast_res.to_dict()
+                    forecast_latency = (time.time() - t0) * 1000
+                except Exception as e:
+                    logger.warning(f"[ATOMIC_TRIO] Forecast stage failed: {e}")
+
+        async def run_risk():
+            nonlocal risk_results, risk_latency
+            if market_features and self._risk_engine is not None:
+                try:
+                    t0 = time.time()
+                    risk_res = await self._risk_engine.classify(features=market_features)
+                    risk_results = risk_res.to_dict()
+                    risk_latency = (time.time() - t0) * 1000
+                except Exception as e:
+                    logger.warning(f"[ATOMIC_TRIO] Risk validation stage failed: {e}")
+
+        await asyncio.gather(run_forecast(), run_risk())
 
         # Stage 3: Decision Stage with RAG
         decision_latency = 0.0
@@ -246,6 +257,8 @@ class AtomicTrioPipeline:
             decision=decision,
             forecast_results=forecast_results,
             risk_results=risk_results,
+            chronos_forecast=forecast_results,
+            tabpfn_risk=risk_results,
             pipeline_latency_ms=pipeline_latency,
             forecast_latency_ms=forecast_latency,
             risk_latency_ms=risk_latency,
@@ -280,3 +293,55 @@ class AtomicTrioPipeline:
         res = self._last_result.to_dict()
         res["run_count"] = self._run_count
         return res
+
+
+# --- ML INFERENCE SERVER ---
+
+app = FastAPI(title="QTrader ML Engine", version="1.0.0")
+pipeline = AtomicTrioPipeline()
+
+
+class PredictRequest(BaseModel):
+    historical_prices: list[float] | None = None
+    market_features: dict[str, float] | None = None
+    market_context: dict[str, Any] | None = None
+    system_state: dict[str, Any] | None = None
+    prediction_length: int = 10
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "healthy", "service": "ML_ENGINE"}
+
+
+@app.get("/info")
+async def get_info() -> dict[str, Any]:
+    return {
+        "run_count": pipeline._run_count,
+        "is_initialized": pipeline._is_initialized,
+        "config": {
+            "forecast": pipeline.config.forecast_model_id,
+            "risk": pipeline.config.risk_model_id,
+            "decision": pipeline.config.decision_model_id,
+        }
+    }
+
+
+@app.post("/predict")
+async def predict(req: PredictRequest) -> dict[str, Any]:
+    try:
+        result = await pipeline.run(
+            historical_prices=req.historical_prices,
+            market_features=req.market_features,
+            market_context=req.market_context,
+            system_state=req.system_state,
+            prediction_length=req.prediction_length
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"[SERVER] Prediction failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -42,8 +42,8 @@ class TradeDBWriter:
             """
             CREATE TABLE IF NOT EXISTS trading_sessions (
                 session_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                status           VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-                mode             VARCHAR(20)  NOT NULL DEFAULT 'paper',
+                status           TEXT NOT NULL DEFAULT 'ACTIVE',
+                mode             TEXT NOT NULL DEFAULT 'paper',
                 start_time       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 end_time         TIMESTAMPTZ,
                 initial_capital  NUMERIC(24, 8) DEFAULT 0,
@@ -54,70 +54,75 @@ class TradeDBWriter:
             """,
             """
             CREATE TABLE IF NOT EXISTS fills (
-                fill_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                order_id         VARCHAR(100) NOT NULL,
-                symbol           VARCHAR(20)  NOT NULL,
-                side             VARCHAR(10)  NOT NULL,
+                fill_id          UUID DEFAULT gen_random_uuid(),
+                order_id         TEXT NOT NULL,
+                symbol           TEXT NOT NULL,
+                side             TEXT NOT NULL,
                 quantity         NUMERIC(24, 8) NOT NULL,
                 price            NUMERIC(24, 8) NOT NULL,
                 commission       NUMERIC(24, 8) NOT NULL DEFAULT 0,
-                timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+                timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                source           TEXT NOT NULL DEFAULT 'qtrader',
                 session_id       UUID REFERENCES trading_sessions(session_id),
-                metadata         JSONB        DEFAULT '{}'
+                metadata         JSONB DEFAULT '{}',
+                PRIMARY KEY (fill_id, timestamp)
             );
             """,
             """
             CREATE TABLE IF NOT EXISTS orders (
-                order_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                broker_order_id  VARCHAR(100),
-                symbol           VARCHAR(20)  NOT NULL,
-                side             VARCHAR(10)  NOT NULL,
-                order_type       VARCHAR(20)  NOT NULL DEFAULT 'MARKET',
+                order_id         UUID DEFAULT gen_random_uuid(),
+                broker_order_id  TEXT,
+                symbol           TEXT NOT NULL,
+                side             TEXT NOT NULL,
+                order_type       TEXT NOT NULL DEFAULT 'MARKET',
                 quantity         NUMERIC(24, 8) NOT NULL,
                 price            NUMERIC(24, 8),
-                status           VARCHAR(20)  NOT NULL DEFAULT 'SUBMITTED',
-                submitted_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                source           VARCHAR(50)  NOT NULL DEFAULT 'qtrader',
+                status           TEXT NOT NULL DEFAULT 'SUBMITTED',
+                submitted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                source           TEXT NOT NULL DEFAULT 'qtrader',
                 session_id       UUID REFERENCES trading_sessions(session_id),
-                metadata         JSONB        DEFAULT '{}'
+                metadata         JSONB DEFAULT '{}',
+                PRIMARY KEY (order_id, submitted_at)
             );
             """,
             """
             CREATE TABLE IF NOT EXISTS positions (
-                id               BIGSERIAL PRIMARY KEY,
-                symbol           VARCHAR(20)  NOT NULL,
+                id               BIGSERIAL,
+                symbol           TEXT NOT NULL,
                 quantity         NUMERIC(24, 8) NOT NULL,
                 average_price    NUMERIC(24, 8) NOT NULL,
                 unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 session_id       UUID REFERENCES trading_sessions(session_id),
+                PRIMARY KEY (id, timestamp),
                 UNIQUE (symbol, timestamp)
             );
             """,
             """
             CREATE TABLE IF NOT EXISTS pnl_snapshots (
-                id               BIGSERIAL PRIMARY KEY,
+                id               BIGSERIAL,
                 total_equity     NUMERIC(24, 8) NOT NULL,
                 cash             NUMERIC(24, 8) NOT NULL,
                 realized_pnl     NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 unrealized_pnl   NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 total_commission NUMERIC(24, 8) NOT NULL DEFAULT 0,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                session_id       UUID REFERENCES trading_sessions(session_id)
+                session_id       UUID REFERENCES trading_sessions(session_id),
+                PRIMARY KEY (id, timestamp)
             );
             """,
             """
             CREATE TABLE IF NOT EXISTS ai_thinking_logs (
-                id               BIGSERIAL PRIMARY KEY,
-                symbol           VARCHAR(20)  NOT NULL,
-                action           VARCHAR(20)  NOT NULL,
+                id               BIGSERIAL,
+                symbol           TEXT NOT NULL,
+                action           TEXT NOT NULL,
                 confidence       NUMERIC(10, 4) NOT NULL,
-                thinking         TEXT         NOT NULL,
+                thinking         TEXT NOT NULL,
                 explanation      TEXT,
                 timestamp        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 session_id       UUID REFERENCES trading_sessions(session_id),
-                metadata         JSONB        DEFAULT '{}'
+                metadata         JSONB        DEFAULT '{}',
+                PRIMARY KEY (id, timestamp)
             );
             """,
             """
@@ -125,7 +130,7 @@ class TradeDBWriter:
                 id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 session_id       UUID REFERENCES trading_sessions(session_id),
                 note_text        TEXT NOT NULL,
-                note_type        VARCHAR(20) NOT NULL DEFAULT 'OBSERVATION',
+                note_type        TEXT NOT NULL DEFAULT 'OBSERVATION',
                 embedding        FLOAT[],
                 timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 metadata         JSONB DEFAULT '{}'
@@ -134,7 +139,7 @@ class TradeDBWriter:
             """
             CREATE TABLE IF NOT EXISTS market_data_raw (
                 id               BIGSERIAL,
-                symbol           VARCHAR(20)  NOT NULL,
+                symbol           TEXT NOT NULL,
                 bid              NUMERIC(24, 8),
                 ask              NUMERIC(24, 8),
                 last_price       NUMERIC(24, 8),
@@ -148,10 +153,10 @@ class TradeDBWriter:
             CREATE TABLE IF NOT EXISTS config_changes (
                 id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 session_id       UUID REFERENCES trading_sessions(session_id),
-                parameter        VARCHAR(100) NOT NULL,
+                parameter        TEXT NOT NULL,
                 old_value        TEXT,
                 new_value        TEXT,
-                changed_by       VARCHAR(50) NOT NULL DEFAULT 'AI',
+                changed_by       TEXT NOT NULL DEFAULT 'AI',
                 timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
             """,
@@ -162,7 +167,7 @@ class TradeDBWriter:
                 cpu_pct          NUMERIC(5, 2),
                 mem_pct          NUMERIC(5, 2),
                 latency_ms       INTEGER,
-                status           VARCHAR(50),
+                status           TEXT,
                 timestamp        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 PRIMARY KEY (id, timestamp)
             );
@@ -177,13 +182,13 @@ class TradeDBWriter:
 
         # Try to create hypertables (requires timescaledb extension)
         hypertable_queries = [
-            "SELECT create_hypertable('fills', 'timestamp', if_not_exists => TRUE);",
-            "SELECT create_hypertable('orders', 'submitted_at', if_not_exists => TRUE);",
-            "SELECT create_hypertable('positions', 'timestamp', if_not_exists => TRUE);",
-            "SELECT create_hypertable('pnl_snapshots', 'timestamp', if_not_exists => TRUE);",
-            "SELECT create_hypertable('ai_thinking_logs', 'timestamp', if_not_exists => TRUE);",
-            "SELECT create_hypertable('market_data_raw', 'timestamp', if_not_exists => TRUE);",
-            "SELECT create_hypertable('system_health', 'timestamp', if_not_exists => TRUE);",
+            "SELECT create_hypertable('fills', 'timestamp', if_not_exists => TRUE, migrate_data => TRUE);",
+            "SELECT create_hypertable('orders', 'submitted_at', if_not_exists => TRUE, migrate_data => TRUE);",
+            "SELECT create_hypertable('positions', 'timestamp', if_not_exists => TRUE, migrate_data => TRUE);",
+            "SELECT create_hypertable('pnl_snapshots', 'timestamp', if_not_exists => TRUE, migrate_data => TRUE);",
+            "SELECT create_hypertable('ai_thinking_logs', 'timestamp', if_not_exists => TRUE, migrate_data => TRUE);",
+            "SELECT create_hypertable('market_data_raw', 'timestamp', if_not_exists => TRUE, migrate_data => TRUE);",
+            "SELECT create_hypertable('system_health', 'timestamp', if_not_exists => TRUE, migrate_data => TRUE);",
         ]
         for query in hypertable_queries:
             try:

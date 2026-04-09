@@ -117,6 +117,7 @@ class TradingSystem:
                 max_order_quantity=Decimal(str(self.config.max_order_qty)),
                 max_order_notional=Decimal(str(self.config.max_order_notional)),
                 max_position_per_symbol=Decimal(str(self.config.max_position_usd / self.config.reference_price)),
+                max_position_usd=Decimal(str(self.config.max_position_usd)),
                 max_orders_per_second=int(self.config.max_orders_per_second),
             )
         )
@@ -169,6 +170,7 @@ class TradingSystem:
         return {
             "status": "RUNNING" if self._running else "IDLE",
             "session_id": self.active_session_id,
+            "market_price": self.config.reference_price,
             "latency_ms": round(self.last_latency_ms, 2),
             "stats": self._stats,
             "module_traces": self._last_module_traces,
@@ -224,15 +226,24 @@ class TradingSystem:
         price = Decimal(str(data.get("price", "0")))
         bid = Decimal(str(data.get("best_bid", "0")))
         ask = Decimal(str(data.get("best_ask", "0")))
-        if price > 0: self.broker._quotes[symbol] = {"price": price}
-        
         if price > 0 and symbol:
+            self.broker._quotes[symbol] = {"price": price}
+            self.config.reference_price = float(price)
+            from qtrader.core.config import settings
+            old_ref = settings.ts_reference_price
+            settings.ts_reference_price = float(price)
+            config_manager.update("current_market_price", float(price))
+            self.pre_trade_risk.update_mid_price(symbol, price)
+            if abs(float(price) - old_ref) / old_ref > 0.01:
+                logger.info(f"[TS] Reference Price shifted > 1%: {old_ref:.2f} -> {price:.2f}")
+
             try:
                 await self.event_bus.publish(
                     MarketEvent(
                         source="coinbase_ws",
                         payload=MarketPayload(
                             symbol=symbol,
+                            price=price,
                             data=data,
                             bid=bid,
                             ask=ask,
@@ -305,10 +316,32 @@ class TradingSystem:
             symbol, ml_result or {}, self.broker._quotes, self.kill_switch, 
             self.guardrail_manager, self.allocator, self.recon, self.session_state
         )
+        
+        # [DISTRIBUTED SYNC] Broadcast trace to other containers (Dashboard)
+        from qtrader.core.events import DecisionTraceEvent, DecisionTracePayload
+        await self.event_bus.publish(
+            DecisionTraceEvent(
+                source="TradingSystem",
+                payload=DecisionTracePayload(
+                    model_id=f"TradingSystem-{symbol}",
+                    features={},
+                    signal=Decimal("0"),
+                    decision_price=Decimal(str(market_data["price"])),
+                    decision="HEARTBEAT" if not ml_result else "PIPELINE_COMPLETE",
+                    config_version=1,
+                    module_traces=self._last_module_traces
+                )
+            )
+        )
 
     async def _get_market_data(self, symbol: str) -> dict[str, Any]:
-        quote = self.broker._quotes.get(symbol, {})
-        price = float(quote.get("price", settings.ts_reference_price))
+        quote = self.broker._quotes.get(symbol) or \
+                self.broker._quotes.get(symbol.replace("-", "/")) or \
+                self.broker._quotes.get(symbol.replace("/", "-")) or {}
+        
+        from qtrader.core.config import settings
+        price = float(quote.get("price") or settings.ts_reference_price)
+        
         self._market_data[symbol].append({"close": price})
         if len(self._market_data[symbol]) > 1000: self._market_data[symbol].pop(0)
         

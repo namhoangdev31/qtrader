@@ -52,11 +52,9 @@ def get_sim_engine() -> Any:
 
         _simulation_engine = PaperTradingEngine(
             starting_capital=1000.0,
-            fee_rate=0.04,
             sl_pct=0.02,
             tp_pct=0.03,
             tick_interval=1.0,
-            base_price=50000.0,
         )
     return _simulation_engine
 
@@ -85,7 +83,8 @@ async def start_simulation(sys: TradingSystem | None = None) -> None:
             real_price = float(quote.get("price") or 0.0)
             if real_price > 0:
                 engine.update_base_price(real_price, force_current=True)
-                logger.info(f"[SIM] Synced simulation to real price: {real_price:.2f}")
+                engine.clear_history()
+                logger.info(f"[SIM] Synced simulation to real price: {real_price:.2f} and cleared history")
 
             if not _is_subscribed:
                 sys.event_bus.subscribe(EventType.MARKET_DATA, engine.handle_market_event)
@@ -165,7 +164,6 @@ async def update_sim_config(cfg: SimulationConfig) -> dict[str, Any]:
 
     _simulation_engine = PaperTradingEngine(
         starting_capital=cfg.initial_balance,
-        fee_rate=0.04,
         sl_pct=cfg.sl_pct,
         tp_pct=cfg.tp_pct,
         tick_interval=cfg.tick_interval,
@@ -519,11 +517,16 @@ async def forensics_updates(websocket: WebSocket) -> None:
         }
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
-    async def handler(event): await queue.put(True)
+    async def handler(event):
+        if event.event_type == EventType.DECISION_TRACE:
+            # Sync cross-container trace into local system state for dashboard visualization
+            sys._last_module_traces = getattr(event.payload, "module_traces", {})
+        await queue.put(True)
     
     # Forensics subscribes to more granular events
     sys.event_bus.subscribe(EventType.SIGNAL, handler)
     sys.event_bus.subscribe(EventType.DECISION_TRACE, handler)
+    sys.event_bus.subscribe(EventType.MARKET_DATA, handler) # Pulse on every tick
     engine.add_update_listener(lambda x: queue.put_nowait(True))
 
     try:
@@ -561,6 +564,7 @@ async def telemetry_updates(websocket: WebSocket) -> None:
             status["stats"]["signals"] = len(engine._thinking_history)
             status["peak_equity"] = engine._peak_equity
             status["module_traces"] = engine._last_trace.get("module_traces", status.get("module_traces", {}))
+            status["market_price"] = engine._current_price # Injection for dashboard widget
             
             uptime = time.time() - getattr(engine, "_start_time", time.time())
             latency = getattr(engine, "_last_latency_ms", 0.0)
@@ -580,10 +584,14 @@ async def telemetry_updates(websocket: WebSocket) -> None:
 
     queue: asyncio.Queue[bool] = asyncio.Queue()
     
-    # Subscribe to sim engine updates (fires every tick) instead of MARKET_DATA
+    # Subscribe to sim engine updates (fires every tick)
     engine.add_update_listener(lambda x: queue.put_nowait(True))
+    
     async def handler(event): await queue.put(True)
+    
+    # SYSTEM events for lifecycle, MARKET_DATA for real-time price updates
     sys.event_bus.subscribe(EventType.SYSTEM, handler)
+    sys.event_bus.subscribe(EventType.MARKET_DATA, handler)
 
     try:
         await websocket.send_json(await get_snapshot())
@@ -596,6 +604,7 @@ async def telemetry_updates(websocket: WebSocket) -> None:
         logger.error(f"[WS/TELEMETRY] Unexpected error: {e}")
     finally:
         sys.event_bus.unsubscribe(EventType.SYSTEM, handler)
+        sys.event_bus.unsubscribe(EventType.MARKET_DATA, handler)
 
 
 @ws_router.websocket("/ws/simulation")

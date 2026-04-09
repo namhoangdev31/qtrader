@@ -24,6 +24,7 @@ class LiveConfigSchema(BaseModel):
     sim_sma_long_window: int = Field(default=10, description="Long SMA window size")
     sim_crossover_threshold: float = Field(default=0.0001, description="Min SMA delta for signal")
     sim_reversal_threshold: float = Field(default=0.35, description="Threshold for reversal detection")
+    sim_mean_reversion_strength: float = Field(default=0.01, description="Strength of drift towards base price")
     
     # Execution & Simulation Fidelity
     stop_loss_pct: float = Field(default=0.025, description="Dynamic SL base percentage")
@@ -46,7 +47,7 @@ class LiveConfigSchema(BaseModel):
     sim_anomaly_threshold: float = Field(default=0.01, description="Price jump anomaly trigger")
     
     # Simulation Data & Baselines
-    reference_price_btc: float = Field(default=65000.0, description="Simulator baseline BTC")
+    reference_price_btc: float = Field(default=71522.97, description="Simulator baseline BTC")
     reference_price_eth: float = Field(default=3500.0, description="Simulator baseline ETH")
     max_md_points: int = Field(default=5000, description="Max market data points in memory")
     md_prune_target: int = Field(default=1000, description="Points to retain on prune")
@@ -56,6 +57,7 @@ class LiveConfigSchema(BaseModel):
     signal_interval_s: float = Field(default=1.0, description="Signal processing tick interval")
     volatility_multiplier: float = Field(default=1.0, description="Scaling factor for signal thresholds")
     min_history_for_alpha: int = Field(default=20, description="Min price points for ML prediction")
+    current_market_price: float = Field(default=71522.97, description="Latest market price from WebSocket")
 class DynamicConfigManager:
     """Manages system configuration with real-time AI overrides."""
 
@@ -104,6 +106,10 @@ class DynamicConfigManager:
                 self._change_callback(key, old_value, value)
             except Exception:
                 pass
+
+    def update(self, key: str, value: Any) -> None:
+        """Alias for set_override to maintain compatibility with real-time update patterns."""
+        self.set_override(key, value)
 
     def clear_overrides(self) -> None:
         """Reset all dynamic shifts to defaults."""
@@ -160,9 +166,13 @@ class DynamicSettingsMixin:
     def SMA_LONG_WINDOW(self) -> int: return config_manager.get("sim_sma_long_window")
     @property
     def CROSSOVER_THRESHOLD(self) -> float: return config_manager.get("sim_crossover_threshold")
+    @property
+    def MEAN_REVERSION_STRENGTH(self) -> float: return config_manager.get("sim_mean_reversion_strength")
     
     @property
     def TS_MAX_ORDERS_PER_SECOND(self) -> float: return config_manager.get("ts_max_orders_per_second")
+    @property
+    def MARKET_PRICE(self) -> float: return config_manager.get("current_market_price")
     
     # --- Static Settings (Non-AI yet or hard limits) ---
     @property

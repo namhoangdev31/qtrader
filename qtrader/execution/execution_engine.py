@@ -1,4 +1,5 @@
 # File: qtrader/execution/execution_engine.py
+from qtrader.core.events import FillPayload
 import asyncio
 import time
 from abc import ABC, abstractmethod
@@ -45,66 +46,34 @@ class OrderStatus(Enum):
 
 
 class ExchangeAdapter(ABC):
-    """Abstract base class for exchange adapters."""
 
     def __init__(self, name: str, logger: LoggerProtocol = logger) -> None:
         self.name = name
         self.logger = logger
 
     @abstractmethod
-    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
-        """
-        Send an order to the exchange.
-
-        Args:
-            order: OrderEvent to send
-
-        Returns:
-            Tuple (success, order_id or error_message)
-        """
+    async def submit_order(self, order: OrderEvent) -> str:
         pass
 
     @abstractmethod
     async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
-        """
-        Cancel an order on the exchange.
-
-        Args:
-            order_id: ID of the order to cancel
-
-        Returns:
-            Tuple (success, error_message)
-        """
         pass
 
     @abstractmethod
     async def get_position(self, symbol: str) -> Decimal:
-        """
-        Get current position for a symbol.
-
-        Args:
-            symbol: Trading symbol
-
-        Returns:
-            Position size (can be negative)
-        """
         pass
 
     async def get_positions(self) -> dict[str, Decimal]:
-        """Get current positions from the exchange."""
         return {}
 
     async def get_orderbook(self, symbol: str) -> dict[str, Any]:
-        """Get orderbook for a symbol."""
         return {}
 
     async def get_fees(self, symbol: str) -> dict[str, Decimal]:
-        """Get trading fees for a symbol."""
         return {}
 
 
 class SimulatedExchangeAdapter(ExchangeAdapter):
-    """Simulated exchange adapter for testing and development."""
 
     def __init__(
         self,
@@ -130,26 +99,19 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
         self._fill_callback = None  # Optional callback for fill events
 
     def set_price(self, symbol: str, price: Decimal) -> None:
-        """Set the simulated price for a symbol."""
         self.prices[symbol] = price
 
     def set_fill_callback(self, callback) -> None:
-        """Set callback for fill events. Callback signature: (order_id: str, fill_event: FillEvent) -> None"""
         self._fill_callback = callback
 
     async def _async_notify_fill(self, order_id: str, fill_event: FillEvent) -> None:
-        """Async helper to call fill callback."""
         if self._fill_callback:
             self._fill_callback(order_id, fill_event)
 
-    async def send_order(self, order: OrderEvent) -> tuple[bool, str | None]:
-        """Simulate sending an order to the exchange."""
+    async def submit_order(self, order: OrderEvent) -> str:
         try:
-            # Generate a unique order ID
             self.order_counter += 1
             order_id = f"SIM_{self.order_counter}_{int(time.time() * 1000)}"
-
-            # Store the order
             self.orders[order_id] = {
                 "order": order,
                 "status": OrderStatus.OPEN,
@@ -157,72 +119,21 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
                 "filled_size": Decimal("0"),
                 "avg_price": Decimal("0"),
             }
-
             self.logger.info(
-                f"Simulated exchange: Order sent - ID: {order_id}, Symbol: {order.symbol}, Side: {order.side}, Quantity: {order.quantity}, Price: {order.price}"
+                f"Simulated exchange: Order submitted - ID: {order_id}, Symbol: {order.payload.symbol}, Side: {order.payload.action}, Quantity: {order.payload.quantity}, Price: {order.payload.price}"
             )
-
-            # For simulation, we can immediately fill market orders or simulate limit order filling
-            if order.order_type == OrderType.MARKET.value:
-                # Market order: fill immediately at current price
-                if order.symbol in self.prices:
-                    fill_price = self.prices[order.symbol]
-                    # Simulate slippage (optional)
-                    slippage = Decimal("0.001")  # 0.1% slippage
-                    if order.side == "BUY":
-                        fill_price *= 1 + slippage
-                    else:
-                        fill_price *= 1 - slippage
-
-                    # Update position
-                    self.positions[order.symbol] = self.positions.get(
-                        order.symbol, Decimal("0")
-                    ) + (order.quantity if order.side == "BUY" else -order.quantity)
-
-                    # Create fill event
-                    fill_event = FillEvent(
-                        order_id=order_id,
-                        symbol=order.symbol,
-                        timestamp=datetime.utcnow(),
-                        side=order.side,
-                        quantity=order.quantity,
-                        price=fill_price,
-                        commission=Decimal("0"),
-                    )
-
-                    # Update order status
+            if order.payload.order_type == "MARKET":
+                if order.payload.symbol in self.prices:
+                    fill_price = self.prices[order.payload.symbol]
                     self.orders[order_id]["status"] = OrderStatus.FILLED
-                    self.orders[order_id]["filled_size"] = order.quantity
+                    self.orders[order_id]["filled_size"] = order.payload.quantity
                     self.orders[order_id]["avg_price"] = fill_price
-
-                    # Notify fill callback asynchronously
-                    if self._fill_callback:
-                        asyncio.create_task(self._async_notify_fill(order_id, fill_event))
-
-                    # Return the fill event via callback? In a real system, we'd emit an event.
-                    # For this adapter, we return the order ID and the caller can request fills.
-                    return True, order_id
-                else:
-                    # No price available, reject order
-                    self.orders[order_id]["status"] = OrderStatus.REJECTED
-                    return False, f"No price available for symbol {order.symbol}"
-            else:
-                # Limit order: remain open until price conditions are met
-                # In simulation, we'll just leave it open and let the caller check for fills later
-                self.logger.info(f"Simulated exchange: Limit order placed - ID: {order_id}")
-                return True, order_id
-
-        except ConnectionError as e:
-            self.logger.critical(f"CRITICAL: Exchange connection lost: {e}")
-            if self.kill_switch:
-                self.kill_switch.trigger_on_critical_failure("BROKER_DISCONNECT", str(e))
-            return False, f"Exchange connection lost: {e}"
+            return order_id
         except Exception as e:
-            self.logger.error(f"Error sending order to simulated exchange: {e}", exc_info=True)
-            return False, str(e)
+            self.logger.error(f"Simulated exchange submission error: {e}", exc_info=True)
+            raise
 
     async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
-        """Simulate cancelling an order on the exchange."""
         if order_id not in self.orders:
             return False, f"Order ID {order_id} not found"
 
@@ -235,78 +146,49 @@ class SimulatedExchangeAdapter(ExchangeAdapter):
         return True, None
 
     async def get_position(self, symbol: str) -> Decimal:
-        """Get simulated position for a symbol."""
         return self.positions.get(symbol, Decimal("0"))
 
     def check_and_fill_limit_orders(self, current_prices: dict[str, Decimal]) -> list:
-        """
-        Check limit orders against current prices and fill them if conditions are met.
-        This is a helper method for simulation to generate fill events.
-
-        Args:
-            current_prices: Dictionary of symbol -> current price
-
-        Returns:
-            List of FillEvent objects for orders that were filled
-        """
         fills = []
         for order_id, order_info in self.orders.items():
             if order_info["status"] != OrderStatus.OPEN:
                 continue
 
             order = order_info["order"]
-            symbol = order.symbol
+            symbol = order.payload.symbol
 
             if symbol not in current_prices:
                 continue
 
-            current_price = current_prices[symbol]
-            should_fill = False
-            fill_price = current_price
+            price = current_prices[symbol]
+            side = order.payload.action
+            limit_price = order.payload.price
 
-            if order.side == "BUY" and order.price is not None and current_price <= order.price:
-                should_fill = True
-            elif order.side == "SELL" and order.price is not None and current_price >= order.price:
-                should_fill = True
+            if limit_price is None:
+                continue
 
-            if should_fill:
-                # Fill the order
-                self.positions[symbol] = self.positions.get(symbol, Decimal("0")) + (
-                    order.quantity if order.side == "BUY" else -order.quantity
-                )
-
+            can_fill = (side == "BUY" and price <= limit_price) or (side == "SELL" and price >= limit_price)
+            if can_fill:
                 fill_event = FillEvent(
-                    order_id=order_id,
-                    symbol=symbol,
-                    timestamp=datetime.utcnow(),
-                    side=order.side,
-                    quantity=order.quantity,
-                    price=fill_price,
-                    commission=Decimal("0"),
+                    source="SimulatedExchange",
+                    payload=FillPayload(
+                        order_id=order_id,
+                        symbol=symbol,
+                        side=side,
+                        quantity=order.payload.quantity,
+                        price=price,
+                        commission=Decimal("0.0"),
+                    )
                 )
                 fills.append(fill_event)
-
-                # Update order status
                 order_info["status"] = OrderStatus.FILLED
-                order_info["filled_size"] = order.quantity
-                order_info["avg_price"] = fill_price
-
-                # Notify fill callback asynchronously
-                if self._fill_callback:
-                    asyncio.create_task(self._async_notify_fill(order_id, fill_event))
-
-                self.logger.info(
-                    f"Simulated exchange: Limit order filled - ID: {order_id}, Symbol: {symbol}, Price: {fill_price}"
-                )
+                order_info["filled_size"] = order.payload.quantity
+                order_info["avg_price"] = price
 
         return fills
 
 
 class ExecutionEngine:
-    """
-    Real execution layer connecting QTrader to exchanges.
-    Handles order validation, routing, execution logic, position tracking, retry logic, failover, and safety checks.
-    """
 
     def __init__(
         self,
@@ -371,7 +253,6 @@ class ExecutionEngine:
         self._is_running = False
 
     async def start(self) -> None:
-        """Start the execution engine background tasks."""
         if self._is_running:
             return
 
@@ -380,7 +261,6 @@ class ExecutionEngine:
         self.logger.info("ExecutionEngine started (with Rust Worker Thread)")
 
     async def stop(self) -> None:
-        """Stop the execution engine background tasks."""
         self._is_running = False
         self._worker_queue.put(None)  # Signal worker to stop
         self._worker_thread.join(timeout=2.0)
@@ -388,12 +268,8 @@ class ExecutionEngine:
 
     from qtrader.core.latency import enforce_latency
 
-    @enforce_latency(threshold_ms=2.0)  # Further reduced due to dedicated thread
+    @enforce_latency(threshold_ms=2.0)
     async def execute_order(self, order: OrderEvent, attempt: int = 1) -> tuple[bool, str | None]:
-        """
-        Execute an order with Python-side rate limiting and background Rust processing.
-        """
-        # 1. Python-side Rate Limiting (Safety Check)
         if not self.rate_limiter.consume():
             self.logger.warning(f"Rate limit exceeded for {order.symbol}, deferring...")
             await self.rate_limiter.wait_and_consume()
@@ -412,22 +288,29 @@ class ExecutionEngine:
             last_id = None
             
             for r_order, exchange in routed_orders:
+                from qtrader.core.events import OrderPayload
                 dispatch_order = OrderEvent(
-                    order_id=f"{exchange}_{r_order.id}",
-                    symbol=r_order.symbol,
-                    timestamp=datetime.utcnow(),
-                    order_type="MARKET" if r_order.order_type == RustOrderType.Market else "LIMIT",
-                    side="BUY" if r_order.side == RustSide.Buy else "SELL",
-                    quantity=Decimal(str(r_order.qty)),
-                    price=Decimal(str(r_order.price)) if r_order.price > 0 else None,
-                    metadata={**(order.metadata or {}), "exchange": exchange}
+                    source="ExecutionEngine",
+                    timestamp=int(time.time() * 1_000_000),
+                    payload=OrderPayload(
+                        order_id=f"{exchange}_{r_order.id}",
+                        symbol=r_order.symbol,
+                        action="BUY" if r_order.side == RustSide.Buy else "SELL",
+                        quantity=Decimal(str(r_order.qty)),
+                        price=Decimal(str(r_order.price)) if r_order.price > 0 else None,
+                        order_type="MARKET" if r_order.order_type == RustOrderType.Market else "LIMIT",
+                        metadata={**(order.payload.metadata or {}), "exchange": exchange}
+                    )
                 )
                 
-                success, result = await self.exchange_adapter.send_order(dispatch_order)
-                if success:
-                    last_id = result
-                else:
+                try:
+                    broker_oid = await self.exchange_adapter.submit_order(dispatch_order)
+                    last_id = broker_oid
+                except Exception as e:
+                    self.logger.error(f"Failed to submit order to {exchange}: {e}")
                     all_success = False
+                    last_id = str(e)
+                    break # Stop dispatching subsequent legs if one fails
             
             return all_success, last_id
 
@@ -436,27 +319,14 @@ class ExecutionEngine:
             return False, str(e)
 
     async def _on_retry_order(self, event: Any) -> None:
-        """Handler for RetryOrderEvent."""
         from qtrader.core.events import RetryOrderEvent
-
         if isinstance(event, RetryOrderEvent):
             await self.execute_order(event.order, attempt=event.attempt)
 
     async def cancel_order(self, order_id: str) -> tuple[bool, str | None]:
-        """Cancel an order via the adapter purely stateless."""
         return await self.exchange_adapter.cancel_order(order_id)
 
     def _validate_order(self, order: OrderEvent) -> str | None:
-        """
-        Validate an order before sending.
-
-        Args:
-            order: OrderEvent to validate
-
-        Returns:
-            Error message if invalid, None if valid
-        """
-        # Check quantity
         if order.quantity <= 0:
             return "Order quantity must be positive"
 
@@ -478,21 +348,14 @@ class ExecutionEngine:
 
         return None
 
-    # Redundant loop removed for event-driven architecture
-
     def _execution_worker_loop(self) -> None:
-        """
-        Background thread loop that manages the RustExecutionEngine synchronously.
-        """
-        # Initialize Rust engine in this thread
         self._rust_engine = RustExecutionEngine(
             risk_engine=self._rust_risk,
-            initial_capital=1000000.0, # Placeholder
+            initial_capital=1000000.0,
             routing_mode=RustRoutingMode.Smart,
             max_retries=self._max_retry_attempts,
         )
         loop = asyncio.new_event_loop() # For future completion if needed
-
         while True:
             try:
                 item = self._worker_queue.get()
@@ -503,20 +366,20 @@ class ExecutionEngine:
                 
                 if cmd == "EXECUTE":
                     order = data
-                    # Map to Rust
-                    rust_side = RustSide.Buy if order.side == "BUY" else RustSide.Sell
-                    rust_type = RustOrderType.Market if order.order_type == "MARKET" else RustOrderType.Limit
+                    # Map to Rust using payload (Standash §2)
+                    rust_side = RustSide.Buy if order.payload.action == "BUY" else RustSide.Sell
+                    rust_type = RustOrderType.Market if order.payload.order_type == "MARKET" else RustOrderType.Limit
                     rust_order = RustOrder(
-                        id=int(time.time() * 1000),
-                        symbol=order.symbol,
+                        id=str(int(time.time() * 1000)),
+                        symbol=order.payload.symbol,
                         side=rust_side,
-                        qty=float(order.quantity),
-                        price=float(order.price) if order.price else 0.0,
+                        qty=float(order.payload.quantity),
+                        price=float(order.payload.price) if order.payload.price else 0.0,
                         order_type=rust_type,
                         timestamp_ms=int(time.time() * 1000)
                     )
                     
-                    market_data = {order.symbol: (100.0, 100.1)} # Simplified
+                    market_data = {order.payload.symbol: (100.0, 100.1)} # Simplified
                     
                     try:
                         result = self._rust_engine.execute_order(
@@ -530,12 +393,12 @@ class ExecutionEngine:
 
                 elif cmd == "FILL_UPDATE":
                     fill_event = data
-                    rust_side = RustSide.Buy if fill_event.side == "BUY" else RustSide.Sell
+                    rust_side = RustSide.Buy if fill_event.payload.side == "BUY" else RustSide.Sell
                     self._rust_engine.update_fill(
-                        fill_event.symbol,
+                        fill_event.payload.symbol,
                         rust_side,
-                        float(fill_event.quantity),
-                        float(fill_event.price)
+                        float(fill_event.payload.quantity),
+                        float(fill_event.payload.price)
                     )
 
             except Exception as e:
@@ -545,69 +408,51 @@ class ExecutionEngine:
 
     # Methods to be called by the exchange adapter or market data feed to update order status
     def _on_order_filled(self, order_id: str, fill_event: FillEvent) -> None:
-        """Callback to handle an order fill."""
         # 1. Sync Rust state via background worker
         self._worker_queue.put(("FILL_UPDATE", fill_event, None))
         
         # 2. Propagation & Logging
-
-        # Standardized institutional trade log
         from qtrader.execution.trade_logger import TradeLogger
 
-        trace_id = getattr(fill_event, "trace_id", "no_trace")
+        trace_id = getattr(fill_event.payload, "trace_id", "no_trace")
         TradeLogger.log_trade(
-            symbol=fill_event.symbol,
-            side=fill_event.side,
-            quantity=float(fill_event.quantity),
-            price=float(fill_event.price),
+            symbol=fill_event.payload.symbol,
+            side=fill_event.payload.side,
+            quantity=float(fill_event.payload.quantity),
+            price=float(fill_event.payload.price),
             trace_id=trace_id,
-            timestamp=fill_event.timestamp,
+            timestamp=getattr(fill_event, "timestamp", time.time()),
         )
 
-        # ML Explainability: Log decision attribution (Standash §13)
         self._log_explainability(fill_event, trace_id)
 
     def _log_explainability(self, fill_event: FillEvent, trace_id: str) -> None:
-        """Log ML explainability for executed fills (Standash §13).
-
-        Records which factors contributed to the trade decision,
-        providing institutional transparency for audit and compliance.
-        """
         try:
-            # Extract decision metadata from fill event
-            metadata = getattr(fill_event, "metadata", {})
+            # Extract decision metadata from fill event payload
+            metadata = getattr(fill_event.payload, "metadata", {})
             explanation = metadata.get("explanation", "No explanation available")
             reasoning = metadata.get("reasoning", "No reasoning available")
             ml_confidence = metadata.get("confidence", 0.0)
             ml_signal = metadata.get("ml_signal", "UNKNOWN")
 
             self.logger.info(
-                f"[EXPLAINABILITY] Trade {trace_id} | "
-                f"Signal: {ml_signal} | Confidence: {ml_confidence:.0%} | "
-                f"Reasoning: {reasoning} | "
-                f"Explanation: {explanation[:200]}"
+                f"[ML_TRACE] {trace_id} | Signal: {ml_signal} (Conf: {ml_confidence:.2f}) | Logic: {explanation}"
             )
         except Exception as e:
             self.logger.debug(f"[EXPLAINABILITY] Failed to log explainability: {e}")
 
     def _on_order_cancelled(self, order_id: str) -> None:
-        """Callback to handle an order cancellation."""
         self.logger.info(f"Order cancelled: {order_id}")
 
     async def _update_position_from_fill(self, fill_event: FillEvent) -> None:
-        """[STATELESS_EXECUTION]: Update central state store instead of local trackers."""
-        symbol = fill_event.symbol
-        quantity = fill_event.quantity if fill_event.side == "BUY" else -fill_event.quantity
+        symbol = fill_event.payload.symbol
+        quantity = fill_event.payload.quantity if fill_event.payload.side == "BUY" else -fill_event.payload.quantity
 
-        # We rely on the orchestrator to do the primary update, but we ensure
-        # consistency here if required. However, for a truly stateless worker,
-        # we can just fetch and verify.
         current = await self.state_store.get_position(symbol)
         if current:
-            # Recompute average price and update
             new_qty = current.quantity + quantity
             new_cost = (current.quantity * current.average_price) + (
-                fill_event.quantity * fill_event.price
+                fill_event.payload.quantity * fill_event.payload.price
             )
             new_avg = new_cost / new_qty if new_qty != 0 else Decimal("0")
             await self.state_store.set_position(
@@ -623,18 +468,16 @@ class ExecutionEngine:
                 Position(
                     symbol=symbol,
                     quantity=quantity,
-                    average_price=fill_event.price,
+                    average_price=fill_event.payload.price,
                     timestamp=datetime.utcnow(),
                 )
             )
 
     async def get_position(self, symbol: str) -> Decimal:
-        """[STATELESS_EXECUTION]: Fetch current position from central state store."""
         pos = await self.state_store.get_position(symbol)
         return pos.quantity if pos else Decimal("0")
 
     async def get_average_price(self, symbol: str) -> Decimal | None:
-        """[STATELESS_EXECUTION]: Fetch average price from central state store."""
         pos = await self.state_store.get_position(symbol)
         return pos.average_price if pos else None
 

@@ -24,8 +24,7 @@ class SignalMixin:
                 self._price_history = self._price_history[-self.PRICE_HISTORY_PRUNE:]
             return self._current_price
     
-        mean_reversion_strength = 0.05
-        drift = mean_reversion_strength * (self._base_price - self._current_price)
+        drift = self.MEAN_REVERSION_STRENGTH * (self._base_price - self._current_price)
         noise = random.gauss(0, self._volatility * self._current_price)  # noqa: S311
         self._current_price = max(
             self._current_price + drift + noise,
@@ -54,6 +53,9 @@ class SignalMixin:
             return None
         
         recent = self._price_history[-self.SMA_LONG_WINDOW * 2:]
+        if len(recent) < self.SMA_LONG_WINDOW:
+            return None
+            
         sma_short = sum(recent[-self.SMA_SHORT_WINDOW:]) / self.SMA_SHORT_WINDOW
         sma_long = sum(recent[-self.SMA_LONG_WINDOW:]) / self.SMA_LONG_WINDOW
     
@@ -68,9 +70,14 @@ class SignalMixin:
             avg_l = sum(losses) / len(losses) if losses else 0
             if avg_g == 0 and avg_l == 0:
                 rsi = 50.0
+            elif avg_l == 0:
+                rsi = 100.0
             else:
-                rs = avg_g / max(avg_l, 0.0001)
+                rs = avg_g / avg_l
                 rsi = 100 - 100 / (1 + rs)
+                
+        # Clamp RSI to [0, 100]
+        rsi = max(0.0, min(100.0, rsi))
     
         if sma_short > sma_long * (1 + self.CROSSOVER_THRESHOLD) and rsi < self.RSI_BULL_GATE:
             self._last_thinking = (

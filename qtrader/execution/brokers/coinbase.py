@@ -133,6 +133,29 @@ class PaperAccount:
             self.positions.pop(asset, None)
             self.avg_entry_prices.pop(asset, None)
 
+    def get_positions(self) -> dict[str, list[Any]]:
+        """Returns the current positions as a list of lots per symbol.
+        
+        This satisfies the interface expected by the SignalEngine for exit trigger checks.
+        """
+        from collections import namedtuple
+        Lot = namedtuple("Lot", ["avg_price", "qty", "side", "trade_id"])
+        
+        results: dict[str, list[Any]] = {}
+        for sym, qty in self.positions.items():
+            if qty == 0:
+                continue
+            avg_p = self.avg_entry_prices.get(sym, Decimal("0"))
+            results[sym] = [
+                Lot(
+                    avg_price=float(avg_p),
+                    qty=float(qty),
+                    side="BUY" if qty > 0 else "SELL",
+                    trade_id=f"paper-{sym}"
+                )
+            ]
+        return results
+
 
 class CoinbaseBrokerAdapter(BrokerAdapter):
     """
@@ -699,6 +722,42 @@ class CoinbaseBrokerAdapter(BrokerAdapter):
             return
         self._ws_running = True
         self._ws_task = asyncio.create_task(self._websocket_loop())
+        
+        # In simulation mode, also listen to internal Redis market feed (Unified Heartbeat)
+        if self.simulate and HAS_REDIS and self._redis:
+            async def redis_market_listener():
+                try:
+                    from qtrader.core.events import EventType
+                    pubsub = self._redis.pubsub()
+                    # Subscribe to the key that EventBus uses for MarketData
+                    channel = f"{settings.redis_prefix}:{EventType.MARKET_DATA.value}"
+                    await pubsub.subscribe(channel)
+                    logger.info(f"[SIM_FEED] Listening for unified heartbeat on {channel}")
+                    
+                    async for message in pubsub.listen():
+                        if not self._ws_running: break
+                        if message["type"] == "message":
+                            try:
+                                data = json.loads(message["data"])
+                                # Extract payload and pass to market data handler
+                                payload = data.get("payload", {})
+                                if payload:
+                                    # Format for _handle_ws_message expecting "ticker" style
+                                    ticker_data = {
+                                        "type": "ticker",
+                                        "product_id": payload.get("symbol", "BTC-USD"),
+                                        "price": str(payload.get("data", {}).get("price", "0")),
+                                        "best_bid": str(payload.get("bid", "0")),
+                                        "best_ask": str(payload.get("ask", "0")),
+                                    }
+                                    await self._handle_ws_message(ticker_data)
+                            except Exception as e:
+                                logger.error(f"[SIM_FEED] Parse error: {e}")
+                except Exception as e:
+                    logger.error(f"[SIM_FEED] Execution error: {e}")
+
+            asyncio.create_task(redis_market_listener())
+
         logger.info(
             f"[COINBASE_WS] WebSocket loop started | products={self._ws_product_ids} | simulate={self.simulate}"
         )

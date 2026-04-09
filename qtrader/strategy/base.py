@@ -246,12 +246,17 @@ class BaseStrategy:
         timestamp = datetime.now()
         # Generate a simple order ID based on symbol and timestamp
         order_id = f"{self.symbol}_{int(timestamp.timestamp())}"
+        
+        from qtrader.core.events import OrderPayload
         return OrderEvent(
-            order_id=order_id,
-            symbol=self.symbol,
-            timestamp=timestamp,
-            order_type=order_type,
-            side=side,
-            quantity=Decimal(str(quantity)),
-            price=Decimal(str(price)) if price is not None else None,
+            source=f"Strategy:{self.__class__.__name__}",
+            timestamp=int(timestamp.timestamp() * 1_000_000),
+            payload=OrderPayload(
+                order_id=order_id,
+                symbol=self.symbol,
+                action=side,
+                quantity=Decimal(str(quantity)),
+                price=Decimal(str(price)) if price is not None else None,
+                order_type=order_type,
+            )
         )

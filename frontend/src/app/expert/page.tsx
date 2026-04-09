@@ -203,6 +203,7 @@ export default function ExpertDashboard() {
                 }
                 simRunning={telemetry?.status.running || false}
                 liveTrace={forensics?.module_traces}
+                currentPrice={telemetry?.status.market_price}
               />
             </div>
             <div className="md:col-span-2">

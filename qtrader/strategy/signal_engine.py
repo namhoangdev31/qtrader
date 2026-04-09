@@ -33,10 +33,21 @@ class SignalEngine:
     ) -> dict[str, Any] | None:
         """Core signal generation logic using dynamic thresholds and Kelly sizing."""
         decision = ml_result["decision"]
-        action = str(
-            decision.action.value if hasattr(decision.action, "value") else decision.action
-        )
-        confidence = float(decision.confidence)
+        
+        # Handle both object and dictionary representation (remote ML compatibility)
+        if isinstance(decision, dict):
+            action_val = decision.get("action", "HOLD")
+            action = str(action_val.value if hasattr(action_val, "value") else action_val)
+            confidence = float(decision.get("confidence", 0.0))
+            reasoning = str(decision.get("reasoning", "No reasoning provided"))
+            base_size = float(decision.get("position_size_multiplier", 0.1))
+        else:
+            action = str(
+                decision.action.value if hasattr(decision.action, "value") else decision.action
+            )
+            confidence = float(decision.confidence)
+            reasoning = str(decision.reasoning)
+            base_size = float(getattr(decision, "position_size_multiplier", 0.1))
 
         min_conf = config_manager.get("MIN_CONFIDENCE")
         exit_conf = config_manager.get("EXIT_CONFIDENCE")
@@ -44,8 +55,6 @@ class SignalEngine:
 
         if action == "HOLD" or confidence < threshold:
             return None
-
-        base_size = float(getattr(decision, "position_size_multiplier", 0.1))
         
         kelly_multiplier = self._calculate_kelly_multiplier()
         
@@ -59,7 +68,7 @@ class SignalEngine:
             "position_size_multiplier": position_size,
             "confidence": confidence,
             "kelly_multiplier": kelly_multiplier,
-            "reasoning": str(decision.reasoning),
+            "reasoning": reasoning,
         }
 
     def _calculate_kelly_multiplier(self) -> float:
@@ -107,18 +116,27 @@ class SignalEngine:
             return None
 
         for lot in positions_lots:
-            avg_entry = float(lot.avg_price)
+            # Handle both object and dictionary representation of a Lot/Position
+            if isinstance(lot, dict):
+                avg_entry = float(lot.get("avg_price", 0.0))
+                side = lot.get("side", "BUY")
+                trade_id = lot.get("trade_id", "unknown")
+            else:
+                avg_entry = float(getattr(lot, "avg_price", 0.0))
+                side = getattr(lot, "side", "BUY")
+                trade_id = getattr(lot, "trade_id", "unknown")
+
             pnl_pct = (current_price - avg_entry) / avg_entry if avg_entry > 0 else 0
             
-            if lot.side == "BUY":
+            if side == "BUY":
                 if pnl_pct <= -sl_pct:
-                    return {"symbol": symbol, "side": "SELL", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
+                    return {"symbol": symbol, "side": "SELL", "reason": "STOP_LOSS", "lot_id": trade_id}
                 if pnl_pct >= tp_pct:
-                    return {"symbol": symbol, "side": "SELL", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
-            elif lot.side == "SELL":
+                    return {"symbol": symbol, "side": "SELL", "reason": "TAKE_PROFIT", "lot_id": trade_id}
+            elif side == "SELL":
                 if pnl_pct >= sl_pct:
-                    return {"symbol": symbol, "side": "BUY", "reason": "STOP_LOSS", "lot_id": lot.trade_id}
+                    return {"symbol": symbol, "side": "BUY", "reason": "STOP_LOSS", "lot_id": trade_id}
                 if pnl_pct <= -tp_pct:
-                    return {"symbol": symbol, "side": "BUY", "reason": "TAKE_PROFIT", "lot_id": lot.trade_id}
+                    return {"symbol": symbol, "side": "BUY", "reason": "TAKE_PROFIT", "lot_id": trade_id}
         
         return None

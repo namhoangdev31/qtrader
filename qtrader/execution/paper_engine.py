@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from decimal import Decimal
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -38,7 +39,7 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
         sl_pct: float = 0.02,
         tp_pct: float = 0.03,
         tick_interval: float = 0.2,
-        base_price: float = 50000.0,
+        base_price: float | None = None,
         db_writer: Any | None = None,
         session_id: str | None = None,
     ) -> None:
@@ -61,13 +62,14 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
             base_take_profit_pct=tp_pct,
         )
     
+        ref_price = base_price if base_price is not None else settings.ts_reference_price
         self._cash = starting_capital
         self._total_commissions = 0.0
         self._total_gross_pnl = 0.0
         self._peak_equity = starting_capital
         self._max_drawdown = 0.0
-        self._current_price = base_price
-        self._base_price = base_price
+        self._current_price = ref_price
+        self._base_price = ref_price
         self._price_history: list[float] = []
         self._volatility = 0.0003
         self._running = False
@@ -78,35 +80,10 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
         self._last_thinking = "Awaiting first analysis..."
         self._last_explanation = "Simulation engine is initializing market data buffer..."
         self._thinking_history: list[dict[str, Any]] = []
-    
-        self._open_positions: dict[str, list[OpenPosition]] = {}
-        self._managed_positions: dict[str, list[OpenPosition]] = {}
-    
-        self.adaptive = AdaptiveConfig(
-            base_stop_loss_pct=sl_pct,
-            base_take_profit_pct=tp_pct,
-        )
-    
-        self._cash = starting_capital
-        self._total_commissions = 0.0
-        self._total_gross_pnl = 0.0
-        self._peak_equity = starting_capital
-        self._max_drawdown = 0.0
-        self._current_price = base_price
-        self._base_price = base_price
-        self._price_history: list[float] = []
-        self._volatility = 0.0003
-        self._running = False
-        self._tick_interval = tick_interval
-        self._last_external_tick = 0.0
-        self._start_time = time.time()
-        self._last_latency_ms = 0.0
-        self._last_thinking = "Awaiting first analysis..."
-        self._last_explanation = "Simulation engine is initializing market data buffer..."
-        self._thinking_history: list[dict[str, Any]] = []
+        
         self._last_trace: dict[str, Any] = {
             "module_traces": {
-                "ingestion": {"status": "INITIALIZING", "price": base_price},
+                "ingestion": {"status": "INITIALIZING", "price": ref_price},
                 "AlphaEngine": {"status": "INITIALIZING"},
                 "alpha": {"status": "INITIALIZING", "indicators": {"rsi": 50.0}},
                 "RiskEngine": {"status": "INITIALIZING"},
@@ -119,7 +96,6 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
             }
         }
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
-    
         self._tick_count = 0
 
     def add_update_listener(self, handler: Callable[[dict[str, Any]], None]) -> None:
@@ -346,14 +322,45 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
             _LOG.error(f"[PAPER] Simulation tick error: {e}", exc_info=True)
 
     async def run_continuous(self) -> None:
-        """DEPRECATED: Background loop. Now drive via handle_market_event.
+        """Background loop driving the heartbeat of the simulation.
         
-        Maintained for legacy interface compatibility but essentially a no-op 
-        start marker.
+        Broadcasts MarketEvents to the global EventBus so other containers (Orchestrator, etc.)
+        can synchronize to the same price feed.
         """
+        from qtrader.core.events import MarketEvent, MarketPayload
         self._running = True
         self._start_time = time.time()
-        _LOG.info("[PAPER] Simulation state marked as RUNNING")
+        _LOG.info("[PAPER] Simulation HEARTBEAT started")
+
+        while self._running:
+            try:
+                # 1. Self-drive the price simulation
+                self._on_tick()
+
+                # 2. Extract current price and broadcast to system
+                price = self._current_price
+                if price > 0:
+                    event = MarketEvent(
+                        source="PaperTradingEngine",
+                        payload=MarketPayload(
+                            symbol="BTC-USD",
+                            price=Decimal(str(price)),
+                            data={"price": price},
+                            bid=Decimal(str(round(price * 0.9999, 2))),
+                            ask=Decimal(str(round(price * 1.0001, 2))),
+                        )
+                    )
+                    self._last_latency_ms = 0.0 # Internal loop has negligible latency
+                    self._publish_to_bus(event)
+
+                # 3. Controlled cadence (default 1s or as configured)
+                await asyncio.sleep(self._tick_interval)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                _LOG.error(f"[PAPER] Error in heartbeat loop: {e}")
+                await asyncio.sleep(1)
 
     def stop(self) -> None:
         self._running = False
@@ -408,6 +415,16 @@ class PaperTradingEngine(DynamicSettingsMixin, SignalMixin, PositionMixin, FillM
     
         except Exception as e:
             _LOG.error(f"[PAPER] Failed to handle external market data: {e}")
+
+    def clear_history(self) -> None:
+        """Clear the price history buffer and reset tick indicators.
+        
+        Useful when the base price is updated significantly to avoid 
+        distorted indicators (e.g. extreme RSI) from stale data.
+        """
+        self._price_history.clear()
+        self._tick_count = 0
+        _LOG.info("[PAPER] Price history buffer cleared")
 
     def reset(self) -> None:
         self._cash = self.starting_capital

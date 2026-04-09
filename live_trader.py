@@ -60,6 +60,7 @@ async def run_live_trader(args: argparse.Namespace) -> None:
     # === 3. KÍCH HOẠT BỘ NÃO ===
     try:
         await system.start()
+        await system._shutdown_event.wait()
     except Exception as e:
         log.exception(f"Fatal error in trading system: {e}")
     finally:

@@ -99,6 +99,7 @@ class EventType(str, Enum):
 class MarketPayload(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     symbol: str
+    price: Decimal
     bid: Decimal
     ask: Decimal
     seq_id: int | None = None
@@ -289,11 +290,12 @@ class PipelineErrorPayload(BaseModel):
 class DecisionTracePayload(BaseModel):
     model_config = ConfigDict(frozen=True)
     model_id: str
-    features: dict[str, Decimal]
+    features: dict[str, Any]
     signal: Decimal
     decision_price: Decimal
     decision: str
     config_version: int
+    module_traces: dict[str, Any] = Field(default_factory=dict)
 
 
 class DecisionErrorPayload(BaseModel):

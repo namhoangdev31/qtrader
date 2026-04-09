@@ -15,7 +15,7 @@ logger = logging.getLogger("qtrader.execution.pre_trade_risk")
 
 try:
     import qtrader_core
-    from qtrader.core.oms import Side as RustSide
+    from qtrader_core import Side as RustSide
     HAS_RUST_CORE = True
 except ImportError:
     HAS_RUST_CORE = False
@@ -31,7 +31,8 @@ class PreTradeRiskConfig:
     max_order_notional: Decimal = Decimal("1000000")  # Max USD per order
 
     # Position limits
-    max_position_per_symbol: Decimal = Decimal("100")  # Max position per symbol
+    max_position_per_symbol: Decimal = Decimal("100")  # Max position per symbol (Units)
+    max_position_usd: Decimal = Decimal("1000000")    # Max position per symbol (USD)
     max_total_exposure: Decimal = Decimal("10000000")  # Max total USD exposure
 
     # Order rate limits
@@ -85,6 +86,7 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         self._total_validated: int = 0
         self._total_rejected: int = 0
         self._rejection_reasons: dict[str, int] = {}
+        self._effective_unit_limits: dict[str, Decimal] = {}
 
         # 10. High-Performance Rust Core Initialization
         if HAS_RUST_CORE:
@@ -108,8 +110,13 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         self._positions[symbol] = position
 
     def update_mid_price(self, symbol: str, price: Decimal) -> None:
-        """Update current mid price for a symbol."""
+        """Update current mid price for a symbol and recalculate dynamic limits."""
         self._mid_prices[symbol] = price
+        
+        # Derive dynamic unit limit from USD limit: Units = MaxUSD / Price
+        if price > 0:
+            self._effective_unit_limits[symbol] = self.config.max_position_usd / price
+            logger.debug(f"[RISK] Recalculated dynamic unit limit for {symbol}: {self._effective_unit_limits[symbol]:.4f}")
 
     def update_portfolio_value(self, value: Decimal) -> None:
         """Update total portfolio value."""
@@ -180,16 +187,31 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
                 else:
                     checks_passed.append("PRICE_OK")
 
-        # Check 5: Position limit
+        # Check 5: Position limit (Units - Dynamically Derived)
         current_position = self._positions.get(symbol, Decimal("0"))
         side_upper = side.upper()
         new_position = current_position + (quantity if side_upper == "BUY" else -quantity)
-        if abs(new_position) > self.config.max_position_per_symbol:
+        
+        # Use dynamic limit if available, fallback to static config
+        effective_limit = self._effective_unit_limits.get(symbol, self.config.max_position_per_symbol)
+        
+        if abs(new_position) > effective_limit:
             checks_failed.append(
-                f"POSITION_EXCEEDED: {abs(new_position)} > {self.config.max_position_per_symbol}"
+                f"POSITION_UNITS_EXCEEDED: {abs(new_position):.4f} > {effective_limit:.4f} (Dynamic)"
             )
         else:
-            checks_passed.append("POSITION_OK")
+            checks_passed.append("POSITION_UNITS_OK")
+
+        # Check 5b: Position limit (USD Notional - Dynamic)
+        current_mid = self._mid_prices.get(symbol, order_price)
+        if current_mid > 0:
+            new_position_usd = abs(new_position) * current_mid
+            if new_position_usd > self.config.max_position_usd:
+                checks_failed.append(
+                    f"POSITION_USD_EXCEEDED: ${new_position_usd:,.2f} > ${self.config.max_position_usd:,.2f}"
+                )
+            else:
+                checks_passed.append("POSITION_USD_OK")
 
         # Check 6: Concentration limit
         if self._portfolio_value > 0:
@@ -234,10 +256,12 @@ class PreTradeRiskValidator(DynamicSettingsMixin):
         # Performance Gating: Rust Acceleration Path (< 100μs)
         # ------------------------------------------------------------------
         if HAS_RUST_CORE:
-            from qtrader.core.oms import Order as RustOrder
-            from qtrader.core.oms import Account as RustAccount
-            from qtrader.core.oms import Side as RustSide
-            from qtrader.core.oms import OrderType as RustOrderType
+            from qtrader_core import (
+                Order as RustOrder,
+                Account as RustAccount,
+                Side as RustSide,
+                OrderType as RustOrderType
+            )
 
             # Build mock context for Rust engine
             rust_side = RustSide.Buy if side.upper() == "BUY" else RustSide.Sell

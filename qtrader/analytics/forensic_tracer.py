@@ -33,11 +33,13 @@ class ForensicTracer:
         """Aggregate traces from all specialized decision engines."""
         latencies = latency_enforcer.get_current_measurements()
         recon_audit = recon.get_last_audit() if hasattr(recon, "get_last_audit") else {}
+        from qtrader.core.config import settings
         quote = broker_quotes.get(symbol, {})
+        live_price = float(quote.get("price") or settings.ts_reference_price)
 
         return {
             "ingestion": {
-                "price": float(quote.get("price") or 0.0),
+                "price": live_price,
                 "timestamp": datetime.now().isoformat(),
                 "status": "OK" if quote.get("price") else "WAITING"
             },

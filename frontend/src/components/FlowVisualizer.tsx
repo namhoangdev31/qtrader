@@ -6,9 +6,10 @@ interface FlowVisualizerProps {
   lastSignal?: any;
   simRunning: boolean;
   liveTrace?: any;
+  currentPrice?: number;
 }
 
-export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ lastTickTimestamp, lastSignal, simRunning, liveTrace }) => {
+export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ lastTickTimestamp, lastSignal, simRunning, liveTrace, currentPrice }) => {
   const [activeStage, setActiveStage] = useState<number>(-1);
 
   useEffect(() => {
@@ -48,7 +49,10 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ lastTickTimestam
           icon={<Database size={16} />} 
           label="Data" 
           active={activeStage >= 0} 
-          subLabel={liveTrace?.ingestion ? `$${liveTrace.ingestion.price.toFixed(2)}` : "TICK"}
+          subLabel={
+            currentPrice ? `$${currentPrice.toFixed(2)}` : 
+            (liveTrace?.ingestion ? `$${liveTrace.ingestion.price.toFixed(2)}` : "TICK")
+          }
         />
         <Connector active={activeStage >= 1} />
         <StageItem 

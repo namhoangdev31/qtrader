@@ -16,7 +16,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from qtrader.core.state_replication import StateReplicator
@@ -337,6 +337,16 @@ class StateStore:
             self._state.active_orders[order.order_id] = order.copy()
             self._state.version += 1
             self._state.timestamp = datetime.now(timezone.utc)
+        self._publish_if_primary()
+
+    async def update_order(self, order_id: str, transform: Callable[[Order], None]) -> None:
+        """Update an active order using a transform function."""
+        async with self._lock:
+            order = self._state.active_orders.get(order_id)
+            if order:
+                transform(order)
+                self._state.version += 1
+                self._state.timestamp = datetime.now(timezone.utc)
         self._publish_if_primary()
 
     async def remove_order(self, order_id: str) -> None:

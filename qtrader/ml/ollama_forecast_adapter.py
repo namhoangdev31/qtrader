@@ -31,7 +31,7 @@ class OllamaForecastAdapter:
         self,
         model_id: str,
         base_url: str,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = 180,
     ) -> None:
         self.model_id = model_id
         self.base_url = base_url
@@ -49,12 +49,11 @@ class OllamaForecastAdapter:
 
         # Build prompt for forecasting
         prompt = (
-            "System: Act as a financial time-series forecaster. "
-            "Given a sequence of historical prices, predict the next values in the sequence. "
-            "Return ONLY a JSON object containing a 'forecast' key with a list of predicted numbers.\n\n"
+            "IMPORTANT: Response must be a single, valid JSON object only. "
+            "No conversational filler. Follow this schema exactly:\n\n"
             f"Input History: {prices.tolist()[-50:]}\n"
             f"Prediction Length: {prediction_length}\n"
-            "JSON Template: {\"forecast\": [val1, val2, ...]}\n"
+            "{\"forecast\": [val1, val2, ...]}\n\n"
             "Response:"
         )
 
@@ -98,7 +97,11 @@ class OllamaForecastAdapter:
             "model": self.model_id,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 128},
+            "format": "json",
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 512,  # Increased to prevent truncation of forecast arrays
+            },
         }
 
         async with aiohttp.ClientSession() as session:
@@ -112,13 +115,40 @@ class OllamaForecastAdapter:
 
     def _parse_forecast(self, text: str) -> list[float]:
         try:
+            # 1. Basic Cleaning
             clean = text.strip()
-            if "```json" in clean:
-                clean = clean.split("```json")[-1].split("```")[0].strip()
+            
+            # 2. Extract JSON block (find first '{' and last '}')
+            start_idx = clean.find("{")
+            end_idx = clean.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                clean = clean[start_idx : end_idx + 1]
+            
+            # 3. Handle common truncation/malformation in 1B models
+            # If it's missing the closing bracket but has { at start, try to fix it
+            if clean.startswith("{") and not clean.endswith("}"):
+                clean += '"]}' if '["' in clean or '":' in clean else "}"
+
             data = json.loads(clean)
-            return [float(x) for x in data["forecast"]]
-        except Exception:
-            raise ValueError(f"Failed to parse forecast from: {text[:50]}...")
+            
+            # 4. Flexible key finding (if 'forecast' is missing or named differently)
+            if "forecast" in data and isinstance(data["forecast"], list):
+                return [float(x) for x in data["forecast"]]
+            
+            # If not found, look for any list segment
+            for val in data.values():
+                if isinstance(val, list) and len(val) > 0:
+                    try:
+                        return [float(x) for x in val]
+                    except (ValueError, TypeError):
+                        continue
+            
+            raise KeyError("No valid numeric array found in JSON")
+
+        except Exception as e:
+            # Extract just the snippet for logging to avoid bloat
+            snippet = text[:100].replace("\n", " ")
+            raise ValueError(f"Failed to parse forecast from: {snippet}... Error: {e}")
 
     def _fallback_forecast(self, prices: np.ndarray, length: int) -> np.ndarray:
         if len(prices) < 2:

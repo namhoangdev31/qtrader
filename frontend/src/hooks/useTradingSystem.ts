@@ -24,6 +24,10 @@ export interface Telemetry {
   status: {
     running: boolean;
     mode: string;
+    market_price?: number;
+    session_id?: string;
+    status?: string;
+    stats?: Record<string, number>;
     error?: string;
   };
   latency_ms: number;

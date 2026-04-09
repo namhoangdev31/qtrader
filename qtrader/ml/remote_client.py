@@ -19,13 +19,13 @@ logger = logging.getLogger("qtrader.ml.remote_client")
 
 HTTP_OK = 200
 DEFAULT_TIMEOUT = 5.0
-PREDICT_TIMEOUT = 30.0
+PREDICT_TIMEOUT = 180.0 # Increased to accommodate 3-stage LLM pipeline on CPU
 
 
 class RemoteAtomicTrioPipeline:
     """REST Client for Atomic Trio Pipeline."""
 
-    def __init__(self, base_url: str = "http://ml-engine:8001") -> None:
+    def __init__(self, base_url: str = "http://qt-ml-engine:8001") -> None:
         self.base_url = base_url.rstrip("/")
         self._run_count = 0
         self._model_info: dict[str, Any] = {}
@@ -81,24 +81,23 @@ class RemoteAtomicTrioPipeline:
                         latency = (time.time() - start_t) * 1000
 
                         # Reconstruct result (we trust the types for now)
-                        # data['decision'] is a dict, but we can't easily turn it back
-                        # to DecisionAction enum here without imports
-                        # For now, we return it as a dict which PipelineResult handles.
                         result = PipelineResult(
                             decision=data.get("decision", "HOLD"),
-                            chronos_forecast=data.get("chronos_forecast"),
-                            tabpfn_risk=data.get("tabpfn_risk"),
+                            forecast_results=data.get("forecast_results"),
+                            risk_results=data.get("risk_results"),
                             pipeline_latency_ms=latency,
-                            chronos_latency_ms=data.get("chronos_latency_ms", 0.0),
-                            tabpfn_latency_ms=data.get("tabpfn_latency_ms", 0.0),
+                            forecast_latency_ms=data.get("forecast_latency_ms", 0.0),
+                            risk_latency_ms=data.get("risk_latency_ms", 0.0),
                             decision_latency_ms=data.get("decision_latency_ms", 0.0),
                             model_info=data.get("model_info", {}),
                         )
                         return result
                     else:
-                        logger.error(f"[REMOTE_ML] Prediction failed: {resp.status}")
+                        error_text = await resp.text()
+                        logger.error(f"[REMOTE_ML] Prediction failed ({resp.status}): {error_text}")
             except Exception as e:
-                logger.error(f"[REMOTE_ML] Prediction error: {e}")
+                # Use repr(e) to ensure we see the exception type even if str(e) is empty
+                logger.error(f"[REMOTE_ML] Prediction connection error: {repr(e)}")
 
         # Fallback to empty result on error
         latency = (time.time() - start_t) * 1000

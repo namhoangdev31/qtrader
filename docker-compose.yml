@@ -23,7 +23,7 @@ services:
       - AUTONOMOUS_MODE=${AUTONOMOUS_MODE:-true}
       - SIMULATE_MODE=${SIMULATE_MODE:-true}
       - REDIS_URL=redis://redis:6379/0
-      - REDIS_PREFIX=qtrader_core
+      - REDIS_PREFIX=qtrader
     volumes:
       - hf_cache:/app/.cache/huggingface
     restart: always
@@ -71,7 +71,7 @@ services:
       - UI_ONLY_MODE=true
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
-      - REDIS_PREFIX=qtrader_ui
+      - REDIS_PREFIX=qtrader
     restart: always
     depends_on:
       timescaledb:
@@ -195,8 +195,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-      - ./scripts/ollama_setup.sh:/scripts/ollama_setup.sh
-    entrypoint: ["/usr/bin/bash", "/scripts/ollama_setup.sh"]
+      # - ./scripts/ollama_setup.sh:/scripts/olla ma_setup.sh
+    # entrypoint: ["/usr/bin/bash", "/scripts/ollama_setup.sh"]
     restart: always
     deploy:
       resources:

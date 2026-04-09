@@ -34,7 +34,7 @@ class OllamaRiskAdapter:
         self,
         model_id: str | None = None,
         base_url: str | None = None,
-        timeout_seconds: int = 60,
+        timeout_seconds: int = 180,
     ) -> None:
         self.model_id = model_id or os.getenv("OLLAMA_MODEL_RISK", "qwen3-embedding:0.6b")
         self.base_url = base_url or os.getenv("OLLAMA_URL", "http://ollama:11434")
@@ -94,9 +94,10 @@ class OllamaRiskAdapter:
             "model": self.model_id,
             "prompt": prompt,
             "stream": False,
+            "format": "json",
             "options": {
                 "temperature": 0.1,  # Low temperature for deterministic risk assessment
-                "num_predict": 128,
+                "num_predict": 256,  # Increased for safer JSON completion
             },
         }
 
@@ -121,25 +122,35 @@ class OllamaRiskAdapter:
             "- SAFE: Trending market, stable volatility, low spread.\n"
             "- WARNING: High volatility, abnormal volume, or widening spreads.\n"
             "- DANGER: Extreme volatility, price crashes, or severe order imbalance.\n\n"
-            'JSON Template: {"class_label": "SAFE/WARNING/DANGER", '
+            "IMPORTANT: Response must be a single, valid JSON object only. "
+            "No conversational filler. Follow this schema exactly:\n\n"
+            '{"class_label": "SAFE/WARNING/DANGER", '
             '"confidence": float, "risk_score": float, '
             '"reasoning": string}\n\n'
         )
 
-        return f"{instruct}Market Features:\n{json.dumps(features, indent=2)}\n\nOutput JSON:"
+        return f"{instruct}Market Features:\n{json.dumps(features)}\n\nOutput JSON:"
 
     def _parse_risk_response(self, response: str) -> RiskClassificationResult:
-        """Parse raw LLM response into RiskClassificationResult."""
+        """Parse raw LLM string into RiskClassificationResult."""
         try:
-            clean_json = response.strip()
-            if "```json" in clean_json:
-                clean_json = clean_json.split("```json")[-1].split("```")[0].strip()
-            elif "```" in clean_json:
-                clean_json = clean_json.split("```")[-1].split("```")[0].strip()
+            # 1. Basic Cleaning
+            clean = response.strip()
+            
+            # 2. Extract block between first { and last }
+            start_idx = clean.find("{")
+            end_idx = clean.rfind("}")
+            
+            if start_idx != -1 and end_idx != -1:
+                clean = clean[start_idx : end_idx + 1]
+            
+            # 3. Handle truncation
+            if clean.startswith("{") and not clean.endswith("}"):
+                clean += '"}' if '":' in clean else "}"
 
-            data = json.loads(clean_json)
-        except Exception:
-            logger.warning(f"[OLLAMA_RISK] Failed to parse JSON: {response[:100]}...")
+            data = json.loads(clean)
+        except Exception as e:
+            logger.warning(f"[OLLAMA_RISK] Failed to parse JSON: {response[:100]}... Error: {e}")
             data = {}
 
         label = data.get("class_label", "WARNING").upper()

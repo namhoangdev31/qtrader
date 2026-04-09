@@ -63,6 +63,7 @@ class QTraderSettings(BaseSettings):
     ts_max_order_notional: float = 50_000.0
     ts_max_orders_per_second: float = 5.0
     ts_max_latency_ms: float = 100.0
+    starting_equity: float = 100000.0
     
     # Model Hub
     ts_forecast_model: str = "llama3.2:1b"
@@ -76,7 +77,7 @@ class QTraderSettings(BaseSettings):
     ts_min_sl_pct: float = 0.005
     ts_max_sl_pct: float = 0.05
     ts_price_jump_threshold: float = 0.05
-    ts_reference_price: float = 50000.0
+    ts_reference_price: float = 71522.97
     
     # Retraining & Circuit Breakers
     ts_retrain_win_rate_threshold: float = 0.35
@@ -90,7 +91,7 @@ class QTraderSettings(BaseSettings):
     monthly_cloud_budget: float = 1000.0
     db_path: str = "qtrader.db"
     timezone: str = "Asia/Ho_Chi_Minh"
-    trading_symbols: list[str] = ["BTC/USDT", "ETH/USDT"]
+    trading_symbols: list[str] = ["BTC-USD", "ETH-USD"]
     enable_auto_forensic: bool = True
 
     sim_taker_fee: float = 0.006
@@ -316,6 +317,10 @@ class QTraderSettings(BaseSettings):
     @property
     def SIM_ERROR_PROBABILITY(self) -> float:
         return self.sim_error_probability
+
+    @property
+    def SIMS_STARTING_CAPITAL(self) -> float:
+        return self.starting_equity
 
     @property
     def SIM_SLIPPAGE_VOL_MULT(self) -> float:
